@@ -28,6 +28,7 @@ class VMTemplate(Base):
     name = Column(String(100), unique=True, nullable=False)
     proxmox_node = Column(String(50), nullable=False)
     source_vmid = Column(Integer, nullable=False)
+    enabled = Column(Boolean, default=True)
 
 
 class Permission(Base):
