@@ -37,6 +37,14 @@ class VMResponse(BaseModel):
     status: str
     proxmox_node: str
     created_at: datetime | None = None
+    operating_system: str | None = None
+    access_protocols: str | None = None
+    ssh_enabled: bool | None = None
+    rdp_enabled: bool | None = None
+    console_enabled: bool | None = None
+    default_username: str | None = None
+    assigned_ip: str | None = None
+    hostname: str | None = None
 
 
 class VMCreateResponse(VMResponse):

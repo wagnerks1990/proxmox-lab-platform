@@ -65,3 +65,21 @@ class ProxmoxClient:
             r = await client.post(f'{self.base_url}/nodes/{node}/qemu/{vmid}/status/{action}', headers=self.headers)
             r.raise_for_status()
             return r.json()
+
+    async def get_novnc_ticket(self, node: str, vmid: int):
+        async with httpx.AsyncClient(verify=settings.proxmox_verify_ssl, timeout=30) as client:
+            r = await client.post(f'{self.base_url}/nodes/{node}/qemu/{vmid}/vncproxy', headers=self.headers, data={'websocket': 1})
+            r.raise_for_status()
+            return r.json().get('data', {})
+
+    async def get_spice_config(self, node: str, vmid: int):
+        async with httpx.AsyncClient(verify=settings.proxmox_verify_ssl, timeout=30) as client:
+            r = await client.post(f'{self.base_url}/nodes/{node}/qemu/{vmid}/spiceproxy', headers=self.headers)
+            r.raise_for_status()
+            return r.json().get('data', '')
+
+    async def get_guest_network(self, node: str, vmid: int):
+        async with httpx.AsyncClient(verify=settings.proxmox_verify_ssl, timeout=30) as client:
+            r = await client.get(f'{self.base_url}/nodes/{node}/qemu/{vmid}/agent/network-get-interfaces', headers=self.headers)
+            r.raise_for_status()
+            return r.json().get('data', {}).get('result', [])
