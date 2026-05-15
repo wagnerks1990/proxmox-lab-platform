@@ -1,19 +1,15 @@
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
+import Sidebar from '../components/Sidebar'
+import Topbar from '../components/Topbar'
 
 export default function AppLayout({ children, setUser, user }) {
   const nav = useNavigate()
-  const loc = useLocation()
   const logout = () => { localStorage.removeItem('token'); setUser(false); nav('/') }
-  return <div className='app-shell'>
-    <aside className='sidebar'>
-      <div className='brand'>Proxmox Lab Portal</div>
-      <Link className='nav-link' to='/'>Dashboard</Link>
-      <Link className='nav-link' to='/vms'>My VMs</Link>
-      <Link className='nav-link' to='/create'>Create VM</Link>
-      {(user?.role === 'Teacher' || user?.role === 'Admin') ? <Link className='nav-link' to='/admin/sessions'>Session Activity</Link> : null}
-      <button onClick={logout} style={{marginTop: 10, width: '100%'}}>Logout</button>
-      <div style={{marginTop:14, color:'#a7b0d6', fontSize:12}}>Current: {loc.pathname}</div>
-    </aside>
-    <main className='content'>{children}</main>
+  return <div className='app2'>
+    <Sidebar user={user} />
+    <div className='main2'>
+      <Topbar user={user} onLogout={logout} />
+      <div className='page2'>{children}</div>
+    </div>
   </div>
 }
