@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 import httpx
 from sqlalchemy import text
+import httpx
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.models import User, VMTemplate, Permission, StudentVM, AuditLog
@@ -19,6 +20,8 @@ MAX_RUNNING_VMS_PER_USER = 3
 def _proxmox_error(exc: Exception):
     if isinstance(exc, httpx.HTTPStatusError):
         return HTTPException(status_code=502, detail={'error': 'Proxmox API error', 'status_code': exc.response.status_code, 'body': exc.response.text})
+        detail = {'error': 'Proxmox API error', 'status_code': exc.response.status_code, 'body': exc.response.text}
+        return HTTPException(status_code=502, detail=detail)
     if isinstance(exc, TimeoutError):
         return HTTPException(status_code=504, detail={'error': str(exc)})
     return HTTPException(status_code=502, detail={'error': str(exc)})
@@ -93,6 +96,10 @@ async def list_vms(user: User = Depends(get_current_user), db: Session = Depends
             q = q.filter(StudentVM.template_id == template)
         if node:
             q = q.filter(StudentVM.proxmox_node == node)
+async def list_vms(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    q = db.query(StudentVM)
+    if user.role.name == 'Student':
+        q = q.filter(StudentVM.owner_id == user.id)
     rows = q.all()
     proxmox = ProxmoxClient()
     for vm in rows:
@@ -104,6 +111,13 @@ async def list_vms(user: User = Depends(get_current_user), db: Session = Depends
     db.add(AuditLog(actor_id=user.id, action='list_vms', target_type='student_vm', target_id='bulk'))
     db.commit()
     return rows
+            status = await proxmox.get_vm_status(vm.proxmox_node, vm.vmid)
+            vm.status = status.get('status', vm.status)
+        except Exception:
+            pass
+    db.commit()
+    return rows
+
 
 @router.post('/vms', response_model=VMCreateResponse)
 async def create_vm(payload: CreateVMRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -154,11 +168,23 @@ async def create_vm(payload: CreateVMRequest, user: User = Depends(get_current_u
         vm.status = 'error'
         db.add(AuditLog(actor_id=user.id, action='create_vm_error', target_type='student_vm', target_id=str(vmid)))
         db.commit()
+    try:
+        clone_response = await proxmox.clone_vm(template.proxmox_node, template.source_vmid, vmid, vm_name)
+        upid = clone_response.get('data')
+        if upid:
+            await proxmox.wait_for_task(template.proxmox_node, upid)
+        if payload.auto_start:
+            await proxmox.start_vm(template.proxmox_node, vmid)
+    except Exception as exc:
         raise _proxmox_error(exc)
 
     db.add(AuditLog(actor_id=user.id, action='create_vm', target_type='student_vm', target_id=str(vmid)))
     db.commit(); db.refresh(vm)
     return VMCreateResponse(**vm.__dict__, message=message)
+    db.commit()
+    db.refresh(vm)
+    return vm
+
 
 @router.post('/vms/{id}/start', response_model=VMResponse)
 async def start_vm(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -169,6 +195,13 @@ async def start_vm(id: int, user: User = Depends(get_current_user), db: Session 
     except Exception as exc:
         raise _proxmox_error(exc)
     db.add(AuditLog(actor_id=user.id, action='start_vm', target_type='student_vm', target_id=str(vm.vmid))); db.commit(); db.refresh(vm); return vm
+    except Exception as exc:
+        raise _proxmox_error(exc)
+    vm.status = 'running'
+    db.add(AuditLog(actor_id=user.id, action='start_vm', target_type='student_vm', target_id=str(vm.vmid)))
+    db.commit(); db.refresh(vm)
+    return vm
+
 
 @router.post('/vms/{id}/stop', response_model=VMResponse)
 async def stop_vm(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -179,6 +212,13 @@ async def stop_vm(id: int, user: User = Depends(get_current_user), db: Session =
     except Exception as exc:
         raise _proxmox_error(exc)
     db.add(AuditLog(actor_id=user.id, action='stop_vm', target_type='student_vm', target_id=str(vm.vmid))); db.commit(); db.refresh(vm); return vm
+    except Exception as exc:
+        raise _proxmox_error(exc)
+    vm.status = 'stopped'
+    db.add(AuditLog(actor_id=user.id, action='stop_vm', target_type='student_vm', target_id=str(vm.vmid)))
+    db.commit(); db.refresh(vm)
+    return vm
+
 
 @router.post('/vms/{id}/reboot', response_model=VMResponse)
 async def reboot_vm(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -189,6 +229,13 @@ async def reboot_vm(id: int, user: User = Depends(get_current_user), db: Session
     except Exception as exc:
         raise _proxmox_error(exc)
     db.add(AuditLog(actor_id=user.id, action='reboot_vm', target_type='student_vm', target_id=str(vm.vmid))); db.commit(); db.refresh(vm); return vm
+    except Exception as exc:
+        raise _proxmox_error(exc)
+    vm.status = 'running'
+    db.add(AuditLog(actor_id=user.id, action='reboot_vm', target_type='student_vm', target_id=str(vm.vmid)))
+    db.commit(); db.refresh(vm)
+    return vm
+
 
 @router.delete('/vms/{id}')
 async def delete_vm(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -198,6 +245,11 @@ async def delete_vm(id: int, user: User = Depends(get_current_user), db: Session
     except Exception as exc:
         raise _proxmox_error(exc)
     db.add(AuditLog(actor_id=user.id, action='delete_vm', target_type='student_vm', target_id=str(vm.vmid))); db.delete(vm); db.commit(); return {'ok': True}
+    db.add(AuditLog(actor_id=user.id, action='delete_vm', target_type='student_vm', target_id=str(vm.vmid)))
+    db.delete(vm)
+    db.commit()
+    return {'ok': True}
+
 
 @router.get('/vms/{id}/status')
 async def vm_status(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -240,3 +292,6 @@ def remove_template(id: int, user: User = Depends(require_role('Teacher', 'Admin
     if not t:
         raise HTTPException(status_code=404, detail='Template not found')
     db.delete(t); db.commit(); return JSONResponse({'ok': True})
+    db.add(AuditLog(actor_id=user.id, action='status_vm', target_type='student_vm', target_id=str(vm.vmid)))
+    db.commit(); db.refresh(vm)
+    return {'id': vm.id, 'vmid': vm.vmid, 'status': vm.status, 'node': vm.proxmox_node}
