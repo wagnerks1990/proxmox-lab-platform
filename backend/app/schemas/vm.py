@@ -8,8 +8,18 @@ class TemplateResponse(BaseModel):
     proxmox_node: str
     source_vmid: int
     operating_system: str | None = None
+    default_protocol: str | None = None
     default_protocols: str | None = None
     description: str | None = None
+    cluster_id: int | None = None
+    node_id: int | None = None
+    storage_pool: str | None = None
+    network_bridge: str | None = None
+    spice_enabled: bool | None = None
+    rdp_enabled: bool | None = None
+    web_terminal_enabled: bool | None = None
+    is_active: bool | None = None
+    created_at: datetime | None = None
     enabled: bool = True
 
 
@@ -18,8 +28,18 @@ class TemplateCreateRequest(BaseModel):
     proxmox_node: str
     source_vmid: int
     operating_system: str | None = None
+    default_protocol: str | None = None
     default_protocols: str | None = None
     description: str | None = None
+    cluster_id: int | None = None
+    node_id: int | None = None
+    storage_pool: str | None = None
+    network_bridge: str | None = None
+    spice_enabled: bool | None = None
+    rdp_enabled: bool | None = None
+    web_terminal_enabled: bool | None = None
+    is_active: bool | None = None
+    created_at: datetime | None = None
     enabled: bool = True
 
 
@@ -28,6 +48,7 @@ class TemplateUpdateRequest(BaseModel):
     proxmox_node: str | None = None
     source_vmid: int | None = None
     operating_system: str | None = None
+    default_protocol: str | None = None
     default_protocols: str | None = None
     description: str | None = None
     enabled: bool | None = None
@@ -85,6 +106,15 @@ class ConnectionLaunchResponse(BaseModel):
 class PoolBase(BaseModel):
     name: str
     description: str | None = None
+    cluster_id: int | None = None
+    node_id: int | None = None
+    storage_pool: str | None = None
+    network_bridge: str | None = None
+    spice_enabled: bool | None = None
+    rdp_enabled: bool | None = None
+    web_terminal_enabled: bool | None = None
+    is_active: bool | None = None
+    created_at: datetime | None = None
     enabled: bool = True
     default_template_id: int | None = None
     max_vms: int = 20

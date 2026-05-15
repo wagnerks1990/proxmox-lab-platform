@@ -18,8 +18,9 @@ class User(Base):
     role_id = Column(Integer, ForeignKey('roles.id'), nullable=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, server_default=func.now())
+    role = Column(String(50), nullable=True)  # deprecated: compatibility only
 
-    role = relationship('Role')
+    role_rel = relationship('Role', foreign_keys=[role_id])
 
 
 class VMTemplate(Base):
@@ -28,6 +29,19 @@ class VMTemplate(Base):
     name = Column(String(100), unique=True, nullable=False)
     proxmox_node = Column(String(50), nullable=False)
     source_vmid = Column(Integer, nullable=False)
+    operating_system = Column(String(50), nullable=True)
+    default_protocol = Column(String(255), nullable=True)
+    default_protocols = Column(String(255), nullable=True)
+    description = Column(String(255), nullable=True)
+    cluster_id = Column(Integer, ForeignKey('proxmox_clusters.id'), nullable=True)
+    node_id = Column(Integer, ForeignKey('proxmox_nodes.id'), nullable=True)
+    storage_pool = Column(String(100), nullable=True)
+    network_bridge = Column(String(100), nullable=True)
+    spice_enabled = Column(Boolean, default=False)
+    rdp_enabled = Column(Boolean, default=False)
+    web_terminal_enabled = Column(Boolean, default=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, server_default=func.now())
     enabled = Column(Boolean, default=True)
 
 

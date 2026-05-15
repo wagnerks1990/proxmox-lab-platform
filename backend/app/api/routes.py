@@ -24,6 +24,10 @@ MAX_RUNNING_VMS_PER_USER = 3
 CONSOLE_RATE_LIMIT = {}
 
 
+def _role_name(user: User) -> str:
+    return (getattr(getattr(user, 'role_rel', None), 'name', None) or getattr(user, 'role', None) or '').strip()
+
+
 def _proxmox_error(exc: Exception):
     if isinstance(exc, httpx.HTTPStatusError):
         return HTTPException(status_code=502, detail={'error': 'Proxmox API error', 'status_code': exc.response.status_code, 'body': exc.response.text})
@@ -34,7 +38,7 @@ def _proxmox_error(exc: Exception):
 
 def _get_vm_for_user(db: Session, user: User, vm_id: int):
     q = db.query(StudentVM).filter(StudentVM.id == vm_id)
-    if user.role.name == 'Student':
+    if _role_name(user) == 'Student':
         q = q.filter(StudentVM.owner_id == user.id)
     vm = q.first()
     if not vm:
@@ -134,18 +138,18 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
 
 @router.get('/auth/me', response_model=UserResponse)
 def me(user: User = Depends(get_current_user)):
-    return UserResponse(id=user.id, username=user.username, email=user.email, role=user.role.name)
+    return UserResponse(id=user.id, username=user.username, email=user.email, role=_role_name(user).lower())
 
 @router.get('/templates', response_model=list[TemplateResponse])
 def templates(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if user.role.name in ['Teacher', 'Admin']:
+    if _role_name(user) in ['Teacher', 'Admin']:
         return db.query(VMTemplate).all()
     return db.query(VMTemplate).join(Permission, Permission.template_id == VMTemplate.id).filter(Permission.user_id == user.id, VMTemplate.enabled.is_(True)).all()
 
 @router.get('/vms', response_model=list[VMResponse])
 async def list_vms(user: User = Depends(get_current_user), db: Session = Depends(get_db), username: str | None = None, status: str | None = None, template: int | None = None, node: str | None = None):
     q = db.query(StudentVM)
-    if user.role.name == 'Student':
+    if _role_name(user) == 'Student':
         q = q.filter(StudentVM.owner_id == user.id)
     else:
         if username:
@@ -168,6 +172,62 @@ async def list_vms(user: User = Depends(get_current_user), db: Session = Depends
             vm.status = vm.status or 'error'
     db.commit()
     return rows
+
+@router.get('/vms/{id}/network')
+async def vm_network(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    vm = _get_vm_for_user(db, user, id)
+    proxmox = ProxmoxClient()
+    try:
+        status = await proxmox.get_vm_status(vm.proxmox_node, vm.vmid)
+        interfaces = await proxmox.get_guest_network(vm.proxmox_node, vm.vmid)
+    except Exception as exc:
+        raise _proxmox_error(exc)
+    ip = None
+    for iface in interfaces:
+        for addr in iface.get('ip-addresses', []):
+            if addr.get('ip-address-type') == 'ipv4' and not addr.get('ip-address', '').startswith('127.'):
+                ip = addr.get('ip-address')
+                break
+        if ip:
+            break
+    vm.assigned_ip = ip
+    vm.hostname = status.get('name', vm.hostname)
+    db.add(AuditLog(actor_id=user.id, action='network_vm', target_type='student_vm', target_id=str(vm.vmid)))
+    db.commit(); db.refresh(vm)
+    return {'id': vm.id, 'status': status.get('status'), 'uptime': status.get('uptime'), 'hostname': vm.hostname, 'assigned_ip': vm.assigned_ip, 'interfaces': interfaces}
+
+@router.get('/vms/{id}/console/novnc')
+async def console_novnc(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    vm = _get_vm_for_user(db, user, id)
+    _rate_limit(user, vm.vmid, 'novnc')
+    try:
+        return await ProtocolService(db).novnc_ticket_scaffold(user, vm)
+    except Exception as exc:
+        if isinstance(exc, HTTPException):
+            raise exc
+        raise _proxmox_error(exc)
+
+@router.get('/vms/{id}/console/spice')
+async def console_spice(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    vm = _get_vm_for_user(db, user, id)
+    _rate_limit(user, vm.vmid, 'spice')
+    try:
+        cfg = await ProxmoxClient().get_spice_config(vm.proxmox_node, vm.vmid)
+    except Exception as exc:
+        msg = str(exc).lower()
+        if 'spice' in msg and ('not enabled' in msg or 'no spice' in msg or 'port' in msg):
+            raise HTTPException(status_code=400, detail={'error': 'SPICE is not enabled for this VM.'})
+        raise _proxmox_error(exc)
+    db.add(AuditLog(actor_id=user.id, action='console_spice', target_type='student_vm', target_id=str(vm.vmid))); db.commit()
+    return {'type': 'spice', 'config': cfg}
+
+@router.get('/vms/{id}/console/ssh')
+async def console_ssh(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    vm = _get_vm_for_user(db, user, id)
+    _rate_limit(user, vm.vmid, 'ssh')
+    db.add(AuditLog(actor_id=user.id, action='console_ssh', target_type='student_vm', target_id=str(vm.vmid))); db.commit()
+    host = vm.assigned_ip or vm.hostname or vm.vm_name
+    return {'type': 'ssh', 'host': host, 'username': vm.default_username or 'student', 'web_terminal_url': f'/api/vms/{vm.id}/console/ssh'}
 
 @router.get('/vms/{id}/network')
 async def vm_network(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -253,7 +313,7 @@ async def create_vm(payload: CreateVMRequest, user: User = Depends(get_current_u
     template = db.query(VMTemplate).filter(VMTemplate.id == payload.template_id).first()
     if not template:
         raise HTTPException(status_code=404, detail='Template not found')
-    if user.role.name == 'Student':
+    if _role_name(user) == 'Student':
         allowed = db.query(Permission).filter(Permission.user_id == user.id, Permission.template_id == payload.template_id).first()
         if not allowed or not template.enabled:
             raise HTTPException(status_code=403, detail='Template not allowed')
@@ -315,8 +375,8 @@ async def vm_status(id: int, user: User = Depends(get_current_user), db: Session
 def audit_logs(user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
     return db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(200).all()
 @router.get('/admin/session-activity', response_model=list[ConnectionLaunchResponse])
-def session_activity(user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db), protocol: str | None = None, status: str | None = None, username: str | None = None):
-    q = db.query(ConnectionLaunch, User.username, StudentVM.vm_name).join(User, User.id == ConnectionLaunch.actor_id).join(StudentVM, StudentVM.id == ConnectionLaunch.vm_id)
+def session_activity(user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db), protocol: str | None = None, status: str | None = None, username: str | None = None, date_from: str | None = None, date_to: str | None = None):
+    q = db.query(ConnectionLaunch, User.username, StudentVM.vm_name).outerjoin(User, User.id == ConnectionLaunch.actor_id).outerjoin(StudentVM, StudentVM.id == ConnectionLaunch.vm_id)
     if protocol:
         q = q.filter(ConnectionLaunch.protocol == protocol)
     if status:
@@ -324,30 +384,43 @@ def session_activity(user: User = Depends(require_role('Teacher', 'Admin')), db:
     if username:
         q = q.filter(User.username.ilike(f'%{username}%'))
     rows = q.order_by(ConnectionLaunch.created_at.desc()).limit(500).all()
-    return [
-        {
-            'id': x.ConnectionLaunch.id,
-            'actor_id': x.ConnectionLaunch.actor_id,
-            'vm_id': x.ConnectionLaunch.vm_id,
-            'protocol': x.ConnectionLaunch.protocol,
-            'status': x.ConnectionLaunch.status,
-            'details': f"user={x.username}; vm={x.vm_name}; {x.ConnectionLaunch.details or ''}",
-            'created_at': x.ConnectionLaunch.created_at,
-        }
-        for x in rows
-    ]
+    if not rows:
+        return []
+    out = []
+    for x in rows:
+        cl = x.ConnectionLaunch
+        uname = x.username or 'unknown'
+        vmn = x.vm_name or 'unknown'
+        out.append({
+            'id': cl.id,
+            'actor_id': cl.actor_id or 0,
+            'vm_id': cl.vm_id or 0,
+            'protocol': cl.protocol or 'unknown',
+            'status': cl.status or 'unknown',
+            'details': f"user={uname}; vm={vmn}; {cl.details or ''}",
+            'created_at': cl.created_at,
+        })
+    return out
 
 @router.get('/admin/templates', response_model=list[TemplateResponse])
 def admin_templates(user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
     return db.query(VMTemplate).all()
 @router.post('/admin/templates', response_model=TemplateResponse)
 def create_template(payload: TemplateCreateRequest, user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
-    t = VMTemplate(**payload.model_dump()); db.add(t); db.commit(); db.refresh(t); return t
+    allowed = {'name','proxmox_node','source_vmid','operating_system','default_protocol','default_protocols','description','cluster_id','node_id','storage_pool','network_bridge','spice_enabled','rdp_enabled','web_terminal_enabled','is_active','enabled'}
+    data = {k:v for k,v in payload.model_dump().items() if k in allowed}
+    try:
+        t = VMTemplate(**data)
+    except TypeError as exc:
+        raise HTTPException(status_code=400, detail={'error': f'Invalid template payload: {exc}'})
+    db.add(t); db.commit(); db.refresh(t); return t
 @router.patch('/admin/templates/{id}', response_model=TemplateResponse)
 def patch_template(id: int, payload: TemplateUpdateRequest, user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
     t = db.query(VMTemplate).filter(VMTemplate.id == id).first();
     if not t: raise HTTPException(status_code=404, detail='Template not found')
-    for k, v in payload.model_dump(exclude_none=True).items(): setattr(t, k, v)
+    allowed = {'name','proxmox_node','source_vmid','operating_system','default_protocol','default_protocols','description','cluster_id','node_id','storage_pool','network_bridge','spice_enabled','rdp_enabled','web_terminal_enabled','is_active','enabled'}
+    for k, v in payload.model_dump(exclude_none=True).items():
+        if k in allowed: setattr(t, k, v)
     db.commit(); db.refresh(t); return t
 @router.delete('/admin/templates/{id}')
 def remove_template(id: int, user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
@@ -515,7 +588,7 @@ def delete_pool(id: int, user: User = Depends(require_role('Teacher', 'Admin')),
 @router.get('/admin/users')
 def admin_users(user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
     users = db.query(User).all()
-    return [{'id':u.id,'username':u.username,'email':u.email,'role':u.role.name,'vm_count':db.query(StudentVM).filter(StudentVM.owner_id==u.id).count()} for u in users]
+    return [{'id':u.id,'username':u.username,'email':u.email,'role': (_role_name(u).lower() if _role_name(u) else 'student'),'vm_count':db.query(StudentVM).filter(StudentVM.owner_id==u.id).count()} for u in users]
 
 @router.get('/admin/groups', response_model=list[GroupResponse])
 def admin_groups(user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
