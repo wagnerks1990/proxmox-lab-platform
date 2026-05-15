@@ -229,6 +229,67 @@ async def console_ssh(id: int, user: User = Depends(get_current_user), db: Sessi
     host = vm.assigned_ip or vm.hostname or vm.vm_name
     return {'type': 'ssh', 'host': host, 'username': vm.default_username or 'student', 'web_terminal_url': f'/api/vms/{vm.id}/console/ssh'}
 
+@router.get('/vms/{id}/network')
+async def vm_network(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    vm = _get_vm_for_user(db, user, id)
+    proxmox = ProxmoxClient()
+    try:
+        status = await proxmox.get_vm_status(vm.proxmox_node, vm.vmid)
+        interfaces = await proxmox.get_guest_network(vm.proxmox_node, vm.vmid)
+    except Exception as exc:
+        raise _proxmox_error(exc)
+    ip = None
+    for iface in interfaces:
+        for addr in iface.get('ip-addresses', []):
+            if addr.get('ip-address-type') == 'ipv4' and not addr.get('ip-address', '').startswith('127.'):
+                ip = addr.get('ip-address')
+                break
+        if ip:
+            break
+    vm.assigned_ip = ip
+    vm.hostname = status.get('name', vm.hostname)
+    db.add(AuditLog(actor_id=user.id, action='network_vm', target_type='student_vm', target_id=str(vm.vmid)))
+    db.commit(); db.refresh(vm)
+    return {'id': vm.id, 'status': status.get('status'), 'uptime': status.get('uptime'), 'hostname': vm.hostname, 'assigned_ip': vm.assigned_ip, 'interfaces': interfaces}
+
+@router.get('/vms/{id}/console/novnc')
+async def console_novnc(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    vm = _get_vm_for_user(db, user, id)
+    _rate_limit(user, vm.vmid, 'novnc')
+    try:
+        return await ProtocolService(db).novnc_ticket_scaffold(user, vm)
+    except Exception as exc:
+        if isinstance(exc, HTTPException):
+            raise exc
+        raise _proxmox_error(exc)
+
+@router.get('/vms/{id}/console/spice')
+async def console_spice(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    vm = _get_vm_for_user(db, user, id)
+    _rate_limit(user, vm.vmid, 'spice')
+    try:
+        cfg = await ProxmoxClient().get_spice_config(vm.proxmox_node, vm.vmid)
+    except Exception as exc:
+        msg = str(exc).lower()
+        if 'spice' in msg and ('not enabled' in msg or 'no spice' in msg or 'port' in msg):
+            raise HTTPException(status_code=400, detail={'error': 'SPICE is not enabled for this VM.'})
+        raise _proxmox_error(exc)
+    db.add(AuditLog(actor_id=user.id, action='console_spice', target_type='student_vm', target_id=str(vm.vmid))); db.commit()
+    return {'type': 'spice', 'config': cfg}
+
+@router.get('/vms/{id}/console/ssh')
+async def console_ssh(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    vm = _get_vm_for_user(db, user, id)
+    _rate_limit(user, vm.vmid, 'ssh')
+    db.add(AuditLog(actor_id=user.id, action='console_ssh', target_type='student_vm', target_id=str(vm.vmid))); db.commit()
+    host = vm.assigned_ip or vm.hostname or vm.vm_name
+    return {'type': 'ssh', 'host': host, 'username': vm.default_username or 'student', 'web_terminal_url': f'/api/vms/{vm.id}/console/ssh'}
+
+@router.get('/vms/{id}/console/terminal-url')
+async def console_terminal_url(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    vm = _get_vm_for_user(db, user, id)
+    _rate_limit(user, vm.vmid, 'web_terminal')
+    return await ProtocolService(db).web_terminal_url(user, vm)
 
 
 @router.get('/vms/{id}/console/terminal-url')
