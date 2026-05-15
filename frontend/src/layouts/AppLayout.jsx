@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 
-export default function AppLayout({ children, setUser }) {
+export default function AppLayout({ children, setUser, user }) {
   const nav = useNavigate()
   const loc = useLocation()
   const logout = () => { localStorage.removeItem('token'); setUser(false); nav('/') }
@@ -10,6 +10,7 @@ export default function AppLayout({ children, setUser }) {
       <Link className='nav-link' to='/'>Dashboard</Link>
       <Link className='nav-link' to='/vms'>My VMs</Link>
       <Link className='nav-link' to='/create'>Create VM</Link>
+      {(user?.role === 'Teacher' || user?.role === 'Admin') ? <Link className='nav-link' to='/admin/sessions'>Session Activity</Link> : null}
       <button onClick={logout} style={{marginTop: 10, width: '100%'}}>Logout</button>
       <div style={{marginTop:14, color:'#a7b0d6', fontSize:12}}>Current: {loc.pathname}</div>
     </aside>

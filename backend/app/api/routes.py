@@ -8,9 +8,9 @@ import websockets
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.db.session import get_db
-from app.models.models import User, VMTemplate, Permission, StudentVM, AuditLog
+from app.models.models import User, VMTemplate, Permission, StudentVM, AuditLog, ConnectionLaunch
 from app.schemas.auth import LoginRequest, TokenResponse, UserResponse
-from app.schemas.vm import TemplateResponse, CreateVMRequest, VMResponse, VMCreateResponse, AuditLogResponse, TemplateCreateRequest, TemplateUpdateRequest
+from app.schemas.vm import TemplateResponse, CreateVMRequest, VMResponse, VMCreateResponse, AuditLogResponse, TemplateCreateRequest, TemplateUpdateRequest, ConnectionLaunchResponse
 from app.services.security import verify_password, create_access_token
 from app.services.proxmox import ProxmoxClient
 from app.api.deps import get_current_user, require_role
@@ -76,6 +76,10 @@ def _rate_limit(user: User, vmid: int, action: str):
     if now - last < 3:
         raise HTTPException(status_code=429, detail={'error': 'Too many console launches. Please retry shortly.'})
     CONSOLE_RATE_LIMIT[key] = now
+
+
+def _log_connection_launch(db: Session, user: User, vm: StudentVM, protocol: str, status: str = 'success', details: str | None = None):
+    db.add(ConnectionLaunch(actor_id=user.id, vm_id=vm.id, protocol=protocol, status=status, details=details))
 
 
 @router.get('/health')
@@ -198,6 +202,26 @@ async def console_ssh(id: int, user: User = Depends(get_current_user), db: Sessi
     host = vm.assigned_ip or vm.hostname or vm.vm_name
     return {'type': 'ssh', 'host': host, 'username': vm.default_username or 'student', 'web_terminal_url': f'/api/vms/{vm.id}/console/ssh'}
 
+
+
+@router.get('/vms/{id}/console/terminal-url')
+async def console_terminal_url(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    vm = _get_vm_for_user(db, user, id)
+    _rate_limit(user, vm.vmid, 'web_terminal')
+    if not vm.ssh_enabled:
+        _log_connection_launch(db, user, vm, 'WEB_TERMINAL', 'failed', 'web terminal disabled')
+        db.commit()
+        raise HTTPException(status_code=400, detail={'error': 'WEB TERMINAL is not enabled for this VM.'})
+    if not vm.assigned_ip:
+        _log_connection_launch(db, user, vm, 'WEB_TERMINAL', 'failed', 'missing assigned IP')
+        db.commit()
+        raise HTTPException(status_code=400, detail={'error': 'No IP address found for WEB TERMINAL.'})
+    url = f"http://10.0.16.162:7681/?arg={vm.assigned_ip}"
+    db.add(AuditLog(actor_id=user.id, action='console_web_terminal', target_type='student_vm', target_id=str(vm.vmid)))
+    _log_connection_launch(db, user, vm, 'WEB_TERMINAL', 'success', vm.assigned_ip)
+    db.commit()
+    return {'type': 'web_terminal', 'url': url}
+
 @router.get('/vms/{id}/console/rdp')
 async def console_rdp(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     vm = _get_vm_for_user(db, user, id)
@@ -265,6 +289,10 @@ async def vm_status(id: int, user: User = Depends(get_current_user), db: Session
 @router.get('/admin/audit-logs', response_model=list[AuditLogResponse])
 def audit_logs(user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
     return db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(200).all()
+@router.get('/admin/session-activity', response_model=list[ConnectionLaunchResponse])
+def session_activity(user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+    return db.query(ConnectionLaunch).order_by(ConnectionLaunch.created_at.desc()).limit(200).all()
+
 @router.get('/admin/templates', response_model=list[TemplateResponse])
 def admin_templates(user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
     return db.query(VMTemplate).all()

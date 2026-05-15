@@ -70,3 +70,14 @@ class AuditLog(Base):
     target_type = Column(String(50), nullable=False)
     target_id = Column(String(100), nullable=False)
     created_at = Column(DateTime, server_default=func.now())
+
+
+class ConnectionLaunch(Base):
+    __tablename__ = 'connection_launches'
+    id = Column(Integer, primary_key=True)
+    actor_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    vm_id = Column(Integer, ForeignKey('student_vms.id'), nullable=False)
+    protocol = Column(String(50), nullable=False)
+    status = Column(String(20), nullable=False, default='success')
+    details = Column(String(255), nullable=True)
+    created_at = Column(DateTime, server_default=func.now())

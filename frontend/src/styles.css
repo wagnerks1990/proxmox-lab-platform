@@ -44,3 +44,9 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .msg.success { background: rgba(31,170,111,.2); color:#96f1c3; }
 .vm-details { margin-top: 14px; }
 @media (max-width: 900px){ .app-shell{ grid-template-columns: 1fr; } .sidebar{ border-right:none; border-bottom:1px solid var(--border);} }
+
+.panel-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px;}
+.muted{color:var(--muted);font-size:13px;}
+.vm-title{font-weight:700;}
+.connection-group{padding:6px;border:1px dashed var(--border);border-radius:10px;background:rgba(15,22,44,.55);}
+.btn-connection{background:#1d6a53;border-color:#2b9a78;}

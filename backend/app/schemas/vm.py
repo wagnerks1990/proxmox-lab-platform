@@ -62,3 +62,13 @@ class AuditLogResponse(BaseModel):
     target_type: str
     target_id: str
     created_at: datetime | None = None
+
+
+class ConnectionLaunchResponse(BaseModel):
+    id: int
+    actor_id: int
+    vm_id: int
+    protocol: str
+    status: str
+    details: str | None = None
+    created_at: datetime | None = None
