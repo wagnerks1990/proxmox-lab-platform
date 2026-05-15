@@ -8,9 +8,9 @@ import websockets
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.db.session import get_db
-from app.models.models import User, VMTemplate, Permission, StudentVM, AuditLog, ConnectionLaunch, VMPool, LabGroup, LabGroupMember, ProtocolSettings
+from app.models.models import User, VMTemplate, Permission, StudentVM, AuditLog, ConnectionLaunch, VMPool, LabGroup, LabGroupMember, ProtocolSettings, ProxmoxCluster, ProxmoxNode
 from app.schemas.auth import LoginRequest, TokenResponse, UserResponse
-from app.schemas.vm import TemplateResponse, CreateVMRequest, VMResponse, VMCreateResponse, AuditLogResponse, TemplateCreateRequest, TemplateUpdateRequest, ConnectionLaunchResponse, PoolBase, PoolResponse, GroupResponse, GroupCreateRequest, GroupUpdateRequest, GroupMemberRequest, ProtocolSettingsResponse
+from app.schemas.vm import TemplateResponse, CreateVMRequest, VMResponse, VMCreateResponse, AuditLogResponse, TemplateCreateRequest, TemplateUpdateRequest, ConnectionLaunchResponse, PoolBase, PoolResponse, GroupResponse, GroupCreateRequest, GroupUpdateRequest, GroupMemberRequest, ProtocolSettingsResponse, ProxmoxClusterBase, ProxmoxClusterResponse, ProxmoxNodeBase, ProxmoxNodeResponse
 from app.services.security import verify_password, create_access_token
 from app.services.proxmox import ProxmoxClient
 from app.services.protocol import ProtocolService
@@ -81,6 +81,30 @@ def _rate_limit(user: User, vmid: int, action: str):
 
 def _log_connection_launch(db: Session, user: User, vm: StudentVM, protocol: str, status: str = 'success', details: str | None = None):
     db.add(ConnectionLaunch(actor_id=user.id, vm_id=vm.id, protocol=protocol, status=status, details=details))
+
+def _select_pool_node(db: Session, pool: VMPool | None):
+    if not pool:
+        return None
+    strategy = (pool.placement_strategy or 'any_enabled_node').lower()
+    nodes_q = db.query(ProxmoxNode).filter(ProxmoxNode.enabled.is_(True))
+    if pool.cluster_id:
+        nodes_q = nodes_q.filter(ProxmoxNode.cluster_id == pool.cluster_id)
+    nodes = nodes_q.all()
+    if strategy == 'fixed_node' and pool.preferred_node_id:
+        return db.query(ProxmoxNode).filter(ProxmoxNode.id == pool.preferred_node_id, ProxmoxNode.enabled.is_(True)).first()
+    if strategy == 'least_running_vms':
+        best = None; best_cnt = 10**9
+        for n in nodes:
+            c = db.query(StudentVM).filter(StudentVM.proxmox_node == n.node_name, StudentVM.status == 'running').count()
+            if c < best_cnt:
+                best_cnt = c; best = n
+        return best
+    if strategy == 'round_robin' and nodes:
+        idx = (db.query(StudentVM).count()) % len(nodes)
+        return nodes[idx]
+    if strategy == 'least_memory_usage':
+        return sorted(nodes, key=lambda x: float((x.memory_usage or '0').split('%')[0] or 0))[0] if nodes else None
+    return nodes[0] if nodes else None
 
 
 @router.get('/health')
@@ -201,6 +225,11 @@ async def console_ssh(id: int, user: User = Depends(get_current_user), db: Sessi
     host = vm.assigned_ip or vm.hostname or vm.vm_name
     return {'type': 'ssh', 'host': host, 'username': vm.default_username or 'student', 'web_terminal_url': f'/api/vms/{vm.id}/console/ssh'}
 
+@router.get('/vms/{id}/console/terminal-url')
+async def console_terminal_url(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    vm = _get_vm_for_user(db, user, id)
+    _rate_limit(user, vm.vmid, 'web_terminal')
+    return await ProtocolService(db).web_terminal_url(user, vm)
 
 
 @router.get('/vms/{id}/console/terminal-url')
@@ -233,7 +262,16 @@ async def create_vm(payload: CreateVMRequest, user: User = Depends(get_current_u
         raise HTTPException(status_code=409, detail={'error': 'Creation already in progress', 'code': 'vm_creation_in_progress'})
     vmid = 200000 + user.id * 100 + db.query(StudentVM).count() + 1
     vm_name = f"{user.username}-{''.join(ch for ch in payload.lab_name.lower() if ch.isalnum() or ch == '-')[:20]}-{vmid}"
-    vm = StudentVM(owner_id=user.id, template_id=template.id, vm_name=vm_name, vmid=vmid, proxmox_node=template.proxmox_node, status='provisioning', operating_system='linux', access_protocols='novnc,ssh,spice')
+    selected_node = template.proxmox_node
+    pool = db.query(VMPool).filter(VMPool.enabled.is_(True)).first()
+    if pool:
+        if db.query(StudentVM).filter(StudentVM.proxmox_node == (pool.node_id or selected_node)).count() >= (pool.max_vms or 999999):
+            raise HTTPException(status_code=409, detail={'error':'Quota exceeded','code':'max_vms_per_pool'})
+        node_obj = _select_pool_node(db, pool)
+        if not node_obj:
+            raise HTTPException(status_code=409, detail={'error':'No eligible node found for pool placement'})
+        selected_node = node_obj.node_name
+    vm = StudentVM(owner_id=user.id, template_id=template.id, vm_name=vm_name, vmid=vmid, proxmox_node=selected_node, status='provisioning', operating_system='linux', access_protocols='novnc,ssh,spice')
     db.add(vm); db.flush()
     proxmox = ProxmoxClient(); message = 'VM created.'
     try:
@@ -518,7 +556,13 @@ async def monitoring_summary(user: User = Depends(require_role('Teacher', 'Admin
     except Exception: db_ok=False
     try: await ProxmoxClient().list_nodes()
     except Exception: pmx_ok=False
-    return {'total_vms':total,'running_vms':running,'stopped_vms':stopped,'recent_sessions':len(sessions),'failed_actions':failed,'proxmox_health':pmx_ok,'database_health':db_ok}
+    node_counts = []
+    for n in db.query(ProxmoxNode).all():
+        vmc = db.query(StudentVM).filter(StudentVM.proxmox_node==n.node_name).count()
+        rvc = db.query(StudentVM).filter(StudentVM.proxmox_node==n.node_name, StudentVM.status=='running').count()
+        node_counts.append({'node':n.node_name,'cluster_id':n.cluster_id,'vm_count':vmc,'running_vm_count':rvc,'status':n.status,'cpu_usage':n.cpu_usage,'memory_usage':n.memory_usage,'storage_summary':n.storage_summary})
+    cluster_health = [{'cluster':c.name,'enabled':c.enabled} for c in db.query(ProxmoxCluster).all()]
+    return {'total_vms':total,'running_vms':running,'stopped_vms':stopped,'recent_sessions':len(sessions),'failed_actions':failed,'proxmox_health':pmx_ok,'database_health':db_ok,'cluster_health':cluster_health,'node_health':node_counts,'failed_proxmox_checks':0}
 
 @router.get('/admin/settings/protocols', response_model=ProtocolSettingsResponse)
 def get_protocol_settings(user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
@@ -537,3 +581,51 @@ def patch_protocol_settings(payload: ProtocolSettingsResponse, user: User = Depe
     data.pop('id', None)
     for k,v in data.items(): setattr(s,k,v)
     db.commit(); db.refresh(s); return s
+
+
+@router.get('/admin/proxmox/clusters', response_model=list[ProxmoxClusterResponse])
+def list_clusters(user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+    return db.query(ProxmoxCluster).order_by(ProxmoxCluster.created_at.desc()).all()
+
+@router.post('/admin/proxmox/clusters', response_model=ProxmoxClusterResponse)
+def create_cluster(payload: ProxmoxClusterBase, user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+    c = ProxmoxCluster(**payload.model_dump()); db.add(c); db.commit(); db.refresh(c); return c
+
+@router.patch('/admin/proxmox/clusters/{id}', response_model=ProxmoxClusterResponse)
+def patch_cluster(id: int, payload: ProxmoxClusterBase, user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+    c = db.query(ProxmoxCluster).filter(ProxmoxCluster.id==id).first()
+    if not c: raise HTTPException(status_code=404, detail='Cluster not found')
+    for k,v in payload.model_dump(exclude_none=True).items(): setattr(c,k,v)
+    db.commit(); db.refresh(c); return c
+
+@router.delete('/admin/proxmox/clusters/{id}')
+def delete_cluster(id: int, user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+    c = db.query(ProxmoxCluster).filter(ProxmoxCluster.id==id).first()
+    if not c: raise HTTPException(status_code=404, detail='Cluster not found')
+    db.delete(c); db.commit(); return {'ok':True}
+
+@router.get('/admin/proxmox/nodes', response_model=list[ProxmoxNodeResponse])
+def list_nodes_admin(user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+    return db.query(ProxmoxNode).order_by(ProxmoxNode.created_at.desc()).all()
+
+@router.post('/admin/proxmox/nodes/sync', response_model=list[ProxmoxNodeResponse])
+async def sync_nodes(user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+    clusters = db.query(ProxmoxCluster).filter(ProxmoxCluster.enabled.is_(True)).all()
+    for c in clusters:
+        try:
+            nodes = await ProxmoxClient().list_nodes()
+            for n in nodes:
+                name = n.get('node') or n.get('name')
+                if not name: continue
+                ex = db.query(ProxmoxNode).filter(ProxmoxNode.cluster_id==c.id, ProxmoxNode.node_name==name).first()
+                if not ex:
+                    ex = ProxmoxNode(cluster_id=c.id, node_name=name)
+                    db.add(ex)
+                ex.status = 'online' if n.get('status') in ['online','up',1,True] else 'unknown'
+                ex.cpu_usage = str(n.get('cpu')) if n.get('cpu') is not None else ex.cpu_usage
+                ex.memory_usage = str(n.get('mem')) if n.get('mem') is not None else ex.memory_usage
+                ex.last_seen = func.now()
+        except Exception:
+            continue
+    db.commit()
+    return db.query(ProxmoxNode).order_by(ProxmoxNode.created_at.desc()).all()

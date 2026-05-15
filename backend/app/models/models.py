@@ -95,6 +95,13 @@ class VMPool(Base):
     auto_start = Column(Boolean, default=True)
     recycle_on_logout = Column(Boolean, default=False)
     created_at = Column(DateTime, server_default=func.now())
+    cluster_id = Column(Integer, ForeignKey('proxmox_clusters.id'), nullable=True)
+    node_id = Column(Integer, ForeignKey('proxmox_nodes.id'), nullable=True)
+    storage_pool = Column(String(100), nullable=True)
+    network_bridge = Column(String(100), nullable=True)
+    placement_strategy = Column(String(50), nullable=True)
+    preferred_node_id = Column(Integer, ForeignKey('proxmox_nodes.id'), nullable=True)
+    resource_pool_id = Column(Integer, ForeignKey('vm_pools.id'), nullable=True)
 
 
 class LabGroup(Base):
@@ -103,6 +110,13 @@ class LabGroup(Base):
     name = Column(String(100), unique=True, nullable=False)
     description = Column(String(255), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
+    cluster_id = Column(Integer, ForeignKey('proxmox_clusters.id'), nullable=True)
+    node_id = Column(Integer, ForeignKey('proxmox_nodes.id'), nullable=True)
+    storage_pool = Column(String(100), nullable=True)
+    network_bridge = Column(String(100), nullable=True)
+    placement_strategy = Column(String(50), nullable=True)
+    preferred_node_id = Column(Integer, ForeignKey('proxmox_nodes.id'), nullable=True)
+    resource_pool_id = Column(Integer, ForeignKey('vm_pools.id'), nullable=True)
 
 
 class LabGroupMember(Base):
@@ -123,3 +137,28 @@ class ProtocolSettings(Base):
     enable_novnc = Column(Boolean, default=True)
     default_ssh_port = Column(Integer, default=22)
     updated_at = Column(DateTime, server_default=func.now())
+
+
+class ProxmoxCluster(Base):
+    __tablename__ = 'proxmox_clusters'
+    id = Column(Integer, primary_key=True)
+    name = Column(String(100), unique=True, nullable=False)
+    api_url = Column(String(255), nullable=False)
+    enabled = Column(Boolean, default=True)
+    description = Column(String(255), nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class ProxmoxNode(Base):
+    __tablename__ = 'proxmox_nodes'
+    id = Column(Integer, primary_key=True)
+    cluster_id = Column(Integer, ForeignKey('proxmox_clusters.id'), nullable=False)
+    node_name = Column(String(100), nullable=False)
+    management_ip = Column(String(64), nullable=True)
+    enabled = Column(Boolean, default=True)
+    status = Column(String(20), nullable=True)
+    last_seen = Column(DateTime, nullable=True)
+    cpu_usage = Column(String(50), nullable=True)
+    memory_usage = Column(String(50), nullable=True)
+    storage_summary = Column(String(255), nullable=True)
+    created_at = Column(DateTime, server_default=func.now())

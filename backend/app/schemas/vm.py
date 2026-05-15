@@ -7,6 +7,9 @@ class TemplateResponse(BaseModel):
     name: str
     proxmox_node: str
     source_vmid: int
+    operating_system: str | None = None
+    default_protocols: str | None = None
+    description: str | None = None
     enabled: bool = True
 
 
@@ -14,6 +17,9 @@ class TemplateCreateRequest(BaseModel):
     name: str
     proxmox_node: str
     source_vmid: int
+    operating_system: str | None = None
+    default_protocols: str | None = None
+    description: str | None = None
     enabled: bool = True
 
 
@@ -21,6 +27,9 @@ class TemplateUpdateRequest(BaseModel):
     name: str | None = None
     proxmox_node: str | None = None
     source_vmid: int | None = None
+    operating_system: str | None = None
+    default_protocols: str | None = None
+    description: str | None = None
     enabled: bool | None = None
 
 
@@ -82,6 +91,13 @@ class PoolBase(BaseModel):
     max_running_vms: int = 10
     auto_start: bool = True
     recycle_on_logout: bool = False
+    cluster_id: int | None = None
+    node_id: int | None = None
+    storage_pool: str | None = None
+    network_bridge: str | None = None
+    placement_strategy: str | None = 'any_enabled_node'
+    preferred_node_id: int | None = None
+    resource_pool_id: int | None = None
 
 
 class PoolResponse(PoolBase):
@@ -118,3 +134,31 @@ class ProtocolSettingsResponse(BaseModel):
     enable_spice: bool = True
     enable_novnc: bool = True
     default_ssh_port: int = 22
+
+class ProxmoxClusterBase(BaseModel):
+    name: str
+    api_url: str
+    enabled: bool = True
+    description: str | None = None
+
+
+class ProxmoxClusterResponse(ProxmoxClusterBase):
+    id: int
+    created_at: datetime | None = None
+
+
+class ProxmoxNodeBase(BaseModel):
+    cluster_id: int
+    node_name: str
+    management_ip: str | None = None
+    enabled: bool = True
+
+
+class ProxmoxNodeResponse(ProxmoxNodeBase):
+    id: int
+    status: str | None = None
+    last_seen: datetime | None = None
+    cpu_usage: str | None = None
+    memory_usage: str | None = None
+    storage_summary: str | None = None
+    created_at: datetime | None = None

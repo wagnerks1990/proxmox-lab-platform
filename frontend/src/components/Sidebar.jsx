@@ -10,8 +10,9 @@ export default function Sidebar({ user }) {
       <Link to='/create'>Create Lab</Link>
       <Link to='/sessions'>Sessions</Link>
       <AdminOnly user={user}><>
+        <Link to='/proxmox'>Proxmox</Link>
         <Link to='/templates'>Templates</Link>
-        <Link to='/pools'>Pools</Link>
+        <Link to='/pools'>Resource Pools</Link>
         <Link to='/users'>Users</Link>
         <Link to='/monitoring'>Monitoring</Link>
         <Link to='/settings'>Settings</Link>
