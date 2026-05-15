@@ -45,6 +45,9 @@ class VMResponse(BaseModel):
     default_username: str | None = None
     assigned_ip: str | None = None
     hostname: str | None = None
+    ssh_username: str | None = None
+    ssh_auth_method: str | None = None
+    ssh_port: int | None = 22
 
 
 class VMCreateResponse(VMResponse):

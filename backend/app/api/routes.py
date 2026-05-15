@@ -1,7 +1,8 @@
 from time import time
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 import httpx
+import asyncssh
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.db.session import get_db
@@ -11,6 +12,8 @@ from app.schemas.vm import TemplateResponse, CreateVMRequest, VMResponse, VMCrea
 from app.services.security import verify_password, create_access_token
 from app.services.proxmox import ProxmoxClient
 from app.api.deps import get_current_user, require_role
+from jose import jwt, JWTError
+from app.core.config import settings
 
 router = APIRouter(prefix='/api')
 MAX_VMS_PER_USER = 5
@@ -43,6 +46,26 @@ def _ensure_quota(db: Session, user: User):
     if owned.filter(StudentVM.status == 'running').count() >= MAX_RUNNING_VMS_PER_USER:
         raise HTTPException(status_code=409, detail={'error': 'Quota exceeded', 'code': 'max_running_vms', 'max_running_vms_per_user': MAX_RUNNING_VMS_PER_USER})
 
+
+
+
+def _get_user_from_ws_token(db: Session, token: str | None):
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+        username = payload.get('sub')
+    except JWTError:
+        return None
+    return db.query(User).filter(User.username == username).first()
+
+
+def _discover_vm_ip(interfaces):
+    for iface in interfaces:
+        for addr in iface.get('ip-addresses', []):
+            if addr.get('ip-address-type') == 'ipv4' and not addr.get('ip-address', '').startswith('127.'):
+                return addr.get('ip-address')
+    return None
 
 def _rate_limit(user: User, vmid: int, action: str):
     key = f'{user.id}:{vmid}:{action}'
@@ -252,3 +275,78 @@ def remove_template(id: int, user: User = Depends(require_role('Teacher', 'Admin
     t = db.query(VMTemplate).filter(VMTemplate.id == id).first();
     if not t: raise HTTPException(status_code=404, detail='Template not found')
     db.delete(t); db.commit(); return JSONResponse({'ok': True})
+
+
+@router.websocket('/vms/{id}/console/ssh/ws')
+async def ssh_ws(id: int, websocket: WebSocket, db: Session = Depends(get_db)):
+    token = websocket.query_params.get('token')
+    user = _get_user_from_ws_token(db, token)
+    if not user:
+        await websocket.close(code=1008, reason='Invalid token')
+        return
+    try:
+        vm = _get_vm_for_user(db, user, id)
+    except HTTPException:
+        await websocket.close(code=1008, reason='Forbidden')
+        return
+
+    host = vm.assigned_ip
+    if not host:
+        try:
+            interfaces = await ProxmoxClient().get_guest_network(vm.proxmox_node, vm.vmid)
+            host = _discover_vm_ip(interfaces)
+            if host:
+                vm.assigned_ip = host
+                db.commit()
+        except Exception:
+            pass
+
+    if not host:
+        await websocket.accept()
+        await websocket.send_text('ERROR: No VM IP address found. Install/enable QEMU guest agent or manually set assigned_ip.')
+        await websocket.close(code=1000)
+        return
+
+    username = vm.ssh_username or settings.lab_vm_ssh_username or vm.default_username or 'student'
+    password = settings.lab_vm_ssh_password
+    port = vm.ssh_port or 22
+    if not password:
+        await websocket.accept()
+        await websocket.send_text('ERROR: LAB_VM_SSH_PASSWORD is not configured on backend.')
+        await websocket.close(code=1000)
+        return
+
+    await websocket.accept()
+    db.add(AuditLog(actor_id=user.id, action='ssh_ws_launch', target_type='student_vm', target_id=str(vm.vmid))); db.commit()
+
+    try:
+        async with asyncssh.connect(host, port=port, username=username, password=password, known_hosts=None) as conn:
+            process = await conn.create_process(term_type='xterm', term_size=(24, 120))
+
+            async def to_ws():
+                try:
+                    while not process.stdout.at_eof():
+                        chunk = await process.stdout.read(1024)
+                        if chunk:
+                            await websocket.send_text(chunk)
+                        else:
+                            break
+                except Exception:
+                    return
+
+            async def from_ws():
+                while True:
+                    msg = await websocket.receive_text()
+                    process.stdin.write(msg)
+
+            import asyncio
+            sender = asyncio.create_task(to_ws())
+            receiver = asyncio.create_task(from_ws())
+            done, pending = await asyncio.wait({sender, receiver}, return_when=asyncio.FIRST_COMPLETED)
+            for t in pending:
+                t.cancel()
+    except WebSocketDisconnect:
+        return
+    except Exception as exc:
+        await websocket.send_text(f'ERROR: SSH connection failed: {exc}')
+        await websocket.close(code=1011)

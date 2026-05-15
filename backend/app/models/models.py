@@ -55,6 +55,9 @@ class StudentVM(Base):
     default_username = Column(String(100), nullable=True)
     assigned_ip = Column(String(64), nullable=True)
     hostname = Column(String(255), nullable=True)
+    ssh_username = Column(String(100), nullable=True)
+    ssh_auth_method = Column(String(50), nullable=True)
+    ssh_port = Column(Integer, default=22)
     created_at = Column(DateTime, server_default=func.now())
 
 
