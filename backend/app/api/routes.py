@@ -8,9 +8,9 @@ import websockets
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.db.session import get_db
-from app.models.models import User, VMTemplate, Permission, StudentVM, AuditLog, ConnectionLaunch
+from app.models.models import User, VMTemplate, Permission, StudentVM, AuditLog, ConnectionLaunch, VMPool, LabGroup, LabGroupMember, ProtocolSettings
 from app.schemas.auth import LoginRequest, TokenResponse, UserResponse
-from app.schemas.vm import TemplateResponse, CreateVMRequest, VMResponse, VMCreateResponse, AuditLogResponse, TemplateCreateRequest, TemplateUpdateRequest, ConnectionLaunchResponse
+from app.schemas.vm import TemplateResponse, CreateVMRequest, VMResponse, VMCreateResponse, AuditLogResponse, TemplateCreateRequest, TemplateUpdateRequest, ConnectionLaunchResponse, PoolBase, PoolResponse, GroupResponse, GroupCreateRequest, GroupUpdateRequest, GroupMemberRequest, ProtocolSettingsResponse
 from app.services.security import verify_password, create_access_token
 from app.services.proxmox import ProxmoxClient
 from app.services.protocol import ProtocolService
@@ -449,3 +449,91 @@ async def console_novnc_view(id: int, port: int, ticket: str, user: User = Depen
     base = settings.proxmox_base_url.replace('/api2/json', '')
     novnc = f"{base}/?console=kvm&novnc=1&vmid={vm.vmid}&node={vm.proxmox_node}&vncticket={ticket}&port={port}"
     return {'url': novnc}
+
+
+@router.get('/admin/pools', response_model=list[PoolResponse])
+def list_pools(user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+    return db.query(VMPool).order_by(VMPool.created_at.desc()).all()
+
+@router.post('/admin/pools', response_model=PoolResponse)
+def create_pool(payload: PoolBase, user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+    p = VMPool(**payload.model_dump())
+    db.add(p); db.commit(); db.refresh(p)
+    return p
+
+@router.patch('/admin/pools/{id}', response_model=PoolResponse)
+def patch_pool(id: int, payload: PoolBase, user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+    p = db.query(VMPool).filter(VMPool.id == id).first()
+    if not p: raise HTTPException(status_code=404, detail='Pool not found')
+    for k,v in payload.model_dump(exclude_none=True).items(): setattr(p,k,v)
+    db.commit(); db.refresh(p); return p
+
+@router.delete('/admin/pools/{id}')
+def delete_pool(id: int, user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+    p = db.query(VMPool).filter(VMPool.id == id).first()
+    if not p: raise HTTPException(status_code=404, detail='Pool not found')
+    db.delete(p); db.commit(); return {'ok': True}
+
+@router.get('/admin/users')
+def admin_users(user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+    users = db.query(User).all()
+    return [{'id':u.id,'username':u.username,'email':u.email,'role':u.role.name,'vm_count':db.query(StudentVM).filter(StudentVM.owner_id==u.id).count()} for u in users]
+
+@router.get('/admin/groups', response_model=list[GroupResponse])
+def admin_groups(user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+    return db.query(LabGroup).order_by(LabGroup.created_at.desc()).all()
+
+@router.post('/admin/groups', response_model=GroupResponse)
+def create_group(payload: GroupCreateRequest, user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+    g = LabGroup(**payload.model_dump()); db.add(g); db.commit(); db.refresh(g); return g
+
+@router.patch('/admin/groups/{id}', response_model=GroupResponse)
+def patch_group(id: int, payload: GroupUpdateRequest, user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+    g = db.query(LabGroup).filter(LabGroup.id == id).first()
+    if not g: raise HTTPException(status_code=404, detail='Group not found')
+    for k,v in payload.model_dump(exclude_none=True).items(): setattr(g,k,v)
+    db.commit(); db.refresh(g); return g
+
+@router.post('/admin/groups/{id}/members')
+def add_group_member(id: int, payload: GroupMemberRequest, user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+    g = db.query(LabGroup).filter(LabGroup.id==id).first()
+    if not g: raise HTTPException(status_code=404, detail='Group not found')
+    if not db.query(LabGroupMember).filter(LabGroupMember.group_id==id, LabGroupMember.user_id==payload.user_id).first():
+        db.add(LabGroupMember(group_id=id,user_id=payload.user_id)); db.commit()
+    return {'ok': True}
+
+@router.delete('/admin/groups/{id}/members/{user_id}')
+def remove_group_member(id: int, user_id: int, user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+    m = db.query(LabGroupMember).filter(LabGroupMember.group_id==id, LabGroupMember.user_id==user_id).first()
+    if m: db.delete(m); db.commit()
+    return {'ok': True}
+
+@router.get('/admin/monitoring/summary')
+async def monitoring_summary(user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+    total = db.query(StudentVM).count(); running = db.query(StudentVM).filter(StudentVM.status=='running').count(); stopped = db.query(StudentVM).filter(StudentVM.status=='stopped').count()
+    sessions = db.query(ConnectionLaunch).order_by(ConnectionLaunch.created_at.desc()).limit(20).all()
+    failed = db.query(ConnectionLaunch).filter(ConnectionLaunch.status=='failed').count()
+    db_ok=True; pmx_ok=True
+    try: db.execute(text('SELECT 1'))
+    except Exception: db_ok=False
+    try: await ProxmoxClient().list_nodes()
+    except Exception: pmx_ok=False
+    return {'total_vms':total,'running_vms':running,'stopped_vms':stopped,'recent_sessions':len(sessions),'failed_actions':failed,'proxmox_health':pmx_ok,'database_health':db_ok}
+
+@router.get('/admin/settings/protocols', response_model=ProtocolSettingsResponse)
+def get_protocol_settings(user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+    s = db.query(ProtocolSettings).first()
+    if not s:
+        s = ProtocolSettings(terminal_gateway_url='http://10.0.16.162:7681')
+        db.add(s); db.commit(); db.refresh(s)
+    return s
+
+@router.patch('/admin/settings/protocols', response_model=ProtocolSettingsResponse)
+def patch_protocol_settings(payload: ProtocolSettingsResponse, user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+    s = db.query(ProtocolSettings).first()
+    if not s:
+        s = ProtocolSettings(); db.add(s)
+    data = payload.model_dump(exclude_none=True)
+    data.pop('id', None)
+    for k,v in data.items(): setattr(s,k,v)
+    db.commit(); db.refresh(s); return s

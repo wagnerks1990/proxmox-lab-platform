@@ -72,3 +72,49 @@ class ConnectionLaunchResponse(BaseModel):
     status: str
     details: str | None = None
     created_at: datetime | None = None
+
+class PoolBase(BaseModel):
+    name: str
+    description: str | None = None
+    enabled: bool = True
+    default_template_id: int | None = None
+    max_vms: int = 20
+    max_running_vms: int = 10
+    auto_start: bool = True
+    recycle_on_logout: bool = False
+
+
+class PoolResponse(PoolBase):
+    id: int
+    created_at: datetime | None = None
+
+
+class GroupResponse(BaseModel):
+    id: int
+    name: str
+    description: str | None = None
+    created_at: datetime | None = None
+
+
+class GroupCreateRequest(BaseModel):
+    name: str
+    description: str | None = None
+
+
+class GroupUpdateRequest(BaseModel):
+    name: str | None = None
+    description: str | None = None
+
+
+class GroupMemberRequest(BaseModel):
+    user_id: int
+
+
+class ProtocolSettingsResponse(BaseModel):
+    id: int
+    terminal_gateway_url: str | None = None
+    enable_web_terminal: bool = True
+    enable_rdp: bool = True
+    enable_spice: bool = True
+    enable_novnc: bool = True
+    default_ssh_port: int = 22

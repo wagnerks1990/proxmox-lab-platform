@@ -81,3 +81,45 @@ class ConnectionLaunch(Base):
     status = Column(String(20), nullable=False, default='success')
     details = Column(String(255), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
+
+
+class VMPool(Base):
+    __tablename__ = 'vm_pools'
+    id = Column(Integer, primary_key=True)
+    name = Column(String(100), unique=True, nullable=False)
+    description = Column(String(255), nullable=True)
+    enabled = Column(Boolean, default=True)
+    default_template_id = Column(Integer, ForeignKey('vm_templates.id'), nullable=True)
+    max_vms = Column(Integer, default=20)
+    max_running_vms = Column(Integer, default=10)
+    auto_start = Column(Boolean, default=True)
+    recycle_on_logout = Column(Boolean, default=False)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class LabGroup(Base):
+    __tablename__ = 'lab_groups'
+    id = Column(Integer, primary_key=True)
+    name = Column(String(100), unique=True, nullable=False)
+    description = Column(String(255), nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class LabGroupMember(Base):
+    __tablename__ = 'lab_group_members'
+    id = Column(Integer, primary_key=True)
+    group_id = Column(Integer, ForeignKey('lab_groups.id'), nullable=False)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class ProtocolSettings(Base):
+    __tablename__ = 'protocol_settings'
+    id = Column(Integer, primary_key=True)
+    terminal_gateway_url = Column(String(255), nullable=True)
+    enable_web_terminal = Column(Boolean, default=True)
+    enable_rdp = Column(Boolean, default=True)
+    enable_spice = Column(Boolean, default=True)
+    enable_novnc = Column(Boolean, default=True)
+    default_ssh_port = Column(Integer, default=22)
+    updated_at = Column(DateTime, server_default=func.now())
