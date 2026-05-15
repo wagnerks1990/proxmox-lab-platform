@@ -8,11 +8,12 @@ import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import VmsPage from './pages/VmsPage'
 import CreateVmPage from './pages/CreateVmPage'
+import './styles.css'
 
 function App() {
   const { user, setUser, loading, refresh } = useAuth()
   const [message, setMessage] = React.useState(null)
-  if (loading) return <div>Loading...</div>
+  if (loading) return <div className='login-wrap'>Loading...</div>
   if (user === false) return <><MessageBanner message={message} /><LoginPage onLogin={refresh} setMessage={setMessage} /></>
   return <BrowserRouter><AppLayout setUser={setUser}><MessageBanner message={message} /><Routes><Route path='/' element={<DashboardPage user={user} />} /><Route path='/vms' element={<VmsPage setMessage={setMessage} />} /><Route path='/create' element={<CreateVmPage setMessage={setMessage} />} /><Route path='*' element={<Navigate to='/' />} /></Routes></AppLayout></BrowserRouter>
 }

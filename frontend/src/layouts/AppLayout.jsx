@@ -1,15 +1,18 @@
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 
 export default function AppLayout({ children, setUser }) {
   const nav = useNavigate()
+  const loc = useLocation()
   const logout = () => { localStorage.removeItem('token'); setUser(false); nav('/') }
-  return <div style={{ maxWidth: 1200, margin: '0 auto', padding: 16 }}>
-    <nav style={{ display:'flex', gap:10, alignItems:'center', marginBottom: 12 }}>
-      <Link to='/'>Dashboard</Link>
-      <Link to='/vms'>My VMs</Link>
-      <Link to='/create'>Create VM</Link>
-      <button onClick={logout}>Logout</button>
-    </nav>
-    {children}
+  return <div className='app-shell'>
+    <aside className='sidebar'>
+      <div className='brand'>Proxmox Lab Portal</div>
+      <Link className='nav-link' to='/'>Dashboard</Link>
+      <Link className='nav-link' to='/vms'>My VMs</Link>
+      <Link className='nav-link' to='/create'>Create VM</Link>
+      <button onClick={logout} style={{marginTop: 10, width: '100%'}}>Logout</button>
+      <div style={{marginTop:14, color:'#a7b0d6', fontSize:12}}>Current: {loc.pathname}</div>
+    </aside>
+    <main className='content'>{children}</main>
   </div>
 }
