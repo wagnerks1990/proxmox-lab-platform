@@ -14,5 +14,8 @@ class Settings(BaseSettings):
     proxmox_token_secret: str
     proxmox_verify_ssl: bool = False
 
+    lab_vm_ssh_username: str | None = None
+    lab_vm_ssh_password: str | None = None
+
 
 settings = Settings()
