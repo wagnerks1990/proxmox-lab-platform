@@ -1,19 +1,71 @@
-import React from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import ReactDOM from 'react-dom/client'
-import { BrowserRouter, Routes, Route, Link, Navigate } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import { BrowserRouter, Routes, Route, Link, Navigate, useNavigate } from 'react-router-dom'
 import api from './api/client'
+import { Terminal } from 'xterm'
+import { FitAddon } from 'xterm-addon-fit'
+import 'xterm/css/xterm.css'
 
-function Login({ onLogin }) {
-  const [username, setU] = useState('alice')
-  const [password, setP] = useState('Password123!')
-  const submit = async (e) => { e.preventDefault(); const { data } = await api.post('/auth/login', { username, password }); localStorage.setItem('token', data.access_token); onLogin() }
-  return <form onSubmit={submit}><h2>Login</h2><input value={username} onChange={e=>setU(e.target.value)} /><input type='password' value={password} onChange={e=>setP(e.target.value)} /><button>Login</button></form>
+const btn = { marginRight: 8, marginBottom: 6 }
+const badgeColor = { running: '#198754', stopped: '#6c757d', error: '#dc3545', provisioning: '#ffc107' }
+const card = { border: '1px solid #ddd', borderRadius: 8, padding: 12, minWidth: 160 }
+const Message = ({ message }) => message ? <div style={{ color: message.type === 'error' ? '#dc3545' : '#198754', padding: 8 }}>{message.text}</div> : null
+const statusBadge = (s) => <span style={{ background: badgeColor[s] || '#777', color: '#fff', borderRadius: 10, padding: '2px 8px' }}>{s}</span>
+
+function SSHModal({ vm, onClose }) {
+  const el = useRef(null)
+  const wsRef = useRef(null)
+  const termRef = useRef(null)
+  const [err, setErr] = useState('')
+
+  const connect = () => {
+    if (!vm || !el.current) return
+    const token = localStorage.getItem('token')
+    const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws'
+    const ws = new WebSocket(`${scheme}://${window.location.host}/api/vms/${vm.id}/console/ssh/ws?token=${encodeURIComponent(token || '')}`)
+    wsRef.current = ws
+    const term = new Terminal({ theme: { background: '#111', foreground: '#eee' }, cursorBlink: true })
+    const fit = new FitAddon()
+    term.loadAddon(fit)
+    term.open(el.current)
+    fit.fit()
+    termRef.current = term
+    ws.onopen = () => term.writeln('\r\nConnected to SSH backend...\r\n')
+    ws.onmessage = (e) => { const d = String(e.data); if (d.startsWith('ERROR:')) setErr(d); term.write(d) }
+    ws.onerror = () => setErr('WebSocket error connecting to SSH terminal.')
+    ws.onclose = () => term.writeln('\r\n[connection closed]\r\n')
+    term.onData((d) => ws.readyState === 1 && ws.send(d))
+  }
+
+  useEffect(() => {
+    if (!vm) return
+    connect()
+    return () => { try { wsRef.current?.close() } catch {}; try { termRef.current?.dispose() } catch {} }
+  }, [vm?.id])
+
+  if (!vm) return null
+  return <div style={{ position: 'fixed', left: 20, right: 20, top: 40, bottom: 40, background: '#fff', border: '1px solid #ddd', padding: 8, zIndex: 999 }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between' }}><strong>SSH: {vm.vm_name}</strong><div><button style={btn} onClick={() => { wsRef.current?.close(); termRef.current?.dispose(); connect() }}>Reconnect</button><button onClick={onClose}>Close</button></div></div>
+    {err && <div style={{ color: '#dc3545' }}>{err}</div>}
+    <div ref={el} style={{ height: '90%', background: '#111', marginTop: 8 }} />
+  </div>
 }
 
-function Dashboard({ user }) { return <div><h2>{user.role} Dashboard</h2><Link to='/vms'>My VMs</Link> | <Link to='/create'>Create VM</Link></div> }
-function VMs() { const [vms,setV]=useState([]); useEffect(()=>{api.get('/vms').then(r=>setV(r.data))},[]); return <ul>{vms.map(v=><li key={v.id}>{v.vm_name} ({v.status})</li>)}</ul> }
-function CreateVM() { const [templates,setT]=useState([]); const [templateId,setId]=useState(''); const [labName,setL]=useState('linuxlab'); useEffect(()=>{api.get('/templates').then(r=>{setT(r.data); if(r.data[0]) setId(r.data[0].id)})},[]); const create=async()=>{await api.post('/vms',{template_id:Number(templateId),lab_name:labName,auto_start:true}); alert('VM created');}; return <div><h3>Create VM</h3><select value={templateId} onChange={e=>setId(e.target.value)}>{templates.map(t=><option value={t.id} key={t.id}>{t.name}</option>)}</select><input value={labName} onChange={e=>setL(e.target.value)} /><button onClick={create}>Create</button></div> }
+function Login({ onLogin, setMessage }) { const [username,setU]=useState('alice'); const [password,setP]=useState('Password123!'); const submit=async(e)=>{e.preventDefault(); try{const {data}=await api.post('/auth/login',{username,password}); localStorage.setItem('token',data.access_token); setMessage({type:'success',text:'Login successful'}); onLogin();}catch{setMessage({type:'error',text:'Login failed'})}}; return <form onSubmit={submit}><h2>Login</h2><input value={username} onChange={e=>setU(e.target.value)}/><input type='password' value={password} onChange={e=>setP(e.target.value)}/><button>Login</button></form> }
+function Nav({setUser}) { const n=useNavigate(); return <nav style={{display:'flex',gap:10,padding:'8px 0'}}><Link to='/'>Home</Link><Link to='/vms'>My VMs</Link><Link to='/create'>Create VM</Link><button onClick={()=>{localStorage.removeItem('token'); setUser(false); n('/')}}>Logout</button></nav> }
+function Dashboard({user}) { const [vms,setV]=useState([]), [t,setT]=useState([]); useEffect(()=>{api.get('/vms').then(r=>setV(r.data)); api.get('/templates').then(r=>setT(r.data));},[]); const s=useMemo(()=>({total:vms.length,running:vms.filter(v=>v.status==='running').length,stopped:vms.filter(v=>v.status==='stopped').length,templates:t.length}),[vms,t]); return <div><h2>{user.role} Dashboard</h2><div style={{display:'flex',gap:10,flexWrap:'wrap'}}><div style={card}>Total VMs: {s.total}</div><div style={card}>Running VMs: {s.running}</div><div style={card}>Stopped VMs: {s.stopped}</div><div style={card}>Available Templates: {s.templates}</div></div></div> }
 
-function App(){ const [user,setUser]=useState(null); const load=()=>api.get('/auth/me').then(r=>setUser(r.data)).catch(()=>setUser(false)); useEffect(()=>{load()},[]); if(user===null) return <div>Loading...</div>; if(user===false) return <Login onLogin={load}/>; return <BrowserRouter><nav><Link to='/'>Home</Link></nav><Routes><Route path='/' element={<Dashboard user={user}/>} /><Route path='/vms' element={<VMs/>} /><Route path='/create' element={<CreateVM/>} /><Route path='*' element={<Navigate to='/'/>}/></Routes></BrowserRouter> }
+function VMs({ setMessage }) {
+  const [vms,setV]=useState([]), [busy,setBusy]=useState({}), [sshVm,setSshVm]=useState(null)
+  const load=async()=>setV((await api.get('/vms')).data)
+  useEffect(()=>{load()},[])
+  const run=async(vm,action)=>{setBusy(p=>({...p,[vm.id]:true})); try{if(action==='delete'){if(!confirm('Delete VM?')) return; await api.delete(`/vms/${vm.id}`)} else if(action==='status') await api.get(`/vms/${vm.id}/status`); else await api.post(`/vms/${vm.id}/${action}`); await load(); setMessage({type:'success',text:`${action} successful`})}catch(e){setMessage({type:'error',text:JSON.stringify(e?.response?.data?.detail||'Action failed')})} finally{setBusy(p=>({...p,[vm.id]:false}))}}
+  const connect=async(vm,type)=>{try{const r=await api.get(`/vms/${vm.id}/console/${type}`); if(type==='ssh') setSshVm(vm); if(type==='rdp'){const b=new Blob([r.data.rdp_file||''],{type:'application/rdp'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`vm-${vm.vmid}.rdp`; a.click()} if(type==='spice'){const b=new Blob([r.data.config||''],{type:'text/plain'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`vm-${vm.vmid}.vv`; a.click()} if(type==='novnc') window.open(`/api/vms/${vm.id}/console/novnc`,'_blank')}catch(e){setMessage({type:'error',text:JSON.stringify(e?.response?.data?.detail||'Connect failed')})}}
+  return <><div><h3>My VMs</h3><table><thead><tr><th>VM Name</th><th>VMID</th><th>Status</th><th>Node</th><th>Created At</th><th>IP</th><th>Actions</th><th>Connect</th></tr></thead><tbody>{vms.map(v=><tr key={v.id}><td>{v.vm_name}</td><td>{v.vmid}</td><td>{statusBadge(v.status)}</td><td>{v.proxmox_node}</td><td>{v.created_at||'-'}</td><td>{v.assigned_ip||'-'}</td><td><button style={btn} disabled={!!busy[v.id]} onClick={()=>run(v,'start')}>Start</button><button style={btn} disabled={!!busy[v.id]} onClick={()=>run(v,'stop')}>Stop</button><button style={btn} disabled={!!busy[v.id]} onClick={()=>run(v,'reboot')}>Reboot</button><button style={btn} disabled={!!busy[v.id]} onClick={()=>run(v,'delete')}>Delete</button><button style={btn} disabled={!!busy[v.id]} onClick={()=>run(v,'status')}>Refresh</button></td><td><button style={btn} onClick={()=>connect(v,'novnc')}>Open Console</button><button style={btn} onClick={()=>connect(v,'ssh')}>SSH</button><button style={btn} onClick={()=>connect(v,'rdp')}>RDP</button><button style={btn} onClick={()=>connect(v,'spice')}>SPICE</button></td></tr>)}</tbody></table></div><SSHModal vm={sshVm} onClose={()=>setSshVm(null)} /></>
+}
+
+function CreateVM({ setMessage }) { const [templates,setT]=useState([]),[templateId,setId]=useState(''),[lab,setLab]=useState('linuxlab'); useEffect(()=>{api.get('/templates').then(r=>{setT(r.data); if(r.data[0])setId(r.data[0].id)})},[]); const create=async()=>{try{const r=await api.post('/vms',{template_id:Number(templateId),lab_name:lab,auto_start:true}); setMessage({type:'success',text:r.data.message||'VM created'})}catch(e){setMessage({type:'error',text:JSON.stringify(e?.response?.data?.detail||'Create failed')})}}; return <div><h3>Create VM</h3><select value={templateId} onChange={e=>setId(e.target.value)}>{templates.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select><input value={lab} onChange={e=>setLab(e.target.value)}/><button onClick={create}>Create</button></div> }
+
+function App(){ const [user,setUser]=useState(null), [message,setMessage]=useState(null); const load=()=>api.get('/auth/me').then(r=>setUser(r.data)).catch(()=>setUser(false)); useEffect(()=>{load()},[]); if(user===null) return <div>Loading...</div>; if(user===false) return <><Message message={message}/><Login onLogin={load} setMessage={setMessage}/></>; return <BrowserRouter><Nav setUser={setUser}/><Message message={message}/><Routes><Route path='/' element={<Dashboard user={user}/>} /><Route path='/vms' element={<VMs setMessage={setMessage}/>} /><Route path='/create' element={<CreateVM setMessage={setMessage}/>} /><Route path='*' element={<Navigate to='/'/>}/></Routes></BrowserRouter> }
+
 ReactDOM.createRoot(document.getElementById('root')).render(<App />)

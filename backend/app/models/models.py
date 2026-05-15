@@ -28,6 +28,7 @@ class VMTemplate(Base):
     name = Column(String(100), unique=True, nullable=False)
     proxmox_node = Column(String(50), nullable=False)
     source_vmid = Column(Integer, nullable=False)
+    enabled = Column(Boolean, default=True)
 
 
 class Permission(Base):
@@ -46,6 +47,17 @@ class StudentVM(Base):
     vmid = Column(Integer, nullable=False)
     proxmox_node = Column(String(50), nullable=False)
     status = Column(String(20), default='provisioning')
+    operating_system = Column(String(50), nullable=True)
+    access_protocols = Column(String(255), nullable=True)
+    ssh_enabled = Column(Boolean, default=True)
+    rdp_enabled = Column(Boolean, default=False)
+    console_enabled = Column(Boolean, default=True)
+    default_username = Column(String(100), nullable=True)
+    assigned_ip = Column(String(64), nullable=True)
+    hostname = Column(String(255), nullable=True)
+    ssh_username = Column(String(100), nullable=True)
+    ssh_auth_method = Column(String(50), nullable=True)
+    ssh_port = Column(Integer, default=22)
     created_at = Column(DateTime, server_default=func.now())
 
 
