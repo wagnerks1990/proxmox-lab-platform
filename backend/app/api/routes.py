@@ -13,6 +13,7 @@ from app.schemas.auth import LoginRequest, TokenResponse, UserResponse
 from app.schemas.vm import TemplateResponse, CreateVMRequest, VMResponse, VMCreateResponse, AuditLogResponse, TemplateCreateRequest, TemplateUpdateRequest, ConnectionLaunchResponse
 from app.services.security import verify_password, create_access_token
 from app.services.proxmox import ProxmoxClient
+from app.services.protocol import ProtocolService
 from app.api.deps import get_current_user, require_role
 from jose import jwt, JWTError
 from app.core.config import settings
@@ -172,13 +173,11 @@ async def console_novnc(id: int, user: User = Depends(get_current_user), db: Ses
     vm = _get_vm_for_user(db, user, id)
     _rate_limit(user, vm.vmid, 'novnc')
     try:
-        t = await ProxmoxClient().get_novnc_ticket(vm.proxmox_node, vm.vmid)
+        return await ProtocolService(db).novnc_ticket_scaffold(user, vm)
     except Exception as exc:
+        if isinstance(exc, HTTPException):
+            raise exc
         raise _proxmox_error(exc)
-    db.add(AuditLog(actor_id=user.id, action='console_novnc', target_type='student_vm', target_id=str(vm.vmid))); db.commit()
-    port=t.get('port'); ticket=t.get('ticket')
-    novnc_url=f"/api/vms/{vm.id}/console/novnc/view?port={port}&ticket={ticket}"
-    return {'type': 'novnc', 'ticket': ticket, 'port': port, 'vmid': vm.vmid, 'node': vm.proxmox_node, 'novnc_url': novnc_url}
 
 @router.get('/vms/{id}/console/spice')
 async def console_spice(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -208,19 +207,7 @@ async def console_ssh(id: int, user: User = Depends(get_current_user), db: Sessi
 async def console_terminal_url(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     vm = _get_vm_for_user(db, user, id)
     _rate_limit(user, vm.vmid, 'web_terminal')
-    if not vm.ssh_enabled:
-        _log_connection_launch(db, user, vm, 'WEB_TERMINAL', 'failed', 'web terminal disabled')
-        db.commit()
-        raise HTTPException(status_code=400, detail={'error': 'WEB TERMINAL is not enabled for this VM.'})
-    if not vm.assigned_ip:
-        _log_connection_launch(db, user, vm, 'WEB_TERMINAL', 'failed', 'missing assigned IP')
-        db.commit()
-        raise HTTPException(status_code=400, detail={'error': 'No IP address found for WEB TERMINAL.'})
-    url = f"http://10.0.16.162:7681/?arg={vm.assigned_ip}"
-    db.add(AuditLog(actor_id=user.id, action='console_web_terminal', target_type='student_vm', target_id=str(vm.vmid)))
-    _log_connection_launch(db, user, vm, 'WEB_TERMINAL', 'success', vm.assigned_ip)
-    db.commit()
-    return {'type': 'web_terminal', 'url': url}
+    return await ProtocolService(db).web_terminal_url(user, vm)
 
 @router.get('/vms/{id}/console/rdp')
 async def console_rdp(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -290,8 +277,27 @@ async def vm_status(id: int, user: User = Depends(get_current_user), db: Session
 def audit_logs(user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
     return db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(200).all()
 @router.get('/admin/session-activity', response_model=list[ConnectionLaunchResponse])
-def session_activity(user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
-    return db.query(ConnectionLaunch).order_by(ConnectionLaunch.created_at.desc()).limit(200).all()
+def session_activity(user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db), protocol: str | None = None, status: str | None = None, username: str | None = None):
+    q = db.query(ConnectionLaunch, User.username, StudentVM.vm_name).join(User, User.id == ConnectionLaunch.actor_id).join(StudentVM, StudentVM.id == ConnectionLaunch.vm_id)
+    if protocol:
+        q = q.filter(ConnectionLaunch.protocol == protocol)
+    if status:
+        q = q.filter(ConnectionLaunch.status == status)
+    if username:
+        q = q.filter(User.username.ilike(f'%{username}%'))
+    rows = q.order_by(ConnectionLaunch.created_at.desc()).limit(500).all()
+    return [
+        {
+            'id': x.ConnectionLaunch.id,
+            'actor_id': x.ConnectionLaunch.actor_id,
+            'vm_id': x.ConnectionLaunch.vm_id,
+            'protocol': x.ConnectionLaunch.protocol,
+            'status': x.ConnectionLaunch.status,
+            'details': f"user={x.username}; vm={x.vm_name}; {x.ConnectionLaunch.details or ''}",
+            'created_at': x.ConnectionLaunch.created_at,
+        }
+        for x in rows
+    ]
 
 @router.get('/admin/templates', response_model=list[TemplateResponse])
 def admin_templates(user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
