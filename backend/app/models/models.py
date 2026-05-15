@@ -51,6 +51,7 @@ class StudentVM(Base):
     access_protocols = Column(String(255), nullable=True)
     ssh_enabled = Column(Boolean, default=True)
     rdp_enabled = Column(Boolean, default=False)
+    spice_enabled = Column(Boolean, default=False)
     console_enabled = Column(Boolean, default=True)
     default_username = Column(String(100), nullable=True)
     assigned_ip = Column(String(64), nullable=True)

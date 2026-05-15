@@ -41,6 +41,7 @@ class VMResponse(BaseModel):
     access_protocols: str | None = None
     ssh_enabled: bool | None = None
     rdp_enabled: bool | None = None
+    spice_enabled: bool | None = None
     console_enabled: bool | None = None
     default_username: str | None = None
     assigned_ip: str | None = None

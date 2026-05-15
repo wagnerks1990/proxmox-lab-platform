@@ -3,6 +3,8 @@ from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisco
 from fastapi.responses import JSONResponse
 import httpx
 import asyncssh
+import asyncio
+import websockets
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.db.session import get_db
@@ -170,7 +172,9 @@ async def console_novnc(id: int, user: User = Depends(get_current_user), db: Ses
     except Exception as exc:
         raise _proxmox_error(exc)
     db.add(AuditLog(actor_id=user.id, action='console_novnc', target_type='student_vm', target_id=str(vm.vmid))); db.commit()
-    return {'type': 'novnc', 'ticket': t.get('ticket'), 'port': t.get('port'), 'vmid': vm.vmid, 'node': vm.proxmox_node}
+    port=t.get('port'); ticket=t.get('ticket')
+    novnc_url=f"/api/vms/{vm.id}/console/novnc/view?port={port}&ticket={ticket}"
+    return {'type': 'novnc', 'ticket': ticket, 'port': port, 'vmid': vm.vmid, 'node': vm.proxmox_node, 'novnc_url': novnc_url}
 
 @router.get('/vms/{id}/console/spice')
 async def console_spice(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -179,6 +183,9 @@ async def console_spice(id: int, user: User = Depends(get_current_user), db: Ses
     try:
         cfg = await ProxmoxClient().get_spice_config(vm.proxmox_node, vm.vmid)
     except Exception as exc:
+        msg = str(exc).lower()
+        if 'spice' in msg and ('not enabled' in msg or 'no spice' in msg or 'port' in msg):
+            raise HTTPException(status_code=400, detail={'error': 'SPICE is not enabled for this VM.'})
         raise _proxmox_error(exc)
     db.add(AuditLog(actor_id=user.id, action='console_spice', target_type='student_vm', target_id=str(vm.vmid))); db.commit()
     return {'type': 'spice', 'config': cfg}
@@ -350,3 +357,61 @@ async def ssh_ws(id: int, websocket: WebSocket, db: Session = Depends(get_db)):
     except Exception as exc:
         await websocket.send_text(f'ERROR: SSH connection failed: {exc}')
         await websocket.close(code=1011)
+
+
+@router.websocket('/vms/{id}/console/novnc/ws')
+async def console_novnc_ws(id: int, websocket: WebSocket, db: Session = Depends(get_db)):
+    token = websocket.query_params.get('token')
+    user = _get_user_from_ws_token(db, token)
+    if not user:
+        await websocket.close(code=1008, reason='Invalid token')
+        return
+    try:
+        vm = _get_vm_for_user(db, user, id)
+    except HTTPException:
+        await websocket.close(code=1008, reason='Forbidden')
+        return
+    if not vm.console_enabled:
+        await websocket.close(code=1008, reason='Console disabled for VM')
+        return
+    try:
+        ticket_data = await ProxmoxClient().get_novnc_ticket(vm.proxmox_node, vm.vmid)
+        port = ticket_data.get('port')
+        ticket = ticket_data.get('ticket')
+        if not port or not ticket:
+            raise HTTPException(status_code=502, detail={'error': 'Failed to get noVNC ticket'})
+        await websocket.accept()
+        db.add(AuditLog(actor_id=user.id, action='novnc_ws_launch', target_type='student_vm', target_id=str(vm.vmid))); db.commit()
+        path = f"/api2/json/nodes/{vm.proxmox_node}/qemu/{vm.vmid}/vncwebsocket?port={port}&vncticket={ticket}"
+        base = settings.proxmox_base_url.replace('/api2/json', '')
+        ws_url = base.replace('https://', 'wss://').replace('http://', 'ws://') + path
+        async with websockets.connect(ws_url, ssl=settings.proxmox_verify_ssl) as pmx:
+            async def c2p():
+                while True:
+                    data = await websocket.receive_text()
+                    await pmx.send(data)
+            async def p2c():
+                while True:
+                    data = await pmx.recv()
+                    await websocket.send_text(data if isinstance(data, str) else data.decode('utf-8', 'ignore'))
+            t1 = asyncio.create_task(c2p())
+            t2 = asyncio.create_task(p2c())
+            done, pending = await asyncio.wait({t1, t2}, return_when=asyncio.FIRST_COMPLETED)
+            for t in pending:
+                t.cancel()
+    except WebSocketDisconnect:
+        return
+    except Exception as exc:
+        try:
+            await websocket.send_text(f'ERROR: noVNC proxy failed: {exc}')
+            await websocket.close(code=1011)
+        except Exception:
+            return
+
+
+@router.get('/vms/{id}/console/novnc/view')
+async def console_novnc_view(id: int, port: int, ticket: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    vm = _get_vm_for_user(db, user, id)
+    base = settings.proxmox_base_url.replace('/api2/json', '')
+    novnc = f"{base}/?console=kvm&novnc=1&vmid={vm.vmid}&node={vm.proxmox_node}&vncticket={ticket}&port={port}"
+    return {'url': novnc}
