@@ -225,6 +225,11 @@ async def console_ssh(id: int, user: User = Depends(get_current_user), db: Sessi
     host = vm.assigned_ip or vm.hostname or vm.vm_name
     return {'type': 'ssh', 'host': host, 'username': vm.default_username or 'student', 'web_terminal_url': f'/api/vms/{vm.id}/console/ssh'}
 
+@router.get('/vms/{id}/console/terminal-url')
+async def console_terminal_url(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    vm = _get_vm_for_user(db, user, id)
+    _rate_limit(user, vm.vmid, 'web_terminal')
+    return await ProtocolService(db).web_terminal_url(user, vm)
 
 
 @router.get('/vms/{id}/console/terminal-url')
