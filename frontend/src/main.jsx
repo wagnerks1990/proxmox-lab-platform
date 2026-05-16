@@ -20,10 +20,10 @@ import ValidationPage from './pages/ValidationPage'
 import './styles.css'
 
 function App() {
-  const { user, setUser, loading, refresh } = useAuth()
+  const { user, setUser, loading, refresh, initialized, authError } = useAuth()
   const [message, setMessage] = React.useState(null)
-  if (loading) return <div className='login-wrap'>Loading...</div>
-  if (user === false) return <><MessageBanner message={message} /><LoginPage onLogin={refresh} setMessage={setMessage} /></>
+  if (loading) return <div className='login-wrap'>Loading authentication...</div>
+  if (user === false) return <><MessageBanner message={message || (authError ? { type: 'error', text: String(authError) } : null)} /><LoginPage onLogin={refresh} setMessage={setMessage} /><div className='muted' style={{textAlign:'center'}}>Auth initialized: {String(initialized)} · Token exists: {String(!!localStorage.getItem('token'))}</div></>
   return <BrowserRouter><AppLayout setUser={setUser} user={user}><MessageBanner message={message} /><Routes><Route path='/' element={<DashboardPage user={user} />} /><Route path='/vms' element={<VmsPage setMessage={setMessage} user={user} />} /><Route path='/create' element={<CreateVmPage setMessage={setMessage} />} /><Route path='/sessions' element={<SessionActivityPage setMessage={setMessage} />} />
           <Route path='/proxmox' element={<ProxmoxPage setMessage={setMessage} />} />
           <Route path='/templates' element={<TemplatesPage setMessage={setMessage} />} />
