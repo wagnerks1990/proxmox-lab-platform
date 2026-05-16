@@ -17,14 +17,20 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     except JWTError:
         raise credentials_exception
     user = db.query(User).filter(User.username == username).first()
-    if not user:
+    if not user or not user.is_active:
         raise credentials_exception
+    if not user.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='User account is disabled')
     return user
 
 
 def require_role(*roles):
     def checker(user: User = Depends(get_current_user)):
-        if user.role.name not in roles:
+        if _role_name(user) not in roles:
             raise HTTPException(status_code=403, detail='Forbidden')
         return user
     return checker
+
+
+def _role_name(user: User) -> str:
+    return (getattr(getattr(user, 'role_rel', None), 'name', None) or getattr(user, 'role', None) or '').strip()
