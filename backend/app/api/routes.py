@@ -20,6 +20,8 @@ from app.api.routers.console import router as console_router
 from app.api.routers.sessions import router as sessions_router
 from app.api.routers.console_ws import router as console_ws_router
 from app.api.routers.admin_telemetry import router as telemetry_router
+from app.api.routers.admin_events import router as admin_events_router
+from app.api.routers.pools import router as pools_router
 
 router = APIRouter(prefix='/api')
 MAX_VMS_PER_USER = 5
@@ -228,3 +230,5 @@ router.include_router(sessions_router)
 router.include_router(console_ws_router)
 
 router.include_router(telemetry_router)
+router.include_router(admin_events_router)
+router.include_router(pools_router)

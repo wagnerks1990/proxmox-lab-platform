@@ -111,3 +111,40 @@ class VMSession(Base):
     request_id = Column(String(100), nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class TelemetryEvent(Base):
+    __tablename__ = 'telemetry_events'
+    id = Column(Integer, primary_key=True)
+    event_type = Column(String(64), nullable=False, index=True)
+    severity = Column(String(20), nullable=False, default='info', index=True)
+    source = Column(String(64), nullable=False)
+    user_id = Column(Integer, nullable=True, index=True)
+    vm_id = Column(Integer, nullable=True, index=True)
+    session_id = Column(Integer, nullable=True, index=True)
+    request_id = Column(String(100), nullable=True, index=True)
+    metadata_json = Column(String, nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False, index=True)
+
+
+class DesktopPool(Base):
+    __tablename__ = 'desktop_pools'
+    id = Column(Integer, primary_key=True)
+    name = Column(String(120), nullable=False, unique=True, index=True)
+    description = Column(String(255), nullable=True)
+    pool_type = Column(String(32), nullable=False, index=True)
+    template_vmid = Column(Integer, nullable=True)
+    template_node = Column(String(50), nullable=True)
+    default_protocol = Column(String(50), nullable=False)
+    target_node = Column(String(50), nullable=True)
+    storage = Column(String(100), nullable=True)
+    bridge = Column(String(100), nullable=True)
+    vlan_tag = Column(Integer, nullable=True)
+    vmid_start = Column(Integer, nullable=True)
+    vmid_end = Column(Integer, nullable=True)
+    naming_pattern = Column(String(100), nullable=True)
+    desired_size = Column(Integer, nullable=False, default=0)
+    maintenance_mode = Column(Boolean, nullable=False, default=False, index=True)
+    enabled = Column(Boolean, nullable=False, default=True, index=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), nullable=False)

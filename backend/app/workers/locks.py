@@ -1,15 +1,12 @@
-from threading import Lock
+from app.core.config import settings
+from app.workers.lock_store import build_lock_store
 
-
-_locks: dict[str, Lock] = {}
+_lock_store = build_lock_store(settings.worker_lock_backend)
 
 
 def acquire_worker_lock(name: str) -> bool:
-    lock = _locks.setdefault(name, Lock())
-    return lock.acquire(blocking=False)
+    return _lock_store.acquire(name)
 
 
 def release_worker_lock(name: str) -> None:
-    lock = _locks.get(name)
-    if lock and lock.locked():
-        lock.release()
+    _lock_store.release(name)

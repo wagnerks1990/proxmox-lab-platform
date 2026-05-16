@@ -10,7 +10,10 @@ from app.architecture.state_machines import SessionState, SESSION_TRANSITIONS, v
 from app.db.tx import safe_commit
 from app.core.config import settings
 from app.security.reconnect_tokens import create_reconnect_token, verify_reconnect_token
-from app.security.replay_cache import replay_cache
+from app.security.replay_store import build_replay_store
+
+
+replay_store = build_replay_store(settings.replay_store_backend)
 
 
 class SessionService:
@@ -151,7 +154,7 @@ class SessionService:
         secret = settings.reconnect_token_secret or settings.jwt_secret_key
         try:
             payload = verify_reconnect_token(token=token, secret=secret, session_id=session_id, user_id=user_id, protocol=protocol)
-            return replay_cache.mark_used(str(payload['jti']), int(payload['exp']))
+            return replay_store.mark_used(str(payload['jti']), int(payload['exp']))
         except Exception:
             return False
 

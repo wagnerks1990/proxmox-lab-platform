@@ -29,5 +29,8 @@ class Settings(BaseSettings):
     health_poll_interval_seconds: int = 60
     reconciliation_interval_seconds: int = 300
 
+    replay_store_backend: str = 'memory'
+    worker_lock_backend: str = 'memory'
+
 
 settings = Settings()
