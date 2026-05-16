@@ -14,5 +14,12 @@ class Settings(BaseSettings):
     proxmox_token_secret: str
     proxmox_verify_ssl: bool = False
 
+    lab_vm_ssh_username: str | None = None
+    lab_vm_ssh_password: str | None = None
+
+    heartbeat_timeout_seconds: int = 60
+    session_reconnect_timeout_seconds: int = 180
+    session_idle_timeout_seconds: int = 900
+
 
 settings = Settings()
