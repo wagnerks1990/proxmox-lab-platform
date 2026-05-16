@@ -1,0 +1,1 @@
+export default function RecentEventsTable({ rows=[] }) { return <table className='vm-table'><thead><tr><th>Type</th><th>Severity</th><th>Time</th></tr></thead><tbody>{rows.map(r=><tr key={r.id}><td>{r.event_type}</td><td>{r.severity}</td><td>{r.created_at}</td></tr>)}</tbody></table> }
