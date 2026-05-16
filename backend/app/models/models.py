@@ -86,6 +86,24 @@ class AuditLog(Base):
     created_at = Column(DateTime, server_default=func.now())
 
 
+class VMConsoleConnection(Base):
+    __tablename__ = 'vm_console_connections'
+    id = Column(Integer, primary_key=True)
+    vm_id = Column(Integer, ForeignKey('student_vms.id'), nullable=False, unique=True)
+    proxmox_vmid = Column(Integer, nullable=False)
+    node = Column(String(100), nullable=True)
+    protocol = Column(String(20), nullable=False)
+    guacamole_connection_id = Column(String(100), nullable=False)
+    guacamole_connection_name = Column(String(255), nullable=False)
+    hostname = Column(String(255), nullable=False)
+    port = Column(Integer, nullable=False)
+    username_mode = Column(String(50), nullable=True)
+    credential_source = Column(String(50), nullable=True)
+    last_verified_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
 class ConnectionLaunch(Base):
     __tablename__ = 'connection_launches'
     id = Column(Integer, primary_key=True)

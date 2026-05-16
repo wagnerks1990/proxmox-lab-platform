@@ -26,7 +26,7 @@ export default function VmsPage({ setMessage, user }) {
   const onLaunch = async (vm, protocol) => {
     try {
       if (protocol === 'web_terminal') { const r = await api.get(`/vms/${vm.id}/console/terminal-url`); window.open(r.data.url, '_blank', 'noopener,noreferrer'); return }
-      if (protocol === 'guacamole') { const r = await api.get(`/vms/${vm.id}/console/guacamole`, { params: { protocol: 'rdp' } }); window.open(r.data.url, '_blank', 'noopener,noreferrer'); return }
+      if (protocol === 'guacamole') { const r = await api.get(`/vms/${vm.id}/console/guacamole`, { params: { protocol: 'rdp' } }); window.location.assign(r.data.launch_url); return }
       if (protocol === 'console') { setMessage({ type: 'error', text: 'noVNC not implemented yet' }); return }
       if (protocol === 'rdp') { const r = await api.get(`/vms/${vm.id}/console/rdp`); const blob = new Blob([r.data.rdp_file || ''], { type: 'application/rdp' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `vm-${vm.vmid}.rdp`; a.click(); return }
       if (protocol === 'spice') { await api.get(`/vms/${vm.id}/console/spice`); setMessage({ type: 'success', text: 'SPICE config generated.' }) }

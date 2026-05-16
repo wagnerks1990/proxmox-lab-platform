@@ -8,14 +8,13 @@ import websockets
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.db.session import get_db
-from app.models.models import User, VMTemplate, Permission, StudentVM, AuditLog, ConnectionLaunch, VMPool, LabGroup, LabGroupMember, ProtocolSettings, ProxmoxCluster, ProxmoxNode, DesktopPool
+from app.models.models import User, VMTemplate, Permission, StudentVM, AuditLog, ConnectionLaunch, VMConsoleConnection, VMPool, LabGroup, LabGroupMember, ProtocolSettings, ProxmoxCluster, ProxmoxNode, DesktopPool
 from app.schemas.auth import LoginRequest, TokenResponse, UserResponse
 from app.schemas.vm import TemplateResponse, CreateVMRequest, VMResponse, VMCreateResponse, AuditLogResponse, TemplateCreateRequest, TemplateUpdateRequest, ConnectionLaunchResponse, PoolBase, PoolResponse, GroupResponse, GroupCreateRequest, GroupUpdateRequest, GroupMemberRequest, ProtocolSettingsResponse, ProxmoxClusterBase, ProxmoxClusterResponse, ProxmoxNodeBase, ProxmoxNodeResponse, DesktopPoolBase, DesktopPoolResponse
 from app.services.security import verify_password, create_access_token
 from app.services.proxmox import ProxmoxClient
 from app.services.protocol import ProtocolService
-from app.services.connection_broker import get_guacamole_launch
-from app.services.guacamole import check_guacamole_reachable
+from app.services.guacamole import check_guacamole_reachable, guacamole_configured, build_launch_payload, GuacamoleError
 from app.api.deps import get_current_user, require_role
 from jose import jwt, JWTError
 from app.core.config import settings
@@ -245,13 +244,49 @@ async def console_terminal_url(id: int, user: User = Depends(get_current_user), 
 async def console_guacamole(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db), protocol: str = 'rdp'):
     vm = _get_vm_for_user(db, user, id)
     _rate_limit(user, vm.vmid, 'guacamole')
+    protocol = (protocol or 'rdp').lower()
     if protocol not in ['rdp', 'vnc', 'ssh']:
         raise HTTPException(status_code=400, detail={'error': 'Unsupported Guacamole protocol'})
+    if not guacamole_configured():
+        raise HTTPException(status_code=503, detail={'error': 'Guacamole is disabled or not configured'})
+
     db.add(AuditLog(actor_id=user.id, action='console_guacamole', target_type='student_vm', target_id=str(vm.vmid)))
-    _log_connection_launch(db, user, vm, 'GUACAMOLE', 'pending', f'protocol={protocol}')
+    launch = ConnectionLaunch(actor_id=user.id, vm_id=vm.id, protocol=protocol, status='pending', details='launch requested')
+    db.add(launch)
     db.commit()
+
     reachable, err = await check_guacamole_reachable()
-    return get_guacamole_launch(vm.vmid, protocol, reachable=reachable)
+    if not reachable:
+        launch.status = 'failed'
+        launch.details = f'guacamole unreachable: {err}'
+        db.commit()
+        raise HTTPException(status_code=503, detail={'error': 'Guacamole unavailable'})
+
+    try:
+        payload = await build_launch_payload(vm, protocol)
+    except GuacamoleError as exc:
+        launch.status = 'failed'
+        launch.details = str(exc)[:255]
+        db.commit()
+        raise HTTPException(status_code=502, detail={'error': str(exc)})
+
+    mapping = db.query(VMConsoleConnection).filter(VMConsoleConnection.vm_id == vm.id).first()
+    host = vm.assigned_ip or vm.hostname
+    port = 3389 if protocol == 'rdp' else (5900 if protocol == 'vnc' else 22)
+    if not mapping:
+        mapping = VMConsoleConnection(vm_id=vm.id, proxmox_vmid=vm.vmid, node=vm.proxmox_node, protocol=protocol, guacamole_connection_id=str(payload['connection_id']), guacamole_connection_name=f'vm-{vm.vmid}-{protocol}', hostname=host, port=port, username_mode='template_default', credential_source='backend_profile')
+        db.add(mapping)
+    else:
+        mapping.protocol = protocol
+        mapping.guacamole_connection_id = str(payload['connection_id'])
+        mapping.guacamole_connection_name = f'vm-{vm.vmid}-{protocol}'
+        mapping.hostname = host
+        mapping.port = port
+
+    launch.status = 'success'
+    launch.details = f'connection_id={payload["connection_id"]}'
+    db.commit()
+    return payload
 
 @router.get('/vms/{id}/console/rdp')
 async def console_rdp(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):

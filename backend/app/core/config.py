@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     guacamole_admin_user: str | None = None
     guacamole_admin_password: str | None = None
     guacamole_datasource: str | None = 'postgresql'
+    guacamole_enabled: bool = True
+    guacamole_default_protocol: str = 'rdp'
+    guacamole_verify_ssl: bool = False
 
 
 settings = Settings()
