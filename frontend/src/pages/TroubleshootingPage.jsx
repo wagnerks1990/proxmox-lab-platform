@@ -2,4 +2,10 @@ import { useEffect, useState } from 'react'
 import { getTroubleshootingRecent } from '../services/troubleshootingApi'
 import useOperationalEvents from '../hooks/useOperationalEvents'
 import { useOperationalStore } from '../state/operationalStore'
-export default function TroubleshootingPage(){const [rows,setRows]=useState([]); const live=useOperationalStore(); useOperationalEvents(); useEffect(()=>{getTroubleshootingRecent().then(setRows)},[]); return <section><h2>Troubleshooting</h2><div className='muted'>Live stream: {live.status}</div><button onClick={()=>navigator.clipboard?.writeText(JSON.stringify(rows,null,2))}>Copy diagnostic summary</button><table className='vm-table'><thead><tr><th>Issue</th><th>Severity</th><th>Cause</th><th>Suggested Fix</th></tr></thead><tbody>{rows.map((r,i)=><tr key={i}><td>{r.issue_type}</td><td>{r.severity}</td><td>{r.probable_cause}</td><td>{r.suggested_fix}</td></tr>)}</tbody></table></section>}
+
+export default function TroubleshootingPage(){
+ const [rows,setRows]=useState([])
+ const live=useOperationalStore(); useOperationalEvents()
+ useEffect(()=>{getTroubleshootingRecent().then(setRows)},[])
+ return <section><h2>Troubleshooting</h2><div className='muted'>Live stream: {live.status}</div><div className='group'>{rows.map((r,i)=><div key={i} className='panel'><h4>{r.title||r.issue_type}</h4><div className='muted'>{r.category} • {r.subsystem}</div><div>Severity: {r.severity}</div><div>Cause: {r.probable_cause}</div><div>Fix: {r.suggested_fix}</div></div>)}</div></section>
+}

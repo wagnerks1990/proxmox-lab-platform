@@ -17,11 +17,9 @@ from app.api.routers.auth import router as auth_router
 from app.api.routers.admin_validation import router as validation_router
 from app.api.routers.admin_runtime import router as runtime_router
 from app.api.routers.admin_reconciliation import router as reconciliation_router
+from app.api.routers.admin_analytics import router as analytics_router
 
 router = APIRouter(prefix='/api')
-MAX_VMS_PER_USER = 5
-MAX_RUNNING_VMS_PER_USER = 3
-CONSOLE_RATE_LIMIT = {}
 
 router.include_router(auth_router)
 router.include_router(health_router)
@@ -40,3 +38,5 @@ router.include_router(troubleshooting_router)
 router.include_router(runtime_router)
 router.include_router(validation_router)
 router.include_router(reconciliation_router)
+
+router.include_router(analytics_router)
