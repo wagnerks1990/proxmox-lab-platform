@@ -1,0 +1,2 @@
+import { useEffect, useState } from 'react'
+export default function LiveEventStreamPanel(){const [items,setItems]=useState([]); const [status,setStatus]=useState('connecting'); useEffect(()=>{const es=new EventSource('/api/admin/events/stream'); es.onmessage=(e)=>setItems(p=>[e.data,...p].slice(0,20)); es.onerror=()=>{setStatus('degraded'); es.close()}; es.onopen=()=>setStatus('live'); return ()=>es.close()},[]); return <div className='panel'><h4>Live stream ({status})</h4><pre>{items.join('\n')}</pre></div>}

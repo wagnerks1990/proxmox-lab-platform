@@ -1,69 +1,39 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from app.db.session import get_db
-from app.models.models import User, VMTemplate, Permission, StudentVM, AuditLog
-from app.schemas.auth import LoginRequest, TokenResponse, UserResponse
-from app.schemas.vm import TemplateResponse, CreateVMRequest, VMResponse
-from app.services.security import verify_password, create_access_token
-from app.services.proxmox import ProxmoxClient
-from app.api.deps import get_current_user
+from fastapi import APIRouter
+
+from app.api.routers.console import router as console_router
+from app.api.routers.sessions import router as sessions_router
+from app.api.routers.console_ws import router as console_ws_router
+from app.api.routers.admin_telemetry import router as telemetry_router
+from app.api.routers.admin_events import router as admin_events_router
+from app.api.routers.pools import router as pools_router
+from app.api.routers.admin_troubleshooting import router as troubleshooting_router
+from app.api.routers.admin_operations import router as operations_router
+from app.api.routers.workers import router as workers_router
+from app.api.routers.vms import router as vms_router
+from app.api.routers.audit import router as audit_router
+from app.api.routers.templates import router as templates_router
+from app.api.routers.health import router as health_router
+from app.api.routers.auth import router as auth_router
+from app.api.routers.admin_validation import router as validation_router
+from app.api.routers.admin_runtime import router as runtime_router
+from app.api.routers.admin_reconciliation import router as reconciliation_router
 
 router = APIRouter(prefix='/api')
 
-
-@router.post('/auth/login', response_model=TokenResponse)
-def login(data: LoginRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == data.username).first()
-    if not user or not verify_password(data.password, user.password_hash):
-        raise HTTPException(status_code=401, detail='Invalid credentials')
-    return TokenResponse(access_token=create_access_token(user.username))
-
-
-@router.get('/auth/me', response_model=UserResponse)
-def me(user: User = Depends(get_current_user)):
-    return UserResponse(id=user.id, username=user.username, email=user.email, role=user.role.name)
-
-
-@router.get('/templates', response_model=list[TemplateResponse])
-def templates(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if user.role.name in ['Teacher', 'Admin']:
-        rows = db.query(VMTemplate).all()
-    else:
-        rows = db.query(VMTemplate).join(Permission, Permission.template_id == VMTemplate.id).filter(Permission.user_id == user.id).all()
-    return rows
-
-
-@router.get('/vms', response_model=list[VMResponse])
-def list_vms(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    q = db.query(StudentVM)
-    if user.role.name == 'Student':
-        q = q.filter(StudentVM.owner_id == user.id)
-    return q.all()
-
-
-@router.post('/vms', response_model=VMResponse)
-async def create_vm(payload: CreateVMRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    template = db.query(VMTemplate).filter(VMTemplate.id == payload.template_id).first()
-    if not template:
-        raise HTTPException(status_code=404, detail='Template not found')
-    if user.role.name == 'Student':
-        allowed = db.query(Permission).filter(Permission.user_id == user.id, Permission.template_id == payload.template_id).first()
-        if not allowed:
-            raise HTTPException(status_code=403, detail='Template not allowed')
-
-    vmid = 200000 + user.id * 100 + db.query(StudentVM).count() + 1
-    safe_lab = ''.join(ch for ch in payload.lab_name.lower() if ch.isalnum() or ch == '-')[:20]
-    vm_name = f'{user.username}-{safe_lab}-{vmid}'
-
-    proxmox = ProxmoxClient()
-    await proxmox.clone_vm(template.proxmox_node, template.source_vmid, vmid, vm_name)
-    if payload.auto_start:
-        await proxmox.start_vm(template.proxmox_node, vmid)
-
-    vm = StudentVM(owner_id=user.id, template_id=template.id, vm_name=vm_name, vmid=vmid, proxmox_node=template.proxmox_node, status='running' if payload.auto_start else 'stopped')
-    db.add(vm)
-    db.flush()
-    db.add(AuditLog(actor_id=user.id, action='create_vm', target_type='student_vm', target_id=str(vmid)))
-    db.commit()
-    db.refresh(vm)
-    return vm
+router.include_router(auth_router)
+router.include_router(health_router)
+router.include_router(templates_router)
+router.include_router(audit_router)
+router.include_router(vms_router)
+router.include_router(console_router)
+router.include_router(sessions_router)
+router.include_router(console_ws_router)
+router.include_router(telemetry_router)
+router.include_router(admin_events_router)
+router.include_router(pools_router)
+router.include_router(workers_router)
+router.include_router(operations_router)
+router.include_router(troubleshooting_router)
+router.include_router(runtime_router)
+router.include_router(validation_router)
+router.include_router(reconciliation_router)
