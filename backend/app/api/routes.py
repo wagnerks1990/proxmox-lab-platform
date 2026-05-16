@@ -6,7 +6,7 @@ import asyncio
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.db.session import get_db
-from app.models.models import User, VMTemplate, Permission, StudentVM, AuditLog
+from app.models.models import User, VMTemplate, Permission, StudentVM, AuditLog, ConnectionLaunch
 from app.schemas.auth import LoginRequest, TokenResponse, UserResponse
 from app.schemas.vm import TemplateResponse, CreateVMRequest, VMResponse, VMCreateResponse, AuditLogResponse, TemplateCreateRequest, TemplateUpdateRequest
 from app.services.security import verify_password, create_access_token
