@@ -25,6 +25,11 @@ from app.api.routers.pools import router as pools_router
 from app.api.routers.admin_troubleshooting import router as troubleshooting_router
 from app.api.routers.admin_operations import router as operations_router
 from app.api.routers.workers import router as workers_router
+from app.api.routers.vms import router as vms_router
+from app.api.routers.audit import router as audit_router
+from app.api.routers.templates import router as templates_router
+from app.api.routers.health import router as health_router
+from app.api.routers.auth import router as auth_router
 from app.api.routers.admin_validation import router as validation_router
 from app.api.routers.admin_runtime import router as runtime_router
 
@@ -246,3 +251,13 @@ router.include_router(troubleshooting_router)
 
 router.include_router(runtime_router)
 router.include_router(validation_router)
+
+router.include_router(auth_router)
+
+router.include_router(health_router)
+
+router.include_router(templates_router)
+
+router.include_router(audit_router)
+
+router.include_router(vms_router)
