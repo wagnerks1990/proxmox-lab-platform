@@ -15,6 +15,7 @@ from app.services.security import verify_password, create_access_token
 from app.services.proxmox import ProxmoxClient
 from app.services.protocol import ProtocolService
 from app.services.connection_broker import get_guacamole_launch
+from app.services.guacamole import check_guacamole_reachable
 from app.api.deps import get_current_user, require_role
 from jose import jwt, JWTError
 from app.core.config import settings
@@ -249,7 +250,8 @@ async def console_guacamole(id: int, user: User = Depends(get_current_user), db:
     db.add(AuditLog(actor_id=user.id, action='console_guacamole', target_type='student_vm', target_id=str(vm.vmid)))
     _log_connection_launch(db, user, vm, 'GUACAMOLE', 'pending', f'protocol={protocol}')
     db.commit()
-    return get_guacamole_launch(vm.vmid, protocol)
+    reachable, err = await check_guacamole_reachable()
+    return get_guacamole_launch(vm.vmid, protocol, reachable=reachable)
 
 @router.get('/vms/{id}/console/rdp')
 async def console_rdp(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -730,3 +732,15 @@ def schema_health(user: User = Depends(require_role('Teacher', 'Admin')), db: Se
             if c not in existing: missing_columns.append(f'{t}.{c}')
     if db.query(ConnectionLaunch).count()==0: warnings.append('No session activity records yet')
     return {'ok': not missing_tables and not missing_columns, 'missing_tables': missing_tables, 'missing_columns': missing_columns, 'warnings': warnings}
+
+
+@router.get('/admin/guacamole/status')
+async def guacamole_status(user: User = Depends(require_role('Teacher', 'Admin'))):
+    reachable, error = await check_guacamole_reachable()
+    return {
+        'reachable': reachable,
+        'internal_url': settings.guacamole_internal_url,
+        'base_url': settings.guacamole_base_url,
+        'error': error,
+        'guidance': None if reachable else 'Verify local Guacamole at GUACAMOLE_INTERNAL_URL and nginx proxy for /guacamole',
+    }
