@@ -8,6 +8,8 @@ from app.models.models import ConnectionLaunch, StudentVM, User, VMSession
 from app.architecture.events import bus, DomainEvent, SESSION_CREATED, SESSION_EXPIRED, SESSION_STARTED, RECONNECT_ATTEMPT, RECONNECT_SUCCESS, RECONNECT_FAILURE, STALE_CLEANUP
 from app.architecture.state_machines import SessionState, SESSION_TRANSITIONS, validate_transition
 from app.db.tx import safe_commit
+from app.core.config import settings
+from app.security.reconnect_tokens import create_reconnect_token, verify_reconnect_token
 
 
 class SessionService:
@@ -115,9 +117,9 @@ class SessionService:
             bus.publish(DomainEvent(name=STALE_CLEANUP, payload={'expired_count': count}))
         return count
 
-    def reconnect(self, session_id: int, reconnect_token: str) -> VMSession | None:
+    def reconnect(self, session_id: int, reconnect_token: str, user_id: int) -> VMSession | None:
         row = self.db.query(VMSession).filter(VMSession.id == session_id).first()
-        if not row or reconnect_token != f'reconnect-{session_id}':
+        if not row or not self.verify_reconnect(reconnect_token, session_id, user_id, row.protocol):
             return None
         if not self.mark_reconnecting(session_id):
             bus.publish(DomainEvent(name=RECONNECT_FAILURE, payload={'session_id': session_id}))
@@ -138,3 +140,38 @@ class SessionService:
     def create_launch(self, user: User, vm: StudentVM, protocol: str, status: str = 'success', details: str | None = None, session_state: SessionState = SessionState.LAUNCHING) -> ConnectionLaunch:
         row = ConnectionLaunch(actor_id=user.id, vm_id=vm.id, protocol=protocol, status=status, details=details or f'state={session_state.value}')
         self.db.add(row); self.db.flush(); return row
+
+
+    def issue_reconnect_token(self, session_id: int, user_id: int, protocol: str) -> str:
+        secret = settings.reconnect_token_secret or settings.jwt_secret_key
+        return create_reconnect_token(secret=secret, session_id=session_id, user_id=user_id, protocol=protocol, ttl_seconds=settings.reconnect_token_ttl_seconds)
+
+    def verify_reconnect(self, token: str, session_id: int, user_id: int, protocol: str) -> bool:
+        secret = settings.reconnect_token_secret or settings.jwt_secret_key
+        try:
+            verify_reconnect_token(token=token, secret=secret, session_id=session_id, user_id=user_id, protocol=protocol)
+            return True
+        except Exception:
+            return False
+
+    def expire_reconnecting_sessions(self, timeout_seconds: int) -> int:
+        cutoff = datetime.now(timezone.utc) - timedelta(seconds=timeout_seconds)
+        rows = self.db.query(VMSession).filter(VMSession.state == SessionState.RECONNECTING.value, VMSession.updated_at < cutoff).all()
+        count = 0
+        for row in rows:
+            if self._set_state(row, SessionState.EXPIRED):
+                count += 1
+        if count:
+            safe_commit(self.db)
+        return count
+
+    def fail_stuck_launching(self, timeout_seconds: int) -> int:
+        cutoff = datetime.now(timezone.utc) - timedelta(seconds=timeout_seconds)
+        rows = self.db.query(VMSession).filter(VMSession.state == SessionState.LAUNCHING.value, VMSession.created_at < cutoff).all()
+        count = 0
+        for row in rows:
+            if self._set_state(row, SessionState.FAILED, reason='launch timeout'):
+                count += 1
+        if count:
+            safe_commit(self.db)
+        return count

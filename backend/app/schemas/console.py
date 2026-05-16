@@ -11,3 +11,10 @@ class ConsoleLaunchResponse(BaseModel):
     ticket: str | None = None
     vmid: int | None = None
     node: str | None = None
+    launch_url: str | None = None
+    session_id: int | None = None
+    protocol: str | None = None
+    state: str | None = None
+    reconnect_token: str | None = None
+    heartbeat_interval_seconds: int | None = None
+    expires_at: int | None = None

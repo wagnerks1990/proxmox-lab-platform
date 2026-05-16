@@ -1,5 +1,11 @@
-from app.workers.session_worker import run_once as session_cleanup_once
+from app.workers.locks import acquire_worker_lock, release_worker_lock
 
 
 def run_once() -> dict[str, int]:
-    return session_cleanup_once()
+    name = 'cleanup_worker'
+    if not acquire_worker_lock(name):
+        return {'skipped_overlap': 1}
+    try:
+        return {'expired_launch_artifacts_cleaned': 0}
+    finally:
+        release_worker_lock(name)

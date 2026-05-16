@@ -6,6 +6,7 @@ from app.db.session import get_db
 from app.models.models import User
 from app.schemas.session import SessionActivityResponse, SessionHeartbeatRequest, SessionHeartbeatResponse
 from app.services.session_service import SessionService
+from app.schemas.common import ApiEnvelope
 from app.architecture.state_machines import SessionState
 
 router = APIRouter()
@@ -35,7 +36,7 @@ def session_reconnect(id: int, token: str, user: User = Depends(get_current_user
     row = svc.get_session_for_user(id, user)
     if not row:
         raise HTTPException(status_code=404, detail='Session not found')
-    updated = svc.reconnect(id, token)
+    updated = svc.reconnect(id, token, user.id)
     if not updated:
         raise HTTPException(status_code=409, detail='Reconnect failed')
     return SessionHeartbeatResponse(id=updated.id, state=updated.state, last_heartbeat_at=updated.last_heartbeat_at, updated_at=updated.updated_at)
