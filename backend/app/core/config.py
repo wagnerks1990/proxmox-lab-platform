@@ -17,5 +17,10 @@ class Settings(BaseSettings):
     lab_vm_ssh_username: str | None = None
     lab_vm_ssh_password: str | None = None
 
+    guacamole_base_url: str | None = None
+    guacamole_admin_user: str | None = None
+    guacamole_admin_password: str | None = None
+    guacamole_datasource: str | None = 'postgresql'
+
 
 settings = Settings()

@@ -4,7 +4,8 @@ import ProtocolButton from './ProtocolButton'
 export default function VmCard({ vm, onAction, onLaunch, loading, isAdmin }) {
   const has = p => (vm.access_protocols || '').split(',').map(x => x.trim().toLowerCase()).includes(p)
   const protocols = [
-    { key: 'console', label: 'Open Console', enabled: vm.console_enabled && has('novnc'), reason: 'Console not enabled' },
+    { key: 'guacamole', label: 'Open Console', enabled: true, reason: 'Guacamole unavailable' },
+    { key: 'console', label: 'noVNC (future)', enabled: false, reason: 'not implemented yet' },
     { key: 'web_terminal', label: 'Web Terminal', enabled: vm.ssh_enabled && has('ssh'), reason: 'SSH not enabled' },
     { key: 'rdp', label: 'RDP', enabled: vm.rdp_enabled && has('rdp'), reason: 'RDP not enabled' },
     { key: 'spice', label: 'SPICE', enabled: vm.spice_enabled && has('spice'), reason: 'SPICE not enabled' },

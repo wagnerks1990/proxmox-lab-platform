@@ -14,6 +14,7 @@ from app.schemas.vm import TemplateResponse, CreateVMRequest, VMResponse, VMCrea
 from app.services.security import verify_password, create_access_token
 from app.services.proxmox import ProxmoxClient
 from app.services.protocol import ProtocolService
+from app.services.connection_broker import get_guacamole_launch
 from app.api.deps import get_current_user, require_role
 from jose import jwt, JWTError
 from app.core.config import settings
@@ -236,6 +237,19 @@ async def console_terminal_url(id: int, user: User = Depends(get_current_user), 
     vm = _get_vm_for_user(db, user, id)
     _rate_limit(user, vm.vmid, 'web_terminal')
     return await ProtocolService(db).web_terminal_url(user, vm)
+
+
+
+@router.get('/vms/{id}/console/guacamole')
+async def console_guacamole(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db), protocol: str = 'rdp'):
+    vm = _get_vm_for_user(db, user, id)
+    _rate_limit(user, vm.vmid, 'guacamole')
+    if protocol not in ['rdp', 'vnc', 'ssh']:
+        raise HTTPException(status_code=400, detail={'error': 'Unsupported Guacamole protocol'})
+    db.add(AuditLog(actor_id=user.id, action='console_guacamole', target_type='student_vm', target_id=str(vm.vmid)))
+    _log_connection_launch(db, user, vm, 'GUACAMOLE', 'pending', f'protocol={protocol}')
+    db.commit()
+    return get_guacamole_launch(vm.vmid, protocol)
 
 @router.get('/vms/{id}/console/rdp')
 async def console_rdp(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):

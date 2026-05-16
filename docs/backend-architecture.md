@@ -33,3 +33,11 @@ This platform is **Proxmox-only** and intentionally does not implement VMware/Hy
 - Safe checks only:
   - `python3 -m compileall backend/app`
   - `cd frontend && npm run build`
+
+
+## Remote access priority
+1. Guacamole (primary browser broker)
+2. RDP via Guacamole
+3. VNC via Guacamole
+4. SSH via Guacamole
+5. Direct noVNC/SPICE as future optional fallback placeholders
