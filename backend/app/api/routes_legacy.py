@@ -18,6 +18,7 @@ from app.services.guacamole import check_guacamole_reachable, guacamole_configur
 from app.api.deps import get_current_user, require_role
 from jose import jwt, JWTError
 from app.core.config import settings
+from app.core.response import api_success
 
 router = APIRouter(prefix='/api')
 MAX_VMS_PER_USER = 5
@@ -305,7 +306,7 @@ async def console_guacamole(id: int, user: User = Depends(get_current_user), db:
     launch.status = 'success'
     launch.details = f'connection_id={payload["connection_id"]} node={vm.proxmox_node} vmid={vm.vmid} ip={effective_ip}'
     db.commit()
-    return payload
+    return api_success(payload, message='Guacamole launch prepared')
 
 @router.get('/vms/{id}/console/rdp')
 async def console_rdp(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
