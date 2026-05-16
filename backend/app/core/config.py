@@ -17,14 +17,5 @@ class Settings(BaseSettings):
     lab_vm_ssh_username: str | None = None
     lab_vm_ssh_password: str | None = None
 
-    guacamole_internal_url: str = 'http://127.0.0.1:8080/guacamole'
-    guacamole_base_url: str = '/guacamole'
-    guacamole_admin_user: str | None = None
-    guacamole_admin_password: str | None = None
-    guacamole_datasource: str | None = 'postgresql'
-    guacamole_enabled: bool = True
-    guacamole_default_protocol: str = 'rdp'
-    guacamole_verify_ssl: bool = False
-
 
 settings = Settings()
