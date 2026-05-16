@@ -135,11 +135,13 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == data.username).first()
     if not user or not verify_password(data.password, user.password_hash):
         raise HTTPException(status_code=401, detail='Invalid credentials')
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail='User account is disabled')
     return TokenResponse(access_token=create_access_token(user.username))
 
 @router.get('/auth/me', response_model=UserResponse)
 def me(user: User = Depends(get_current_user)):
-    return UserResponse(id=user.id, username=user.username, email=user.email, role=_role_name(user).lower())
+    return UserResponse(id=user.id, username=user.username, email=user.email, role=_role_name(user).lower(), role_id=user.role_id, is_active=user.is_active)
 
 @router.get('/templates', response_model=list[TemplateResponse])
 def templates(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
