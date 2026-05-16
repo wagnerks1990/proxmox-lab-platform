@@ -24,3 +24,10 @@
 .drawer-backdrop{position:fixed;inset:0;background:rgba(8,12,18,.65);display:flex;justify-content:flex-end;z-index:40}.drawer{width:min(560px,95vw);height:100vh;background:#101927;border-left:1px solid var(--line);padding:14px;overflow:auto}.drawer-head{display:flex;justify-content:space-between;align-items:center}.tabs{display:flex;gap:8px;margin:10px 0}.tabs span{background:#1a2536;padding:6px 10px;border-radius:999px;font-size:12px}
 .login-wrap{min-height:100vh;display:grid;place-items:center}.login-card{width:380px;background:#121b2a;border:1px solid var(--line);border-radius:14px;padding:20px}.input{background:#0f1624;border:1px solid var(--line);border-radius:10px;color:var(--text);padding:10px;min-width:140px}.msg{padding:10px;border-radius:10px;margin:8px}.msg.error{background:rgba(241,111,111,.2)}.msg.success{background:rgba(50,196,141,.2)}
 @media(max-width:1100px){.cards6{grid-template-columns:repeat(2,1fr)}.grid-2{grid-template-columns:1fr}.app2{grid-template-columns:1fr}.sidebar2{position:relative;height:auto}}
+
+.sidebar2 nav a.nav-active{background:#2b3f5e;font-weight:700}
+.role-badge{margin-bottom:10px;display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;text-transform:uppercase}
+.role-badge.admin{background:rgba(241,111,111,.2);color:#ffb0b0}
+.role-badge.teacher{background:rgba(230,186,83,.2);color:#f6da96}
+.role-badge.student{background:rgba(94,161,255,.2);color:#9cc7ff}
+.empty-state{padding:18px;border:1px dashed var(--line);border-radius:10px;color:var(--muted)}

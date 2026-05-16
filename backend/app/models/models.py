@@ -116,6 +116,9 @@ class VMPool(Base):
     placement_strategy = Column(String(50), nullable=True)
     preferred_node_id = Column(Integer, ForeignKey('proxmox_nodes.id'), nullable=True)
     resource_pool_id = Column(Integer, ForeignKey('vm_pools.id'), nullable=True)
+    cpu_limit = Column(String(50), nullable=True)
+    memory_limit_mb = Column(Integer, nullable=True)
+    allowed_roles = Column(String(255), nullable=True)
 
 
 class LabGroup(Base):
@@ -131,6 +134,9 @@ class LabGroup(Base):
     placement_strategy = Column(String(50), nullable=True)
     preferred_node_id = Column(Integer, ForeignKey('proxmox_nodes.id'), nullable=True)
     resource_pool_id = Column(Integer, ForeignKey('vm_pools.id'), nullable=True)
+    cpu_limit = Column(String(50), nullable=True)
+    memory_limit_mb = Column(Integer, nullable=True)
+    allowed_roles = Column(String(255), nullable=True)
 
 
 class LabGroupMember(Base):
@@ -175,4 +181,29 @@ class ProxmoxNode(Base):
     cpu_usage = Column(String(50), nullable=True)
     memory_usage = Column(String(50), nullable=True)
     storage_summary = Column(String(255), nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class DesktopPool(Base):
+    __tablename__ = 'desktop_pools'
+    id = Column(Integer, primary_key=True)
+    name = Column(String(100), unique=True, nullable=False)
+    description = Column(String(255), nullable=True)
+    pool_type = Column(String(20), default='lab')
+    template_id = Column(Integer, ForeignKey('vm_templates.id'), nullable=True)
+    resource_pool_id = Column(Integer, ForeignKey('vm_pools.id'), nullable=True)
+    cpu_limit = Column(String(50), nullable=True)
+    memory_limit_mb = Column(Integer, nullable=True)
+    allowed_roles = Column(String(255), nullable=True)
+    cluster_id = Column(Integer, ForeignKey('proxmox_clusters.id'), nullable=True)
+    node_id = Column(Integer, ForeignKey('proxmox_nodes.id'), nullable=True)
+    storage_pool = Column(String(100), nullable=True)
+    network_bridge = Column(String(100), nullable=True)
+    min_ready = Column(Integer, default=0)
+    max_desktops = Column(Integer, default=20)
+    auto_start = Column(Boolean, default=True)
+    auto_recycle = Column(Boolean, default=False)
+    naming_prefix = Column(String(50), nullable=True)
+    assignment_mode = Column(String(20), default='manual')
+    is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, server_default=func.now())

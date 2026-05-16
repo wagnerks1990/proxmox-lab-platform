@@ -192,3 +192,26 @@ class ProxmoxNodeResponse(ProxmoxNodeBase):
     memory_usage: str | None = None
     storage_summary: str | None = None
     created_at: datetime | None = None
+
+class DesktopPoolBase(BaseModel):
+    name: str
+    description: str | None = None
+    pool_type: str = 'lab'
+    template_id: int | None = None
+    resource_pool_id: int | None = None
+    cluster_id: int | None = None
+    node_id: int | None = None
+    storage_pool: str | None = None
+    network_bridge: str | None = None
+    min_ready: int = 0
+    max_desktops: int = 20
+    auto_start: bool = True
+    auto_recycle: bool = False
+    naming_prefix: str | None = None
+    assignment_mode: str = 'manual'
+    is_active: bool = True
+
+
+class DesktopPoolResponse(DesktopPoolBase):
+    id: int
+    created_at: datetime | None = None

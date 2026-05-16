@@ -15,6 +15,7 @@ import UsersPage from './pages/UsersPage'
 import MonitoringPage from './pages/MonitoringPage'
 import SettingsPage from './pages/SettingsPage'
 import ProxmoxPage from './pages/ProxmoxPage'
+import DesktopPoolsPage from './pages/DesktopPoolsPage'
 import './styles.css'
 
 function App() {
@@ -25,6 +26,7 @@ function App() {
   return <BrowserRouter><AppLayout setUser={setUser} user={user}><MessageBanner message={message} /><Routes><Route path='/' element={<DashboardPage user={user} />} /><Route path='/vms' element={<VmsPage setMessage={setMessage} user={user} />} /><Route path='/create' element={<CreateVmPage setMessage={setMessage} />} /><Route path='/sessions' element={<SessionActivityPage setMessage={setMessage} />} />
           <Route path='/proxmox' element={<ProxmoxPage setMessage={setMessage} />} />
           <Route path='/templates' element={<TemplatesPage setMessage={setMessage} />} />
+          <Route path='/desktop-pools' element={<DesktopPoolsPage setMessage={setMessage} />} />
           <Route path='/pools' element={<PoolsPage setMessage={setMessage} />} />
           <Route path='/users' element={<UsersPage setMessage={setMessage} />} />
           <Route path='/monitoring' element={<MonitoringPage />} />

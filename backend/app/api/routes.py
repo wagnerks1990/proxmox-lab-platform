@@ -8,9 +8,9 @@ import websockets
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.db.session import get_db
-from app.models.models import User, VMTemplate, Permission, StudentVM, AuditLog, ConnectionLaunch, VMPool, LabGroup, LabGroupMember, ProtocolSettings, ProxmoxCluster, ProxmoxNode
+from app.models.models import User, VMTemplate, Permission, StudentVM, AuditLog, ConnectionLaunch, VMPool, LabGroup, LabGroupMember, ProtocolSettings, ProxmoxCluster, ProxmoxNode, DesktopPool
 from app.schemas.auth import LoginRequest, TokenResponse, UserResponse
-from app.schemas.vm import TemplateResponse, CreateVMRequest, VMResponse, VMCreateResponse, AuditLogResponse, TemplateCreateRequest, TemplateUpdateRequest, ConnectionLaunchResponse, PoolBase, PoolResponse, GroupResponse, GroupCreateRequest, GroupUpdateRequest, GroupMemberRequest, ProtocolSettingsResponse, ProxmoxClusterBase, ProxmoxClusterResponse, ProxmoxNodeBase, ProxmoxNodeResponse
+from app.schemas.vm import TemplateResponse, CreateVMRequest, VMResponse, VMCreateResponse, AuditLogResponse, TemplateCreateRequest, TemplateUpdateRequest, ConnectionLaunchResponse, PoolBase, PoolResponse, GroupResponse, GroupCreateRequest, GroupUpdateRequest, GroupMemberRequest, ProtocolSettingsResponse, ProxmoxClusterBase, ProxmoxClusterResponse, ProxmoxNodeBase, ProxmoxNodeResponse, DesktopPoolBase, DesktopPoolResponse
 from app.services.security import verify_password, create_access_token
 from app.services.proxmox import ProxmoxClient
 from app.services.protocol import ProtocolService
@@ -229,67 +229,6 @@ async def console_ssh(id: int, user: User = Depends(get_current_user), db: Sessi
     host = vm.assigned_ip or vm.hostname or vm.vm_name
     return {'type': 'ssh', 'host': host, 'username': vm.default_username or 'student', 'web_terminal_url': f'/api/vms/{vm.id}/console/ssh'}
 
-@router.get('/vms/{id}/network')
-async def vm_network(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    vm = _get_vm_for_user(db, user, id)
-    proxmox = ProxmoxClient()
-    try:
-        status = await proxmox.get_vm_status(vm.proxmox_node, vm.vmid)
-        interfaces = await proxmox.get_guest_network(vm.proxmox_node, vm.vmid)
-    except Exception as exc:
-        raise _proxmox_error(exc)
-    ip = None
-    for iface in interfaces:
-        for addr in iface.get('ip-addresses', []):
-            if addr.get('ip-address-type') == 'ipv4' and not addr.get('ip-address', '').startswith('127.'):
-                ip = addr.get('ip-address')
-                break
-        if ip:
-            break
-    vm.assigned_ip = ip
-    vm.hostname = status.get('name', vm.hostname)
-    db.add(AuditLog(actor_id=user.id, action='network_vm', target_type='student_vm', target_id=str(vm.vmid)))
-    db.commit(); db.refresh(vm)
-    return {'id': vm.id, 'status': status.get('status'), 'uptime': status.get('uptime'), 'hostname': vm.hostname, 'assigned_ip': vm.assigned_ip, 'interfaces': interfaces}
-
-@router.get('/vms/{id}/console/novnc')
-async def console_novnc(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    vm = _get_vm_for_user(db, user, id)
-    _rate_limit(user, vm.vmid, 'novnc')
-    try:
-        return await ProtocolService(db).novnc_ticket_scaffold(user, vm)
-    except Exception as exc:
-        if isinstance(exc, HTTPException):
-            raise exc
-        raise _proxmox_error(exc)
-
-@router.get('/vms/{id}/console/spice')
-async def console_spice(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    vm = _get_vm_for_user(db, user, id)
-    _rate_limit(user, vm.vmid, 'spice')
-    try:
-        cfg = await ProxmoxClient().get_spice_config(vm.proxmox_node, vm.vmid)
-    except Exception as exc:
-        msg = str(exc).lower()
-        if 'spice' in msg and ('not enabled' in msg or 'no spice' in msg or 'port' in msg):
-            raise HTTPException(status_code=400, detail={'error': 'SPICE is not enabled for this VM.'})
-        raise _proxmox_error(exc)
-    db.add(AuditLog(actor_id=user.id, action='console_spice', target_type='student_vm', target_id=str(vm.vmid))); db.commit()
-    return {'type': 'spice', 'config': cfg}
-
-@router.get('/vms/{id}/console/ssh')
-async def console_ssh(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    vm = _get_vm_for_user(db, user, id)
-    _rate_limit(user, vm.vmid, 'ssh')
-    db.add(AuditLog(actor_id=user.id, action='console_ssh', target_type='student_vm', target_id=str(vm.vmid))); db.commit()
-    host = vm.assigned_ip or vm.hostname or vm.vm_name
-    return {'type': 'ssh', 'host': host, 'username': vm.default_username or 'student', 'web_terminal_url': f'/api/vms/{vm.id}/console/ssh'}
-
-@router.get('/vms/{id}/console/terminal-url')
-async def console_terminal_url(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    vm = _get_vm_for_user(db, user, id)
-    _rate_limit(user, vm.vmid, 'web_terminal')
-    return await ProtocolService(db).web_terminal_url(user, vm)
 
 
 @router.get('/vms/{id}/console/terminal-url')
@@ -635,7 +574,10 @@ async def monitoring_summary(user: User = Depends(require_role('Teacher', 'Admin
         rvc = db.query(StudentVM).filter(StudentVM.proxmox_node==n.node_name, StudentVM.status=='running').count()
         node_counts.append({'node':n.node_name,'cluster_id':n.cluster_id,'vm_count':vmc,'running_vm_count':rvc,'status':n.status,'cpu_usage':n.cpu_usage,'memory_usage':n.memory_usage,'storage_summary':n.storage_summary})
     cluster_health = [{'cluster':c.name,'enabled':c.enabled} for c in db.query(ProxmoxCluster).all()]
-    return {'total_vms':total,'running_vms':running,'stopped_vms':stopped,'recent_sessions':len(sessions),'failed_actions':failed,'proxmox_health':pmx_ok,'database_health':db_ok,'cluster_health':cluster_health,'node_health':node_counts,'failed_proxmox_checks':0}
+    placement_warnings = []
+    if not db.query(VMPool).filter(VMPool.enabled.is_(True)).first():
+        placement_warnings.append('No enabled resource pools configured')
+    return {'total_vms':total,'running_vms':running,'stopped_vms':stopped,'recent_sessions':len(sessions),'failed_actions':failed,'proxmox_health':pmx_ok,'database_health':db_ok,'cluster_health':cluster_health,'node_health':node_counts,'failed_proxmox_checks':0,'placement_warnings':placement_warnings}
 
 @router.get('/admin/settings/protocols', response_model=ProtocolSettingsResponse)
 def get_protocol_settings(user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
@@ -702,3 +644,75 @@ async def sync_nodes(user: User = Depends(require_role('Teacher', 'Admin')), db:
             continue
     db.commit()
     return db.query(ProxmoxNode).order_by(ProxmoxNode.created_at.desc()).all()
+
+
+@router.get('/admin/desktop-pools', response_model=list[DesktopPoolResponse])
+def list_desktop_pools(user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+    return db.query(DesktopPool).order_by(DesktopPool.created_at.desc()).all()
+
+@router.post('/admin/desktop-pools', response_model=DesktopPoolResponse)
+def create_desktop_pool(payload: DesktopPoolBase, user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+    p = DesktopPool(**payload.model_dump())
+    db.add(p); db.commit(); db.refresh(p); return p
+
+@router.patch('/admin/desktop-pools/{id}', response_model=DesktopPoolResponse)
+def patch_desktop_pool(id: int, payload: DesktopPoolBase, user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+    p = db.query(DesktopPool).filter(DesktopPool.id==id).first()
+    if not p: raise HTTPException(status_code=404, detail='Desktop pool not found')
+    for k,v in payload.model_dump(exclude_none=True).items(): setattr(p,k,v)
+    db.commit(); db.refresh(p); return p
+
+@router.delete('/admin/desktop-pools/{id}')
+def delete_desktop_pool(id: int, user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+    p = db.query(DesktopPool).filter(DesktopPool.id==id).first()
+    if not p: raise HTTPException(status_code=404, detail='Desktop pool not found')
+    db.delete(p); db.commit(); return {'ok':True}
+
+@router.patch('/admin/proxmox/nodes/{id}/enabled')
+def toggle_node_enabled(id: int, enabled: bool, user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+    n = db.query(ProxmoxNode).filter(ProxmoxNode.id==id).first()
+    if not n: raise HTTPException(status_code=404, detail='Node not found')
+    n.enabled = enabled; db.commit(); db.refresh(n); return n
+
+@router.get('/admin/proxmox/clusters/summary')
+def cluster_summary(user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+    out=[]
+    for c in db.query(ProxmoxCluster).all():
+        node_count = db.query(ProxmoxNode).filter(ProxmoxNode.cluster_id==c.id).count()
+        vm_count = db.query(StudentVM).join(ProxmoxNode, ProxmoxNode.node_name==StudentVM.proxmox_node, isouter=True).filter(ProxmoxNode.cluster_id==c.id).count()
+        out.append({'cluster_id':c.id,'name':c.name,'enabled':c.enabled,'nodes':node_count,'vms':vm_count})
+    return out
+
+@router.get('/admin/proxmox/nodes/summary')
+def node_summary(user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+    out=[]
+    for n in db.query(ProxmoxNode).all():
+        vm_count = db.query(StudentVM).filter(StudentVM.proxmox_node==n.node_name).count()
+        running = db.query(StudentVM).filter(StudentVM.proxmox_node==n.node_name, StudentVM.status=='running').count()
+        out.append({'node_id':n.id,'node_name':n.node_name,'enabled':n.enabled,'status':n.status,'vm_count':vm_count,'running_vm_count':running,'eligible':bool(n.enabled)})
+    return out
+
+@router.get('/admin/schema-health')
+def schema_health(user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+    from sqlalchemy import inspect
+    ins = inspect(db.bind)
+    required = {
+        'users': ['id','username','email','role_id'],
+        'roles': ['id','name'],
+        'student_vms': ['id','owner_id','vmid','proxmox_node','status'],
+        'vm_templates': ['id','name','proxmox_node','source_vmid'],
+        'vm_pools': ['id','name'],
+        'connection_launches': ['id','actor_id','vm_id','protocol','status','created_at'],
+        'proxmox_clusters': ['id','name','api_url'],
+        'proxmox_nodes': ['id','cluster_id','node_name'],
+        'desktop_pools': ['id','name','template_id','resource_pool_id'],
+    }
+    missing_tables=[]; missing_columns=[]; warnings=[]
+    for t, cols in required.items():
+        if not ins.has_table(t):
+            missing_tables.append(t); continue
+        existing={c['name'] for c in ins.get_columns(t)}
+        for c in cols:
+            if c not in existing: missing_columns.append(f'{t}.{c}')
+    if db.query(ConnectionLaunch).count()==0: warnings.append('No session activity records yet')
+    return {'ok': not missing_tables and not missing_columns, 'missing_tables': missing_tables, 'missing_columns': missing_columns, 'warnings': warnings}
