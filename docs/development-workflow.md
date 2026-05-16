@@ -1,14 +1,28 @@
 # Development Workflow
 
-## Branch strategy
-- `main` = production-ready.
-- `develop` = integration/testing.
-- `feature/*` = active development.
+## Branch model
+- `main`: stable production
+- `develop`: integration testing
+- `feature/*`: scoped implementation
 
-## Merge flow
-- Feature PRs target `develop`.
-- Release PRs merge `develop` -> `main`.
+## Backend refactor policy
+- Keep API paths backward-compatible during route splitting.
+- Move logic from `routes_legacy.py` into modular route files incrementally.
+- Use service-layer modules to avoid route bloat.
 
-## Codex safety policy
-- Do not run deployment scripts, Proxmox actions, or runtime integration tests in Codex.
-- Use static validation only (compile/build checks).
+## Proxmox-only scope
+- Classroom VDI orchestration on Proxmox clusters/nodes only.
+- No multi-hypervisor abstraction in this project.
+
+## Schema drift policy
+- Prefer tolerant Alembic migrations for existing drifted databases.
+- Never drop data as part of Codex migration fixes.
+
+## Safe testing policy
+- Allowed in Codex:
+  - `python3 -m compileall backend/app`
+  - `cd frontend && npm run build`
+- Disallowed in Codex:
+  - destructive Proxmox actions
+  - deployment scripts
+  - live runtime integration/destructive tests

@@ -1,19 +1,35 @@
-# Backend Architecture
+# Backend Architecture (Proxmox-only)
 
-## Layering
-- `api/`: HTTP/websocket routes and request validation.
-- `services/`: domain logic boundaries.
-- `models/`: SQLAlchemy ORM.
-- `schemas/`: API contracts.
+This platform is **Proxmox-only** and intentionally does not implement VMware/Hyper-V/XenServer/cloud providers.
 
-## Target service boundaries
-- `auth`
-- `vm`
-- `proxmox`
-- `protocol`
-- `audit`
-- `session`
-- `pools/templates`
+## API organization
+- `app/api/router.py` central registration.
+- Modular route files under `app/api/routes/`:
+  - `auth.py`
+  - `vms.py`
+  - `templates.py`
+  - `resource_pools.py`
+  - `desktop_pools.py`
+  - `proxmox_admin.py`
+  - `sessions.py`
+  - `monitoring.py`
+  - `users.py`
+  - `settings.py`
+  - `schema_health.py`
+- `app/api/routes_legacy.py` currently preserves existing endpoints while logic is incrementally migrated.
 
-## Logging
-Use structured logging helpers to standardize event fields across services.
+## Service layer
+- `services/rbac.py`: centralized role normalization + guards.
+- `services/placement.py`: placement strategy selection (`fixed_node`, `any_enabled_node`, `least_running_vms`, `least_memory_usage`, `round_robin`).
+- `services/schema_health.py`: required table/column checks.
+- `services/protocols.py`: protocol registry placeholders (`novnc`, `guacamole`, `rdp`, `spice`, `web_terminal`).
+
+## RBAC strategy
+- Source of truth: `users.role_id` -> `roles` table.
+- Legacy `users.role` is compatibility-only fallback.
+
+## Safety policy
+- No destructive Proxmox operations during Codex runs.
+- Safe checks only:
+  - `python3 -m compileall backend/app`
+  - `cd frontend && npm run build`
