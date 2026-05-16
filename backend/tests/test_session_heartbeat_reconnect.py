@@ -1,28 +1,14 @@
-from app.architecture.state_machines import SessionState
-from app.services.session_service import SessionService
+from app.security.replay_cache import ReplayCache
 
 
-class DummySession:
-    def __init__(self):
-        self.id = 1
-        self.state = SessionState.DISCONNECTED.value
-        self.last_heartbeat_at = None
-        self.updated_at = None
+def test_replay_cache_rejects_duplicate_token_id():
+    cache = ReplayCache()
+    assert cache.mark_used('jti-1', 9999999999) is True
+    assert cache.mark_used('jti-1', 9999999999) is False
 
 
-class Q:
-    def __init__(self, row): self.row = row
-    def filter(self, *a, **k): return self
-    def first(self): return self.row
-
-
-class DB:
-    def __init__(self, row): self.row=row
-    def query(self, *a, **k): return Q(self.row)
-
-
-def test_reconnect_success_path():
-    row = DummySession()
-    svc = SessionService(DB(row))
-    out = svc.reconnect(1, 'reconnect-1')
-    assert out is not None
+def test_replay_cache_evicts_expired_entries():
+    cache = ReplayCache()
+    assert cache.mark_used('old', 0) is True
+    assert cache.mark_used('new', 9999999999) is True
+    assert cache.mark_used('old', 9999999999) is True

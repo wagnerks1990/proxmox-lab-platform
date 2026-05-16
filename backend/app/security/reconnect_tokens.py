@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from uuid import uuid4
 from datetime import datetime, timedelta, timezone
 from jose import JWTError, jwt
 
@@ -11,6 +12,7 @@ def create_reconnect_token(*, secret: str, session_id: int, user_id: int, protoc
         'sid': session_id,
         'uid': user_id,
         'proto': protocol,
+        'jti': str(uuid4()),
         'iat': int(now.timestamp()),
         'exp': int(exp.timestamp()),
     }
@@ -30,6 +32,8 @@ def verify_reconnect_token(*, token: str, secret: str, session_id: int, user_id:
         raise ValueError('wrong user')
     if payload.get('proto') != protocol:
         raise ValueError('wrong protocol')
+    if not payload.get('jti'):
+        raise ValueError('missing token id')
     if fingerprint and payload.get('fp') not in {None, fingerprint}:
         raise ValueError('wrong fingerprint')
     return payload
