@@ -7,7 +7,6 @@ from app.core.config import settings
 from app.db.session import get_db
 from app.schemas.common import ApiEnvelope
 from app.services.worker_run_service import WorkerRunService
-from app.workers.scheduler import scheduler
 
 router = APIRouter()
 
@@ -25,10 +24,18 @@ def operations_health(_user=Depends(require_role('Teacher', 'Admin')), db: Sessi
         'backend': 'ok',
         'database': 'ok' if db_ok else 'error',
         'scheduler_enabled': settings.worker_scheduler_enabled,
-        'scheduler_running': bool(scheduler and scheduler.running),
+        'scheduler_running': _scheduler_running(),
         'worker_recent_failures': len(failed),
         'telemetry_storage': 'configured',
         'guacamole_health': 'unknown',
         'proxmox_health': 'unknown',
         'session_cleanup_status': 'scheduled' if settings.worker_scheduler_enabled else 'disabled',
     })
+
+
+def _scheduler_running() -> bool:
+    try:
+        from app.workers.scheduler import scheduler
+        return bool(scheduler and scheduler.running)
+    except Exception:
+        return False
