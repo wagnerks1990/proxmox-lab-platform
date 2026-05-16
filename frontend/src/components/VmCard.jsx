@@ -7,7 +7,7 @@ export default function VmCard({ vm, onAction, onLaunch, loading, isAdmin }) {
     { key: 'guacamole', label: 'Open Console', enabled: true, reason: 'Guacamole unavailable' },
     { key: 'console', label: 'noVNC (future)', enabled: false, reason: 'not implemented yet' },
     { key: 'web_terminal', label: 'Web Terminal', enabled: vm.ssh_enabled && has('ssh'), reason: 'SSH not enabled' },
-    { key: 'rdp', label: 'RDP', enabled: vm.rdp_enabled && has('rdp'), reason: 'RDP not enabled' },
+    { key: 'rdp', label: 'RDP (Guacamole)', enabled: vm.rdp_enabled && has('rdp'), reason: 'RDP not enabled' },
     { key: 'spice', label: 'SPICE', enabled: vm.spice_enabled && has('spice'), reason: 'SPICE not enabled' },
   ]
   return <div className='vm-card'>
