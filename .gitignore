@@ -1,2 +1,26 @@
+# Environment
+.env
+.env.*
+venv/
+.venv/
+
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+
+# Node
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
+
+# OS/IDE
+.DS_Store
+.vscode/
+.idea/
+
+# Logs
+*.log

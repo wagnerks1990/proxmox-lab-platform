@@ -16,10 +16,15 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
     role_id = Column(Integer, ForeignKey('roles.id'), nullable=False)
+    display_name = Column(String(120), nullable=True)
     is_active = Column(Boolean, default=True)
+    force_password_change = Column(Boolean, default=False)
+    last_login_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    role = Column(String(50), nullable=True)  # deprecated: compatibility only
 
-    role = relationship('Role')
+    role_rel = relationship('Role', foreign_keys=[role_id])
 
 
 class VMTemplate(Base):
