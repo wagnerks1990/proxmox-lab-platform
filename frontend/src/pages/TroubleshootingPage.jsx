@@ -1,0 +1,3 @@
+import { useEffect, useState } from 'react'
+import { getTroubleshootingRecent } from '../services/troubleshootingApi'
+export default function TroubleshootingPage(){const [rows,setRows]=useState([]); useEffect(()=>{getTroubleshootingRecent().then(setRows)},[]); return <section><h2>Troubleshooting</h2><button onClick={()=>navigator.clipboard?.writeText(JSON.stringify(rows,null,2))}>Copy diagnostic summary</button><table className='vm-table'><thead><tr><th>Issue</th><th>Severity</th><th>Cause</th><th>Suggested Fix</th></tr></thead><tbody>{rows.map((r,i)=><tr key={i}><td>{r.issue_type}</td><td>{r.severity}</td><td>{r.probable_cause}</td><td>{r.suggested_fix}</td></tr>)}</tbody></table></section>}
