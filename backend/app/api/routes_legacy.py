@@ -5,13 +5,13 @@ import httpx
 import asyncssh
 import asyncio
 import websockets
-from sqlalchemy import text
+from sqlalchemy import text, func
 from sqlalchemy.orm import Session
 from app.db.session import get_db
-from app.models.models import User, VMTemplate, Permission, StudentVM, AuditLog, ConnectionLaunch, VMConsoleConnection, VMPool, LabGroup, LabGroupMember, ProtocolSettings, ProxmoxCluster, ProxmoxNode, DesktopPool
+from app.models.models import User, VMTemplate, Permission, StudentVM, AuditLog, ConnectionLaunch, VMConsoleConnection, VMPool, LabGroup, LabGroupMember, ProtocolSettings, ProxmoxCluster, ProxmoxNode, DesktopPool, UserGroup, UserGroupMember, AuditEvent, Role
 from app.schemas.auth import LoginRequest, TokenResponse, UserResponse
 from app.schemas.vm import TemplateResponse, CreateVMRequest, VMResponse, VMCreateResponse, AuditLogResponse, TemplateCreateRequest, TemplateUpdateRequest, ConnectionLaunchResponse, PoolBase, PoolResponse, GroupResponse, GroupCreateRequest, GroupUpdateRequest, GroupMemberRequest, ProtocolSettingsResponse, ProxmoxClusterBase, ProxmoxClusterResponse, ProxmoxNodeBase, ProxmoxNodeResponse, DesktopPoolBase, DesktopPoolResponse
-from app.services.security import verify_password, create_access_token
+from app.services.security import verify_password, create_access_token, hash_password
 from app.services.proxmox import ProxmoxClient
 from app.services.protocol import ProtocolService
 from app.services.guacamole import check_guacamole_reachable, guacamole_configured, build_launch_payload, GuacamoleError
@@ -779,3 +779,119 @@ async def guacamole_status(user: User = Depends(require_role('Teacher', 'Admin')
         'error': error,
         'guidance': None if reachable else 'Verify local Guacamole at GUACAMOLE_INTERNAL_URL and nginx proxy for /guacamole',
     }
+
+
+@router.get('/admin/users')
+def admin_users(user: User = Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    rows = db.query(User).all()
+    return [{'id':u.id,'username':u.username,'email':u.email,'display_name':u.display_name,'role_id':u.role_id,'role':_role_name(u),'is_active':u.is_active,'created_at':u.created_at,'updated_at':u.updated_at,'last_login_at':u.last_login_at,'force_password_change':u.force_password_change} for u in rows]
+
+@router.post('/admin/users')
+def admin_create_user(payload: dict, user: User = Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    role_name = payload.get('role') or 'Student'
+    role = db.query(Role).filter(func.lower(Role.name)==role_name.lower()).first()
+    if not role: raise HTTPException(status_code=400, detail='Invalid role')
+    if db.query(User).filter(User.username==payload.get('username')).first(): raise HTTPException(status_code=409, detail='Username already exists')
+    nu = User(username=payload['username'], email=payload['email'], display_name=payload.get('display_name'), role_id=role.id, is_active=payload.get('is_active', True), force_password_change=payload.get('force_password_change', True), password_hash=hash_password(payload.get('password') or 'TempPass123!'))
+    db.add(nu); db.flush(); db.add(AuditEvent(actor_id=user.id, action='user_created', entity_type='user', entity_id=str(nu.id), status='success', message=f'Created user {nu.username}')); db.commit(); db.refresh(nu)
+    return {'id':nu.id,'username':nu.username}
+
+@router.patch('/admin/users/{id}')
+def admin_patch_user(id: int, payload: dict, user: User = Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    u = db.query(User).filter(User.id==id).first()
+    if not u: raise HTTPException(status_code=404, detail='User not found')
+    for k in ['email','display_name','is_active','force_password_change']:
+        if k in payload: setattr(u,k,payload[k])
+    if 'role' in payload:
+        role = db.query(Role).filter(func.lower(Role.name)==payload['role'].lower()).first()
+        if not role: raise HTTPException(status_code=400, detail='Invalid role')
+        u.role_id = role.id
+    db.add(AuditEvent(actor_id=user.id, action='user_updated', entity_type='user', entity_id=str(u.id), status='success', message=f'Updated user {u.username}')); db.commit(); return {'ok':True}
+
+@router.delete('/admin/users/{id}')
+def admin_delete_user(id: int, user: User = Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    if user.id == id: raise HTTPException(status_code=400, detail='Cannot delete current user')
+    u = db.query(User).filter(User.id==id).first()
+    if not u: raise HTTPException(status_code=404, detail='User not found')
+    db.add(AuditEvent(actor_id=user.id, action='user_deleted', entity_type='user', entity_id=str(id), status='success', message=f'Deleted user {u.username}'))
+    db.delete(u); db.commit(); return {'ok':True}
+
+@router.post('/admin/users/{id}/reset-password')
+def admin_reset_password(id: int, payload: dict, user: User = Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    u = db.query(User).filter(User.id==id).first()
+    if not u: raise HTTPException(status_code=404, detail='User not found')
+    pw = payload.get('temporary_password') or 'TempPass123!'
+    u.password_hash = hash_password(pw); u.force_password_change = True
+    db.add(AuditEvent(actor_id=user.id, action='password_reset', entity_type='user', entity_id=str(id), status='success', message='Admin reset password'))
+    db.commit(); return {'ok':True}
+
+@router.post('/admin/users/{id}/disable')
+def admin_disable_user(id: int, user: User = Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    if user.id == id: raise HTTPException(status_code=400, detail='Cannot disable current user')
+    u = db.query(User).filter(User.id==id).first()
+    if not u: raise HTTPException(status_code=404, detail='User not found')
+    u.is_active=False; db.commit(); return {'ok':True}
+
+@router.post('/admin/users/{id}/enable')
+def admin_enable_user(id: int, user: User = Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    u = db.query(User).filter(User.id==id).first()
+    if not u: raise HTTPException(status_code=404, detail='User not found')
+    u.is_active=True; db.commit(); return {'ok':True}
+
+@router.get('/admin/groups')
+def admin_groups(user: User = Depends(require_role('Teacher','Admin')), db: Session = Depends(get_db)):
+    rows = db.query(UserGroup).order_by(UserGroup.created_at.desc()).all()
+    return [{'id':g.id,'name':g.name,'description':g.description,'created_at':g.created_at,'updated_at':g.updated_at,'member_count':db.query(UserGroupMember).filter(UserGroupMember.group_id==g.id).count()} for g in rows]
+
+@router.post('/admin/groups')
+def admin_create_group(payload: dict, user: User = Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    g = UserGroup(name=payload['name'], description=payload.get('description'))
+    db.add(g); db.flush(); db.add(AuditEvent(actor_id=user.id, action='group_created', entity_type='group', entity_id=str(g.id), status='success', message=f'Created group {g.name}')); db.commit(); return {'id':g.id}
+
+@router.patch('/admin/groups/{id}')
+def admin_patch_group(id: int, payload: dict, user: User = Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    g = db.query(UserGroup).filter(UserGroup.id==id).first()
+    if not g: raise HTTPException(status_code=404, detail='Group not found')
+    if 'name' in payload: g.name=payload['name']
+    if 'description' in payload: g.description=payload['description']
+    db.commit(); return {'ok':True}
+
+@router.delete('/admin/groups/{id}')
+def admin_delete_group(id: int, user: User = Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    g = db.query(UserGroup).filter(UserGroup.id==id).first()
+    if not g: raise HTTPException(status_code=404, detail='Group not found')
+    db.query(UserGroupMember).filter(UserGroupMember.group_id==id).delete(); db.delete(g); db.commit(); return {'ok':True}
+
+@router.get('/admin/groups/{id}/members')
+def admin_group_members(id: int, user: User = Depends(require_role('Teacher','Admin')), db: Session = Depends(get_db)):
+    rows = db.query(UserGroupMember).filter(UserGroupMember.group_id==id).all()
+    return [{'user_id':m.user_id,'username':db.query(User).filter(User.id==m.user_id).first().username} for m in rows]
+
+@router.post('/admin/groups/{id}/members')
+def admin_add_group_member(id: int, payload: dict, user: User = Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    if not db.query(UserGroup).filter(UserGroup.id==id).first(): raise HTTPException(status_code=404, detail='Group not found')
+    if not db.query(User).filter(User.id==payload['user_id']).first(): raise HTTPException(status_code=404, detail='User not found')
+    if not db.query(UserGroupMember).filter(UserGroupMember.group_id==id, UserGroupMember.user_id==payload['user_id']).first(): db.add(UserGroupMember(group_id=id, user_id=payload['user_id']))
+    db.commit(); return {'ok':True}
+
+@router.delete('/admin/groups/{id}/members/{user_id}')
+def admin_remove_group_member(id: int, user_id: int, user: User = Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    db.query(UserGroupMember).filter(UserGroupMember.group_id==id, UserGroupMember.user_id==user_id).delete(); db.commit(); return {'ok':True}
+
+from app.services.cluster_validation import run_validation
+from app.services.placement import validate_placement_request
+
+@router.get('/admin/proxmox/validation')
+async def proxmox_validation(user: User = Depends(require_role('Teacher','Admin')), db: Session = Depends(get_db)):
+    return await run_validation(db)
+
+@router.get('/admin/proxmox/validation/run')
+async def proxmox_validation_run(user: User = Depends(require_role('Teacher','Admin')), db: Session = Depends(get_db)):
+    db.add(AuditEvent(actor_id=user.id, action='validation_run', entity_type='proxmox', entity_id='cluster', status='success', message='Validation executed'))
+    db.commit()
+    return await run_validation(db)
+
+@router.get('/admin/placement/preview')
+def placement_preview(strategy: str = 'any_enabled_node', user: User = Depends(require_role('Teacher','Admin')), db: Session = Depends(get_db)):
+    nodes = [{'id':n.id,'node_name':n.node_name,'enabled':n.enabled,'status':n.status,'running_vm_count':db.query(StudentVM).filter(StudentVM.proxmox_node==n.node_name, StudentVM.status=='running').count(),'cpu_usage':n.cpu_usage,'memory_usage':n.memory_usage} for n in db.query(ProxmoxNode).all()]
+    return validate_placement_request(nodes, strategy)

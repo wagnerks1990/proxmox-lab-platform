@@ -24,6 +24,7 @@ export default function Sidebar({ user }) {
         <Item to='/pools'>Resource Pools</Item>
         <Item to='/users'>Users / Groups</Item>
         <Item to='/monitoring'>Monitoring</Item>
+        <Item to='/validation'>Validation</Item>
         <Item to='/settings'>Settings</Item>
       </></AdminOnly>
     </nav>

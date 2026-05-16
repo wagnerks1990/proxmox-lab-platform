@@ -16,6 +16,7 @@ import MonitoringPage from './pages/MonitoringPage'
 import SettingsPage from './pages/SettingsPage'
 import ProxmoxPage from './pages/ProxmoxPage'
 import DesktopPoolsPage from './pages/DesktopPoolsPage'
+import ValidationPage from './pages/ValidationPage'
 import './styles.css'
 
 function App() {
@@ -30,7 +31,7 @@ function App() {
           <Route path='/pools' element={<PoolsPage setMessage={setMessage} />} />
           <Route path='/users' element={<UsersPage setMessage={setMessage} />} />
           <Route path='/monitoring' element={<MonitoringPage />} />
-          <Route path='/settings' element={<SettingsPage setMessage={setMessage} />} /><Route path='*' element={<Navigate to='/' />} /></Routes></AppLayout></BrowserRouter>
+          <Route path='/settings' element={<SettingsPage setMessage={setMessage} />} /><Route path='/validation' element={<ValidationPage />} /><Route path='*' element={<Navigate to='/' />} /></Routes></AppLayout></BrowserRouter>
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App />)

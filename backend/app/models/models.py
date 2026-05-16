@@ -16,8 +16,12 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
     role_id = Column(Integer, ForeignKey('roles.id'), nullable=False)
+    display_name = Column(String(120), nullable=True)
     is_active = Column(Boolean, default=True)
+    force_password_change = Column(Boolean, default=False)
+    last_login_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     role = Column(String(50), nullable=True)  # deprecated: compatibility only
 
     role_rel = relationship('Role', foreign_keys=[role_id])
@@ -202,6 +206,36 @@ class ProxmoxNode(Base):
     created_at = Column(DateTime, server_default=func.now())
 
 
+class UserGroup(Base):
+    __tablename__ = 'user_groups'
+    id = Column(Integer, primary_key=True)
+    name = Column(String(100), unique=True, nullable=False)
+    description = Column(String(255), nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class UserGroupMember(Base):
+    __tablename__ = 'user_group_members'
+    id = Column(Integer, primary_key=True)
+    group_id = Column(Integer, ForeignKey('user_groups.id'), nullable=False)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class AuditEvent(Base):
+    __tablename__ = 'audit_events'
+    id = Column(Integer, primary_key=True)
+    actor_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    action = Column(String(100), nullable=False)
+    entity_type = Column(String(50), nullable=False)
+    entity_id = Column(String(100), nullable=True)
+    status = Column(String(20), nullable=False, default='success')
+    message = Column(String(255), nullable=True)
+    details_json = Column(String(4000), nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+
 class DesktopPool(Base):
     __tablename__ = 'desktop_pools'
     id = Column(Integer, primary_key=True)
@@ -223,5 +257,9 @@ class DesktopPool(Base):
     auto_recycle = Column(Boolean, default=False)
     naming_prefix = Column(String(50), nullable=True)
     assignment_mode = Column(String(20), default='manual')
+    display_name = Column(String(120), nullable=True)
     is_active = Column(Boolean, default=True)
+    force_password_change = Column(Boolean, default=False)
+    last_login_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
