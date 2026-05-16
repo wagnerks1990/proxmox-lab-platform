@@ -259,9 +259,18 @@ async def console_guacamole(id: int, user: User = Depends(get_current_user), db:
         raise HTTPException(status_code=400, detail={'error': 'Unsupported Guacamole protocol'})
     if not guacamole_configured():
         raise HTTPException(status_code=503, detail={'error': 'Guacamole is disabled or not configured'})
+    if (vm.status or '').lower() != 'running':
+        raise HTTPException(status_code=409, detail={'error': 'VM must be running before console launch'})
+
+    discovered_ip = await ProxmoxClient().get_vm_guest_ip(vm.proxmox_node, vm.vmid)
+    effective_ip = vm.assigned_ip or discovered_ip
+    if not effective_ip:
+        raise HTTPException(status_code=400, detail={'error': 'No usable guest IP discovered. Verify QEMU Guest Agent and network configuration.'})
+    if not vm.assigned_ip and discovered_ip:
+        vm.assigned_ip = discovered_ip
 
     db.add(AuditLog(actor_id=user.id, action='console_guacamole', target_type='student_vm', target_id=str(vm.vmid)))
-    launch = ConnectionLaunch(actor_id=user.id, vm_id=vm.id, protocol=protocol, status='pending', details='launch requested')
+    launch = ConnectionLaunch(actor_id=user.id, vm_id=vm.id, protocol=protocol, status='pending', details=f'launch requested node={vm.proxmox_node} vmid={vm.vmid} ip={effective_ip}')
     db.add(launch)
     db.commit()
 
@@ -294,7 +303,7 @@ async def console_guacamole(id: int, user: User = Depends(get_current_user), db:
         mapping.port = port
 
     launch.status = 'success'
-    launch.details = f'connection_id={payload["connection_id"]}'
+    launch.details = f'connection_id={payload["connection_id"]} node={vm.proxmox_node} vmid={vm.vmid} ip={effective_ip}'
     db.commit()
     return payload
 
