@@ -7,6 +7,8 @@ from app.models.models import DesktopPool
 from app.schemas.common import ApiEnvelope
 from app.schemas.pools import PoolCreate, PoolOut, PoolPatch
 from app.services.pool_service import PoolService
+from app.services.pool_planning_service import PoolPlanningService
+from app.schemas.pool_plan import PoolPlanResponse
 
 router = APIRouter()
 
@@ -48,3 +50,12 @@ def patch_pool(id: int, payload: PoolPatch, _user=Depends(require_role('Teacher'
         setattr(row, k, v)
     db.commit(); db.refresh(row)
     return ApiEnvelope(success=True, data=row)
+
+
+@router.post('/pools/{id}/plan', response_model=ApiEnvelope[PoolPlanResponse])
+def plan_pool(id: int, _user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+    row = db.query(DesktopPool).filter(DesktopPool.id == id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail='Pool not found')
+    plan = PoolPlanningService().build_plan(row)
+    return ApiEnvelope(success=True, data=plan)
