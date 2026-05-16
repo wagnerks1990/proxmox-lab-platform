@@ -4,9 +4,18 @@ from pydantic import BaseModel
 
 class SessionActivityResponse(BaseModel):
     id: int
-    actor_id: int
+    user_id: int
     vm_id: int
     protocol: str
-    status: str
-    details: str | None = None
+    state: str
+    node: str | None = None
+    proxmox_vmid: int | None = None
+    failure_reason: str | None = None
+    last_heartbeat_at: datetime | None = None
     created_at: datetime | None = None
+
+
+class SessionCreateResponse(BaseModel):
+    id: int
+    state: str
+    protocol: str

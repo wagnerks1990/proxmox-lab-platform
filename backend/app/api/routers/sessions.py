@@ -11,4 +11,4 @@ router = APIRouter()
 
 @router.get('/admin/session-activity', response_model=list[SessionActivityResponse])
 def session_activity(user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
-    return SessionService(db).list_recent(200)
+    return SessionService(db).get_recent_activity(200)

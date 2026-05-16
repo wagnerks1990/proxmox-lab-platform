@@ -29,17 +29,20 @@ class ConsoleService:
             raise HTTPException(status_code=409, detail={'error': 'Duplicate launch request in progress.'})
         try:
             if not vm.ssh_enabled:
-                self.sessions.create_launch(user, vm, 'WEB_TERMINAL', 'failed', 'web terminal disabled', session_state=SessionState.FAILED)
-                safe_commit(self.db)
+                launch = self.sessions.create_launch(user, vm, 'WEB_TERMINAL', 'failed', 'web terminal disabled', session_state=SessionState.FAILED)
+                session = self.sessions.create_launching_session(user, vm, 'WEB_TERMINAL', connection_launch_id=launch.id)
+                self.sessions.mark_failed(session.id, 'web terminal disabled')
                 raise HTTPException(status_code=400, detail={'error': 'WEB TERMINAL is not enabled for this VM.'})
             if not vm.assigned_ip:
-                self.sessions.create_launch(user, vm, 'WEB_TERMINAL', 'failed', 'missing assigned IP', session_state=SessionState.FAILED)
-                safe_commit(self.db)
+                launch = self.sessions.create_launch(user, vm, 'WEB_TERMINAL', 'failed', 'missing assigned IP', session_state=SessionState.FAILED)
+                session = self.sessions.create_launching_session(user, vm, 'WEB_TERMINAL', connection_launch_id=launch.id)
+                self.sessions.mark_failed(session.id, 'missing assigned IP')
                 raise HTTPException(status_code=400, detail={'error': 'No IP address found for WEB TERMINAL.'})
             self.db.add(AuditLog(actor_id=user.id, action='console_web_terminal', target_type='student_vm', target_id=str(vm.vmid)))
             launch = self.sessions.create_launch(user, vm, 'WEB_TERMINAL', 'success', vm.assigned_ip, session_state=SessionState.LAUNCHING)
+            session = self.sessions.create_launching_session(user, vm, 'WEB_TERMINAL', connection_launch_id=launch.id)
             safe_commit(self.db)
-            self.sessions.transition_persist(launch.id, SessionState.LAUNCHING, SessionState.ACTIVE)
+            self.sessions.mark_active(session.id)
             return {'type': 'web_terminal', 'url': f'http://10.0.16.162:7681/?arg={vm.assigned_ip}'}
         finally:
             idempotency_store.release(key)

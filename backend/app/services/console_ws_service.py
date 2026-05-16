@@ -9,6 +9,7 @@ from app.models.models import User, StudentVM, AuditLog
 from app.services.proxmox import ProxmoxClient
 from app.db.tx import safe_commit
 from app.architecture.async_retry import async_retry_with_backoff
+from app.services.session_service import SessionService
 
 
 class ConsoleWsService:
@@ -46,6 +47,11 @@ class ConsoleWsService:
 
         await websocket.accept()
         self.db.add(AuditLog(actor_id=user.id, action='ssh_ws_launch', target_type='student_vm', target_id=str(vm.vmid))); safe_commit(self.db)
+        svc = SessionService(self.db)
+        launch = svc.create_launch(user, vm, 'SSH_WS', 'success', host)
+        session = svc.create_launching_session(user, vm, 'SSH_WS', connection_launch_id=launch.id)
+        safe_commit(self.db)
+        svc.mark_active(session.id)
 
         try:
             async with asyncssh.connect(host, port=port, username=username, password=password, known_hosts=None) as conn:
@@ -62,8 +68,13 @@ class ConsoleWsService:
                 done, pending = await asyncio.wait({t1, t2}, return_when=asyncio.FIRST_COMPLETED)
                 for t in pending: t.cancel()
         except WebSocketDisconnect:
+            svc.mark_disconnected(session.id)
             return
         except Exception as exc:
+            try:
+                svc.mark_failed(session.id, str(exc))
+            except Exception:
+                pass
             await websocket.send_text(f'ERROR: SSH connection failed: {exc}'); await websocket.close(code=1011)
 
     async def novnc_ws(self, websocket: WebSocket, user: User, vm: StudentVM):
@@ -80,6 +91,11 @@ class ConsoleWsService:
             await websocket.close(code=1011, reason='Failed to get noVNC ticket'); return
         await websocket.accept()
         self.db.add(AuditLog(actor_id=user.id, action='novnc_ws_launch', target_type='student_vm', target_id=str(vm.vmid))); safe_commit(self.db)
+        svc = SessionService(self.db)
+        launch = svc.create_launch(user, vm, 'NOVNC_WS', 'success', str(vm.vmid))
+        session = svc.create_launching_session(user, vm, 'NOVNC_WS', connection_launch_id=launch.id)
+        safe_commit(self.db)
+        svc.mark_active(session.id)
         path = f"/api2/json/nodes/{vm.proxmox_node}/qemu/{vm.vmid}/vncwebsocket?port={port}&vncticket={ticket}"
         base = settings.proxmox_base_url.replace('/api2/json', '')
         ws_url = base.replace('https://', 'wss://').replace('http://', 'ws://') + path
@@ -94,8 +110,13 @@ class ConsoleWsService:
                 done, pending = await asyncio.wait({t1, t2}, return_when=asyncio.FIRST_COMPLETED)
                 for t in pending: t.cancel()
         except WebSocketDisconnect:
+            svc.mark_disconnected(session.id)
             return
         except Exception as exc:
+            try:
+                svc.mark_failed(session.id, str(exc))
+            except Exception:
+                pass
             try:
                 await websocket.send_text(f'ERROR: noVNC proxy failed: {exc}')
                 await websocket.close(code=1011)

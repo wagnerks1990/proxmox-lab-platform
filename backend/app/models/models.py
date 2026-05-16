@@ -86,3 +86,28 @@ class ConnectionLaunch(Base):
     status = Column(String(20), nullable=False, default='success')
     details = Column(String(255), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
+
+
+class VMSession(Base):
+    __tablename__ = 'vm_sessions'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    vm_id = Column(Integer, ForeignKey('student_vms.id'), nullable=False)
+    pool_id = Column(Integer, nullable=True)
+    connection_launch_id = Column(Integer, ForeignKey('connection_launches.id'), nullable=True)
+    protocol = Column(String(50), nullable=False)
+    state = Column(String(32), nullable=False)
+    node = Column(String(50), nullable=True)
+    proxmox_vmid = Column(Integer, nullable=True)
+    started_at = Column(DateTime, server_default=func.now(), nullable=False)
+    launched_at = Column(DateTime, nullable=True)
+    disconnected_at = Column(DateTime, nullable=True)
+    expired_at = Column(DateTime, nullable=True)
+    failed_at = Column(DateTime, nullable=True)
+    last_heartbeat_at = Column(DateTime, nullable=True)
+    failure_reason = Column(String(255), nullable=True)
+    client_ip = Column(String(64), nullable=True)
+    user_agent = Column(String(255), nullable=True)
+    request_id = Column(String(100), nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), nullable=False)
