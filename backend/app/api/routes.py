@@ -19,6 +19,8 @@ from app.core.config import settings
 from app.architecture.events import bus, DomainEvent, VM_STARTED, VM_STOPPED, VM_REBOOTED, VM_DELETED, SESSION_CREATED, TASK_FAILED, GUEST_AGENT_DISCOVERED
 from app.architecture.policies import can_launch_vm, can_view_audit_logs, PolicyError
 from app.architecture.idempotency import store as idempotency_store
+from app.api.routers.console import router as console_router
+from app.api.routers.sessions import router as sessions_router
 
 router = APIRouter(prefix='/api')
 MAX_VMS_PER_USER = 5
@@ -170,83 +172,6 @@ async def vm_network(id: int, user: User = Depends(get_current_user), db: Sessio
     db.commit(); db.refresh(vm)
     return {'id': vm.id, 'status': status.get('status'), 'uptime': status.get('uptime'), 'hostname': vm.hostname, 'assigned_ip': vm.assigned_ip, 'interfaces': interfaces}
 
-@router.get('/vms/{id}/console/novnc')
-async def console_novnc(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    vm = _get_vm_for_user(db, user, id)
-    _rate_limit(user, vm.vmid, 'novnc')
-    try:
-        t = await ProxmoxClient().get_novnc_ticket(vm.proxmox_node, vm.vmid)
-    except Exception as exc:
-        raise _proxmox_error(exc)
-    db.add(AuditLog(actor_id=user.id, action='console_novnc', target_type='student_vm', target_id=str(vm.vmid))); db.commit()
-    port=t.get('port'); ticket=t.get('ticket')
-    novnc_url=f"/api/vms/{vm.id}/console/novnc/view?port={port}&ticket={ticket}"
-    return {'type': 'novnc', 'ticket': ticket, 'port': port, 'vmid': vm.vmid, 'node': vm.proxmox_node, 'novnc_url': novnc_url}
-
-@router.get('/vms/{id}/console/spice')
-async def console_spice(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    vm = _get_vm_for_user(db, user, id)
-    _rate_limit(user, vm.vmid, 'spice')
-    try:
-        cfg = await ProxmoxClient().get_spice_config(vm.proxmox_node, vm.vmid)
-    except Exception as exc:
-        msg = str(exc).lower()
-        if 'spice' in msg and ('not enabled' in msg or 'no spice' in msg or 'port' in msg):
-            raise HTTPException(status_code=400, detail={'error': 'SPICE is not enabled for this VM.'})
-        raise _proxmox_error(exc)
-    db.add(AuditLog(actor_id=user.id, action='console_spice', target_type='student_vm', target_id=str(vm.vmid))); db.commit()
-    return {'type': 'spice', 'config': cfg}
-
-@router.get('/vms/{id}/console/ssh')
-async def console_ssh(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    vm = _get_vm_for_user(db, user, id)
-    _rate_limit(user, vm.vmid, 'ssh')
-    db.add(AuditLog(actor_id=user.id, action='console_ssh', target_type='student_vm', target_id=str(vm.vmid))); db.commit()
-    host = vm.assigned_ip or vm.hostname or vm.vm_name
-    return {'type': 'ssh', 'host': host, 'username': vm.default_username or 'student', 'web_terminal_url': f'/api/vms/{vm.id}/console/ssh'}
-
-
-
-@router.get('/vms/{id}/console/terminal-url')
-async def console_terminal_url(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    vm = _get_vm_for_user(db, user, id)
-    try:
-        can_launch_vm(user, vm)
-    except PolicyError as exc:
-        raise HTTPException(status_code=403, detail={'error': str(exc)})
-    _rate_limit(user, vm.vmid, 'web_terminal')
-    idem_key = f'launch:{user.id}:{vm.id}:web_terminal'
-    if not idempotency_store.reserve(idem_key):
-        raise HTTPException(status_code=409, detail={'error': 'Duplicate launch request in progress.'})
-    if not vm.ssh_enabled:
-        _log_connection_launch(db, user, vm, 'WEB_TERMINAL', 'failed', 'web terminal disabled')
-        db.commit()
-        idempotency_store.release(idem_key)
-        bus.publish(DomainEvent(name=VALIDATION_FAILED, payload={'vm_id': vm.id, 'actor_id': user.id, 'reason': 'web terminal disabled'}))
-        raise HTTPException(status_code=400, detail={'error': 'WEB TERMINAL is not enabled for this VM.'})
-    if not vm.assigned_ip:
-        _log_connection_launch(db, user, vm, 'WEB_TERMINAL', 'failed', 'missing assigned IP')
-        db.commit()
-        idempotency_store.release(idem_key)
-        bus.publish(DomainEvent(name=VALIDATION_FAILED, payload={'vm_id': vm.id, 'actor_id': user.id, 'reason': 'missing assigned IP'}))
-        raise HTTPException(status_code=400, detail={'error': 'No IP address found for WEB TERMINAL.'})
-    url = f"http://10.0.16.162:7681/?arg={vm.assigned_ip}"
-    db.add(AuditLog(actor_id=user.id, action='console_web_terminal', target_type='student_vm', target_id=str(vm.vmid)))
-    _log_connection_launch(db, user, vm, 'WEB_TERMINAL', 'success', vm.assigned_ip)
-    db.commit()
-    bus.publish(DomainEvent(name=SESSION_CREATED, payload={'vm_id': vm.id, 'actor_id': user.id, 'protocol': 'WEB_TERMINAL'}))
-    idempotency_store.release(idem_key)
-    return {'type': 'web_terminal', 'url': url}
-
-@router.get('/vms/{id}/console/rdp')
-async def console_rdp(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    vm = _get_vm_for_user(db, user, id)
-    _rate_limit(user, vm.vmid, 'rdp')
-    db.add(AuditLog(actor_id=user.id, action='console_rdp', target_type='student_vm', target_id=str(vm.vmid))); db.commit()
-    host = vm.assigned_ip or vm.hostname or vm.vm_name
-    rdp_text = f'full address:s:{host}\nusername:s:{vm.default_username or "student"}\nprompt for credentials:i:1\n'
-    return {'type': 'rdp', 'host': host, 'rdp_file': rdp_text}
-
 # keep prior endpoints below
 @router.post('/vms', response_model=VMCreateResponse)
 async def create_vm(payload: CreateVMRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -309,10 +234,6 @@ def audit_logs(user: User = Depends(require_role('Teacher', 'Admin')), db: Sessi
     except PolicyError as exc:
         raise HTTPException(status_code=403, detail={'error': str(exc)})
     return db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(200).all()
-
-@router.get('/admin/session-activity', response_model=list[ConnectionLaunchResponse])
-def session_activity(user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
-    return db.query(ConnectionLaunch).order_by(ConnectionLaunch.created_at.desc()).limit(200).all()
 
 @router.get('/admin/templates', response_model=list[TemplateResponse])
 def admin_templates(user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
@@ -464,3 +385,7 @@ async def console_novnc_view(id: int, port: int, ticket: str, user: User = Depen
     base = settings.proxmox_base_url.replace('/api2/json', '')
     novnc = f"{base}/?console=kvm&novnc=1&vmid={vm.vmid}&node={vm.proxmox_node}&vncticket={ticket}&port={port}"
     return {'url': novnc}
+
+
+router.include_router(console_router)
+router.include_router(sessions_router)
