@@ -52,6 +52,8 @@ class ConsoleWsService:
         session = svc.create_launching_session(user, vm, 'SSH_WS', connection_launch_id=launch.id)
         safe_commit(self.db)
         svc.mark_active(session.id)
+        svc.heartbeat(session.id)
+        svc.heartbeat(session.id)
 
         try:
             async with asyncssh.connect(host, port=port, username=username, password=password, known_hosts=None) as conn:
@@ -96,6 +98,7 @@ class ConsoleWsService:
         session = svc.create_launching_session(user, vm, 'NOVNC_WS', connection_launch_id=launch.id)
         safe_commit(self.db)
         svc.mark_active(session.id)
+        svc.heartbeat(session.id)
         path = f"/api2/json/nodes/{vm.proxmox_node}/qemu/{vm.vmid}/vncwebsocket?port={port}&vncticket={ticket}"
         base = settings.proxmox_base_url.replace('/api2/json', '')
         ws_url = base.replace('https://', 'wss://').replace('http://', 'ws://') + path

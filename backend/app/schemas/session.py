@@ -19,3 +19,14 @@ class SessionCreateResponse(BaseModel):
     id: int
     state: str
     protocol: str
+
+
+class SessionHeartbeatRequest(BaseModel):
+    state: str | None = None
+
+
+class SessionHeartbeatResponse(BaseModel):
+    id: int
+    state: str
+    last_heartbeat_at: datetime | None = None
+    updated_at: datetime | None = None

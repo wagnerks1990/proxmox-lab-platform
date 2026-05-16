@@ -221,14 +221,6 @@ def remove_template(id: int, user: User = Depends(require_role('Teacher', 'Admin
     db.delete(t); db.commit(); return JSONResponse({'ok': True})
 
 
-@router.get('/vms/{id}/console/novnc/view')
-async def console_novnc_view(id: int, port: int, ticket: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    vm = _get_vm_for_user(db, user, id)
-    base = settings.proxmox_base_url.replace('/api2/json', '')
-    novnc = f"{base}/?console=kvm&novnc=1&vmid={vm.vmid}&node={vm.proxmox_node}&vncticket={ticket}&port={port}"
-    return {'url': novnc}
-
-
 router.include_router(console_router)
 router.include_router(sessions_router)
 

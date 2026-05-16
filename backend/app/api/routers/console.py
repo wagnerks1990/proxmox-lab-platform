@@ -48,3 +48,12 @@ async def console_novnc(id: int, user: User = Depends(get_current_user), db: Ses
     port=t.get('port'); ticket=t.get('ticket')
     novnc_url=f"/api/vms/{vm.id}/console/novnc/view?port={port}&ticket={ticket}"
     return {'type': 'novnc', 'ticket': ticket, 'port': port, 'vmid': vm.vmid, 'node': vm.proxmox_node, 'novnc_url': novnc_url}
+
+
+@router.get('/vms/{id}/console/novnc/view', response_model=ConsoleLaunchResponse)
+async def console_novnc_view(id: int, port: int, ticket: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    vm = _get_vm_for_user(db, user, id)
+    from app.core.config import settings
+    base = settings.proxmox_base_url.replace('/api2/json', '')
+    novnc = f"{base}/?console=kvm&novnc=1&vmid={vm.vmid}&node={vm.proxmox_node}&vncticket={ticket}&port={port}"
+    return {'type': 'novnc', 'url': novnc}
