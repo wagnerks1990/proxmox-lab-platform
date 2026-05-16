@@ -36,7 +36,7 @@ export default function VmsPage({ setMessage, user }) {
   return <section>
     <div className='panel-head'><h2>My Lab VMs</h2></div>
     <div className='vm-grid'>{vms.map(vm => <div key={vm.id} onDoubleClick={() => setSelected(vm)}><VmCard vm={vm} loading={!!busy[vm.id]} onAction={onAction} onLaunch={onLaunch} isAdmin={user?.role !== 'Student'} /></div>)}</div>
-    <div className='panel'><h4>Table View</h4><table className='table2'><thead><tr><th>Name</th><th>VMID</th><th>Status</th><th>Node</th><th>IP</th><th>Owner</th><th/></tr></thead><tbody>{vms.map(v=><tr key={v.id}><td>{v.vm_name}</td><td>{v.vmid}</td><td><StatusBadge status={v.status} /></td><td>{v.proxmox_node}</td><td>{v.assigned_ip||'-'}</td><td>{(user?.role==='Admin'||user?.role==='Teacher')?(v.owner_id||'-'):'N/A'}</td><td><button className='btn ghost' onClick={()=>setSelected(v)}>Details</button></td></tr>)}</tbody></table></div>
+    <div className='panel'><h4>Table View</h4><table className='table2'><thead><tr><th>Name</th><th>VMID</th><th>Status</th><th>Node</th><th>IP</th><th>Owner</th><th/></tr></thead><tbody>{vms.map(v=><tr key={v.id}><td>{v.vm_name}</td><td>{v.vmid}</td><td><StatusBadge status={v.status} /></td><td>{v.proxmox_node}</td><td>{v.ip||v.assigned_ip||v.discovered_ip||'-'}</td><td>{(user?.role==='Admin'||user?.role==='Teacher')?(v.owner_id||'-'):'N/A'}</td><td><button className='btn ghost' onClick={()=>setSelected(v)}>Details</button></td></tr>)}</tbody></table></div>
     <VmDetailsDrawer vm={selected} onClose={() => setSelected(null)} user={user} />
   </section>
 }

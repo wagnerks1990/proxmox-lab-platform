@@ -168,9 +168,16 @@ async def list_vms(user: User = Depends(get_current_user), db: Session = Depends
             data = await proxmox.get_vm_status(vm.proxmox_node, vm.vmid)
             vm.status = data.get('status', vm.status)
             vm.hostname = data.get('name', vm.hostname)
-            vm.assigned_ip = vm.assigned_ip
+            discovered_ip = await proxmox.get_vm_guest_ip(vm.proxmox_node, vm.vmid)
+            setattr(vm, 'discovered_ip', discovered_ip)
+            setattr(vm, 'ip', vm.assigned_ip or discovered_ip)
         except Exception:
             vm.status = vm.status or 'error'
+    for vm in rows:
+        if not hasattr(vm, 'discovered_ip'):
+            setattr(vm, 'discovered_ip', None)
+        if not hasattr(vm, 'ip'):
+            setattr(vm, 'ip', vm.assigned_ip)
     db.commit()
     return rows
 
@@ -183,19 +190,20 @@ async def vm_network(id: int, user: User = Depends(get_current_user), db: Sessio
         interfaces = await proxmox.get_guest_network(vm.proxmox_node, vm.vmid)
     except Exception as exc:
         raise _proxmox_error(exc)
-    ip = None
-    for iface in interfaces:
-        for addr in iface.get('ip-addresses', []):
-            if addr.get('ip-address-type') == 'ipv4' and not addr.get('ip-address', '').startswith('127.'):
-                ip = addr.get('ip-address')
-                break
-        if ip:
-            break
-    vm.assigned_ip = ip
+    ip, diag = ProxmoxClient.parse_guest_agent_ip(interfaces)
+    vm.assigned_ip = ip or vm.assigned_ip
     vm.hostname = status.get('name', vm.hostname)
     db.add(AuditLog(actor_id=user.id, action='network_vm', target_type='student_vm', target_id=str(vm.vmid)))
     db.commit(); db.refresh(vm)
-    return {'id': vm.id, 'status': status.get('status'), 'uptime': status.get('uptime'), 'hostname': vm.hostname, 'assigned_ip': vm.assigned_ip, 'interfaces': interfaces}
+    return {'id': vm.id, 'status': status.get('status'), 'uptime': status.get('uptime'), 'hostname': vm.hostname, 'assigned_ip': vm.assigned_ip, 'discovered_ip': ip, 'ip': vm.assigned_ip or ip, 'interfaces': interfaces, 'ignored_addresses': diag.get('ignored_addresses', [])}
+
+@router.get('/vms/{id}/guest-agent')
+async def guest_agent_diagnostics(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    vm = _get_vm_for_user(db, user, id)
+    diag = await ProxmoxClient().get_vm_guest_agent_diagnostics(vm.proxmox_node, vm.vmid)
+    diag['assigned_ip'] = vm.assigned_ip
+    diag['ip'] = vm.assigned_ip or diag.get('discovered_ip')
+    return diag
 
 @router.get('/vms/{id}/console/novnc')
 async def console_novnc(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):

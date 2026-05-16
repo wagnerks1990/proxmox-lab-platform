@@ -83,3 +83,61 @@ class ProxmoxClient:
             r = await client.get(f'{self.base_url}/nodes/{node}/qemu/{vmid}/agent/network-get-interfaces', headers=self.headers)
             r.raise_for_status()
             return r.json().get('data', {}).get('result', [])
+
+
+    @staticmethod
+    def _is_primary_iface(name: str) -> bool:
+        n = (name or '').lower()
+        return n.startswith(('ens', 'eth', 'enp', 'eno', 'wlan'))
+
+    @staticmethod
+    def parse_guest_agent_ip(interfaces: list[dict]) -> tuple[str | None, dict]:
+        ignored = []
+        candidates_primary = []
+        candidates_other = []
+        for iface in interfaces or []:
+            name = iface.get('name', '')
+            lname = name.lower()
+            is_primary = ProxmoxClient._is_primary_iface(name)
+            for addr in iface.get('ip-addresses', []):
+                ip = (addr.get('ip-address') or '').strip()
+                kind = addr.get('ip-address-type')
+                if not ip:
+                    ignored.append({'interface': name, 'ip': ip, 'reason': 'empty'})
+                    continue
+                if kind != 'ipv4':
+                    if ip.startswith('fe80:'):
+                        ignored.append({'interface': name, 'ip': ip, 'reason': 'link-local ipv6'})
+                    continue
+                if ip.startswith('127.'):
+                    ignored.append({'interface': name, 'ip': ip, 'reason': 'loopback'})
+                    continue
+                if lname.startswith(('lo', 'docker', 'cni', 'br-', 'virbr', 'veth', 'podman')):
+                    ignored.append({'interface': name, 'ip': ip, 'reason': 'container/bridge interface'})
+                    continue
+                (candidates_primary if is_primary else candidates_other).append({'interface': name, 'ip': ip})
+
+        chosen = (candidates_primary[0]['ip'] if candidates_primary else (candidates_other[0]['ip'] if candidates_other else None))
+        diag = {
+            'interfaces': [i.get('name') for i in interfaces or []],
+            'usable_candidates': candidates_primary + candidates_other,
+            'ignored_addresses': ignored,
+            'discovered_ip': chosen,
+        }
+        return chosen, diag
+
+    async def get_vm_guest_ip(self, node: str, vmid: int) -> str | None:
+        try:
+            interfaces = await self.get_guest_network(node, vmid)
+            ip, _ = self.parse_guest_agent_ip(interfaces)
+            return ip
+        except Exception:
+            return None
+
+    async def get_vm_guest_agent_diagnostics(self, node: str, vmid: int) -> dict:
+        try:
+            interfaces = await self.get_guest_network(node, vmid)
+            ip, diag = self.parse_guest_agent_ip(interfaces)
+            return {'agent_reachable': True, 'discovered_ip': ip, **diag}
+        except Exception as exc:
+            return {'agent_reachable': False, 'discovered_ip': None, 'interfaces': [], 'usable_candidates': [], 'ignored_addresses': [], 'error': str(exc)}

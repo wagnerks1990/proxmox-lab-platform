@@ -75,6 +75,8 @@ class VMResponse(BaseModel):
     console_enabled: bool | None = None
     default_username: str | None = None
     assigned_ip: str | None = None
+    discovered_ip: str | None = None
+    ip: str | None = None
     hostname: str | None = None
     ssh_username: str | None = None
     ssh_auth_method: str | None = None

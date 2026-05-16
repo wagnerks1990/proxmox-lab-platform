@@ -28,24 +28,21 @@ class ProtocolService:
             self.db.commit()
             raise HTTPException(status_code=400, detail={'error': 'WEB TERMINAL is not enabled for this VM.'})
 
-        if not vm.assigned_ip:
-            try:
-                interfaces = await self.proxmox.get_guest_network(vm.proxmox_node, vm.vmid)
-                discovered = self.discover_ip(interfaces)
-                if discovered:
-                    vm.assigned_ip = discovered
-                    self.db.flush()
-            except Exception:
-                pass
+        effective_ip = vm.assigned_ip
+        if not effective_ip:
+            effective_ip = await self.proxmox.get_vm_guest_ip(vm.proxmox_node, vm.vmid)
+            if effective_ip:
+                vm.assigned_ip = effective_ip
+                self.db.flush()
 
-        if not vm.assigned_ip:
+        if not effective_ip:
             self.log_launch(user, vm, 'WEB_TERMINAL', 'failed', 'No IP found. Enable QEMU Guest Agent or set assigned_ip.')
             self.db.commit()
             raise HTTPException(status_code=400, detail={'error': 'No IP found. Enable QEMU Guest Agent or set assigned_ip.'})
 
-        url = f"http://10.0.16.162:7681/?arg={vm.assigned_ip}"
+        url = f"http://10.0.16.162:7681/?arg={effective_ip}"
         self.db.add(AuditLog(actor_id=user.id, action='console_web_terminal', target_type='student_vm', target_id=str(vm.vmid)))
-        self.log_launch(user, vm, 'WEB_TERMINAL', 'success', vm.assigned_ip)
+        self.log_launch(user, vm, 'WEB_TERMINAL', 'success', effective_ip)
         self.db.commit()
         return {'type': 'web_terminal', 'url': url}
 
