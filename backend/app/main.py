@@ -13,3 +13,5 @@ app.add_middleware(
     allow_headers=['*'],
 )
 app.include_router(router)
+# Transitional versioned mount for forward compatibility
+app.include_router(router, prefix='/v1')

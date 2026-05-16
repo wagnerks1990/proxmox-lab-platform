@@ -16,6 +16,9 @@ from app.services.proxmox import ProxmoxClient
 from app.api.deps import get_current_user, require_role
 from jose import jwt, JWTError
 from app.core.config import settings
+from app.architecture.events import bus, DomainEvent, VM_STARTED, VM_STOPPED, VM_REBOOTED, VM_DELETED, SESSION_CREATED, TASK_FAILED, GUEST_AGENT_DISCOVERED
+from app.architecture.policies import can_launch_vm, can_view_audit_logs, PolicyError
+from app.architecture.idempotency import store as idempotency_store
 
 router = APIRouter(prefix='/api')
 MAX_VMS_PER_USER = 5
@@ -207,19 +210,32 @@ async def console_ssh(id: int, user: User = Depends(get_current_user), db: Sessi
 @router.get('/vms/{id}/console/terminal-url')
 async def console_terminal_url(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     vm = _get_vm_for_user(db, user, id)
+    try:
+        can_launch_vm(user, vm)
+    except PolicyError as exc:
+        raise HTTPException(status_code=403, detail={'error': str(exc)})
     _rate_limit(user, vm.vmid, 'web_terminal')
+    idem_key = f'launch:{user.id}:{vm.id}:web_terminal'
+    if not idempotency_store.reserve(idem_key):
+        raise HTTPException(status_code=409, detail={'error': 'Duplicate launch request in progress.'})
     if not vm.ssh_enabled:
         _log_connection_launch(db, user, vm, 'WEB_TERMINAL', 'failed', 'web terminal disabled')
         db.commit()
+        idempotency_store.release(idem_key)
+        bus.publish(DomainEvent(name=VALIDATION_FAILED, payload={'vm_id': vm.id, 'actor_id': user.id, 'reason': 'web terminal disabled'}))
         raise HTTPException(status_code=400, detail={'error': 'WEB TERMINAL is not enabled for this VM.'})
     if not vm.assigned_ip:
         _log_connection_launch(db, user, vm, 'WEB_TERMINAL', 'failed', 'missing assigned IP')
         db.commit()
+        idempotency_store.release(idem_key)
+        bus.publish(DomainEvent(name=VALIDATION_FAILED, payload={'vm_id': vm.id, 'actor_id': user.id, 'reason': 'missing assigned IP'}))
         raise HTTPException(status_code=400, detail={'error': 'No IP address found for WEB TERMINAL.'})
     url = f"http://10.0.16.162:7681/?arg={vm.assigned_ip}"
     db.add(AuditLog(actor_id=user.id, action='console_web_terminal', target_type='student_vm', target_id=str(vm.vmid)))
     _log_connection_launch(db, user, vm, 'WEB_TERMINAL', 'success', vm.assigned_ip)
     db.commit()
+    bus.publish(DomainEvent(name=SESSION_CREATED, payload={'vm_id': vm.id, 'actor_id': user.id, 'protocol': 'WEB_TERMINAL'}))
+    idempotency_store.release(idem_key)
     return {'type': 'web_terminal', 'url': url}
 
 @router.get('/vms/{id}/console/rdp')
@@ -273,21 +289,25 @@ async def create_vm(payload: CreateVMRequest, user: User = Depends(get_current_u
 
 @router.post('/vms/{id}/start', response_model=VMResponse)
 async def start_vm(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    vm = _get_vm_for_user(db, user, id); await ProxmoxClient().start_vm(vm.proxmox_node, vm.vmid); vm.status = (await ProxmoxClient().get_vm_status(vm.proxmox_node, vm.vmid)).get('status', vm.status); db.commit(); db.refresh(vm); return vm
+    vm = _get_vm_for_user(db, user, id); await ProxmoxClient().start_vm(vm.proxmox_node, vm.vmid); vm.status = (await ProxmoxClient().get_vm_status(vm.proxmox_node, vm.vmid)).get('status', vm.status); db.commit(); db.refresh(vm); bus.publish(DomainEvent(name=VM_STARTED, payload={'vm_id': vm.id, 'actor_id': user.id})); return vm
 @router.post('/vms/{id}/stop', response_model=VMResponse)
 async def stop_vm(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    vm = _get_vm_for_user(db, user, id); await ProxmoxClient().stop_vm(vm.proxmox_node, vm.vmid); vm.status = (await ProxmoxClient().get_vm_status(vm.proxmox_node, vm.vmid)).get('status', vm.status); db.commit(); db.refresh(vm); return vm
+    vm = _get_vm_for_user(db, user, id); await ProxmoxClient().stop_vm(vm.proxmox_node, vm.vmid); vm.status = (await ProxmoxClient().get_vm_status(vm.proxmox_node, vm.vmid)).get('status', vm.status); db.commit(); db.refresh(vm); bus.publish(DomainEvent(name=VM_STOPPED, payload={'vm_id': vm.id, 'actor_id': user.id})); return vm
 @router.post('/vms/{id}/reboot', response_model=VMResponse)
 async def reboot_vm(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    vm = _get_vm_for_user(db, user, id); await ProxmoxClient().reboot_vm(vm.proxmox_node, vm.vmid); vm.status = (await ProxmoxClient().get_vm_status(vm.proxmox_node, vm.vmid)).get('status', vm.status); db.commit(); db.refresh(vm); return vm
+    vm = _get_vm_for_user(db, user, id); await ProxmoxClient().reboot_vm(vm.proxmox_node, vm.vmid); vm.status = (await ProxmoxClient().get_vm_status(vm.proxmox_node, vm.vmid)).get('status', vm.status); db.commit(); db.refresh(vm); bus.publish(DomainEvent(name=VM_REBOOTED, payload={'vm_id': vm.id, 'actor_id': user.id})); return vm
 @router.delete('/vms/{id}')
 async def delete_vm(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    vm = _get_vm_for_user(db, user, id); await ProxmoxClient().delete_vm(vm.proxmox_node, vm.vmid); db.delete(vm); db.commit(); return {'ok': True}
+    vm = _get_vm_for_user(db, user, id); await ProxmoxClient().delete_vm(vm.proxmox_node, vm.vmid); vm_id = vm.id; db.delete(vm); db.commit(); bus.publish(DomainEvent(name=VM_DELETED, payload={'vm_id': vm_id, 'actor_id': user.id})); return {'ok': True}
 @router.get('/vms/{id}/status')
 async def vm_status(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     vm = _get_vm_for_user(db, user, id); status = await ProxmoxClient().get_vm_status(vm.proxmox_node, vm.vmid); vm.status = status.get('status', vm.status); db.commit(); db.refresh(vm); return {'id': vm.id, 'vmid': vm.vmid, 'status': vm.status, 'node': vm.proxmox_node}
 @router.get('/admin/audit-logs', response_model=list[AuditLogResponse])
 def audit_logs(user: User = Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+    try:
+        can_view_audit_logs(user)
+    except PolicyError as exc:
+        raise HTTPException(status_code=403, detail={'error': str(exc)})
     return db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(200).all()
 
 @router.get('/admin/session-activity', response_model=list[ConnectionLaunchResponse])

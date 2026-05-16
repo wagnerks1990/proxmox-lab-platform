@@ -10,3 +10,5 @@ export default function useAuth() {
 
   return { user, setUser, loading, refresh }
 }
+
+export function clearAuth(){ localStorage.removeItem('token') }
