@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, WebSocket
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
+from app.services.rbac import get_role_name
 from app.db.session import get_db
 from app.core.config import settings
 from app.models.models import StudentVM, User
@@ -23,7 +24,7 @@ def _get_user_from_ws_token(db: Session, token: str | None):
 
 def _get_vm_for_user(db: Session, user: User, vm_id: int):
     q = db.query(StudentVM).filter(StudentVM.id == vm_id)
-    if user.role.name == 'Student':
+    if get_role_name(user) == 'Student':
         q = q.filter(StudentVM.owner_id == user.id)
     return q.first()
 

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from app.services.rbac import get_role_name
 from app.db.session import get_db
 from app.schemas.auth import LoginRequest, TokenResponse, UserResponse
 from app.api.deps import get_current_user
@@ -16,4 +17,4 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
 
 @router.get('/auth/me', response_model=UserResponse)
 def me(user=Depends(get_current_user)):
-    return UserResponse(id=user.id, username=user.username, email=user.email, role=user.role.name)
+    return UserResponse(id=user.id, username=user.username, email=user.email, role=get_role_name(user))

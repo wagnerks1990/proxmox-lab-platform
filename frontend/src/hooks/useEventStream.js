@@ -7,7 +7,7 @@ export default function useEventStream(url = '/api/admin/events/stream') {
     let retry = null
     let es = null
     const connect = () => {
-      es = new EventSource(url)
+      const t = localStorage.getItem('token'); es = new EventSource(`${url}${url.includes('?')?'&':'?'}token=${encodeURIComponent(t||'')}`)
       es.onopen = () => setStatus('live')
       es.onmessage = (e) => setEvents((p) => [e.data, ...p].slice(0, 30))
       es.onerror = () => { setStatus('disconnected'); es.close(); retry = setTimeout(connect, 3000) }

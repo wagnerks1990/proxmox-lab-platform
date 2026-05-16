@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.services.rbac import get_role_name
 from app.models.models import ConnectionLaunch, StudentVM, User, VMSession
 from app.architecture.events import bus, DomainEvent, SESSION_CREATED, SESSION_EXPIRED, SESSION_STARTED, RECONNECT_ATTEMPT, RECONNECT_SUCCESS, RECONNECT_FAILURE, STALE_CLEANUP
 from app.architecture.state_machines import SessionState, SESSION_TRANSITIONS, validate_transition
@@ -46,7 +47,7 @@ class SessionService:
 
     def get_session_for_user(self, session_id: int, user: User) -> VMSession | None:
         q = self.db.query(VMSession).filter(VMSession.id == session_id)
-        if user.role.name == 'Student':
+        if get_role_name(user) == 'Student':
             q = q.filter(VMSession.user_id == user.id)
         return q.first()
 

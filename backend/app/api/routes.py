@@ -11,6 +11,7 @@ from app.schemas.auth import LoginRequest, TokenResponse, UserResponse
 from app.schemas.vm import TemplateResponse, CreateVMRequest, VMResponse, VMCreateResponse, AuditLogResponse, TemplateCreateRequest, TemplateUpdateRequest
 from app.services.security import verify_password, create_access_token
 from app.services.proxmox import ProxmoxClient
+from app.services.rbac import get_role_name
 from app.api.deps import get_current_user, require_role
 from jose import jwt
 from app.core.config import settings
@@ -49,7 +50,7 @@ def _proxmox_error(exc: Exception):
 
 def _get_vm_for_user(db: Session, user: User, vm_id: int):
     q = db.query(StudentVM).filter(StudentVM.id == vm_id)
-    if user.role.name == 'Student':
+    if get_role_name(user) == 'Student':
         q = q.filter(StudentVM.owner_id == user.id)
     vm = q.first()
     if not vm:
@@ -94,18 +95,18 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
 
 @router.get('/auth/me', response_model=UserResponse)
 def me(user: User = Depends(get_current_user)):
-    return UserResponse(id=user.id, username=user.username, email=user.email, role=user.role.name)
+    return UserResponse(id=user.id, username=user.username, email=user.email, role=get_role_name(user))
 
 @router.get('/templates', response_model=list[TemplateResponse])
 def templates(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if user.role.name in ['Teacher', 'Admin']:
+    if get_role_name(user) in ['Teacher', 'Admin']:
         return db.query(VMTemplate).all()
     return db.query(VMTemplate).join(Permission, Permission.template_id == VMTemplate.id).filter(Permission.user_id == user.id, VMTemplate.enabled.is_(True)).all()
 
 @router.get('/vms', response_model=list[VMResponse])
 async def list_vms(user: User = Depends(get_current_user), db: Session = Depends(get_db), username: str | None = None, status: str | None = None, template: int | None = None, node: str | None = None):
     q = db.query(StudentVM)
-    if user.role.name == 'Student':
+    if get_role_name(user) == 'Student':
         q = q.filter(StudentVM.owner_id == user.id)
     else:
         if username:
@@ -158,7 +159,7 @@ async def create_vm(payload: CreateVMRequest, user: User = Depends(get_current_u
     template = db.query(VMTemplate).filter(VMTemplate.id == payload.template_id).first()
     if not template:
         raise HTTPException(status_code=404, detail='Template not found')
-    if user.role.name == 'Student':
+    if get_role_name(user) == 'Student':
         allowed = db.query(Permission).filter(Permission.user_id == user.id, Permission.template_id == payload.template_id).first()
         if not allowed or not template.enabled:
             raise HTTPException(status_code=403, detail='Template not allowed')

@@ -1,10 +1,11 @@
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
+from app.services.rbac import get_role_name
 from app.models.models import VMTemplate, Permission
 
 
 def list_templates(db: Session, user):
-    if user.role.name in ['Teacher', 'Admin']:
+    if get_role_name(user) in ['Teacher', 'Admin']:
         return db.query(VMTemplate).all()
     return db.query(VMTemplate).join(Permission, Permission.template_id == VMTemplate.id).filter(Permission.user_id == user.id, VMTemplate.enabled.is_(True)).all()
 

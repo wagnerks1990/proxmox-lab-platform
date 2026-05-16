@@ -2,6 +2,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.services.rbac import get_role_name
 from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.models import StudentVM, User, VMTemplate, Permission, AuditLog
@@ -22,7 +23,7 @@ def _proxmox_error(exc: Exception):
 
 def _get_vm_for_user(db: Session, user: User, vm_id: int):
     q = db.query(StudentVM).filter(StudentVM.id == vm_id)
-    if user.role.name == 'Student':
+    if get_role_name(user) == 'Student':
         q = q.filter(StudentVM.owner_id == user.id)
     vm = q.first()
     if not vm:
@@ -33,7 +34,7 @@ def _get_vm_for_user(db: Session, user: User, vm_id: int):
 @router.get('/vms', response_model=list[VMResponse])
 async def list_vms(user: User = Depends(get_current_user), db: Session = Depends(get_db), username: str | None = None, status: str | None = None, template: int | None = None, node: str | None = None):
     q = db.query(StudentVM)
-    if user.role.name == 'Student':
+    if get_role_name(user) == 'Student':
         q = q.filter(StudentVM.owner_id == user.id)
     rows = q.all()
     proxmox = ProxmoxClient()
