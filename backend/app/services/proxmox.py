@@ -1,6 +1,7 @@
 import asyncio
 import httpx
 from app.core.config import settings
+from app.architecture.async_retry import async_retry_with_backoff
 
 
 class ProxmoxClient:
@@ -50,10 +51,15 @@ class ProxmoxClient:
     async def wait_for_task(self, node: str, upid: str, timeout_seconds: int = 120):
         deadline = asyncio.get_event_loop().time() + timeout_seconds
         while True:
-            async with httpx.AsyncClient(verify=settings.proxmox_verify_ssl, timeout=30) as client:
-                r = await client.get(f'{self.base_url}/nodes/{node}/tasks/{upid}/status', headers=self.headers)
-                r.raise_for_status()
-                task = r.json()['data']
+            async def _fetch_task():
+                async with httpx.AsyncClient(verify=settings.proxmox_verify_ssl, timeout=30) as client:
+                    r = await client.get(f'{self.base_url}/nodes/{node}/tasks/{upid}/status', headers=self.headers)
+                    r.raise_for_status()
+                    return r.json()['data']
+            rr = await async_retry_with_backoff(_fetch_task, max_attempts=3, allowed_exceptions=(httpx.HTTPError,))
+            if not rr.ok:
+                raise TimeoutError(f'Failed polling task {upid}: {rr.error}')
+            task = rr.value
             if task.get('status') == 'stopped':
                 return task
             if asyncio.get_event_loop().time() > deadline:
@@ -79,7 +85,13 @@ class ProxmoxClient:
             return r.json().get('data', '')
 
     async def get_guest_network(self, node: str, vmid: int):
-        async with httpx.AsyncClient(verify=settings.proxmox_verify_ssl, timeout=30) as client:
-            r = await client.get(f'{self.base_url}/nodes/{node}/qemu/{vmid}/agent/network-get-interfaces', headers=self.headers)
-            r.raise_for_status()
-            return r.json().get('data', {}).get('result', [])
+        async def _fetch():
+            async with httpx.AsyncClient(verify=settings.proxmox_verify_ssl, timeout=30) as client:
+                r = await client.get(f'{self.base_url}/nodes/{node}/qemu/{vmid}/agent/network-get-interfaces', headers=self.headers)
+                r.raise_for_status()
+                return r.json().get('data', {}).get('result', [])
+
+        rr = await async_retry_with_backoff(_fetch, max_attempts=3, allowed_exceptions=(httpx.HTTPError,))
+        if not rr.ok:
+            raise TimeoutError(f'Guest-agent discovery failed for vmid={vmid}: {rr.error}')
+        return rr.value
