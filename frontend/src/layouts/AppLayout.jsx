@@ -4,13 +4,14 @@ export default function AppLayout({ children, setUser, user }) {
   const nav = useNavigate()
   const loc = useLocation()
   const logout = () => { localStorage.removeItem('token'); setUser(false); nav('/') }
+  const role = user?.role
   return <div className='app-shell'>
     <aside className='sidebar'>
-      <div className='brand'>Proxmox Lab Portal</div>
+      <div className='brand'>Proxmox Lab Control Plane</div>
       <Link className='nav-link' to='/'>Dashboard</Link>
-      <Link className='nav-link' to='/vms'>My VMs</Link>
-      <Link className='nav-link' to='/create'>Create VM</Link>
-      {(user?.role === 'Teacher' || user?.role === 'Admin') ? <Link className='nav-link' to='/admin/sessions'>Session Activity</Link> : null}
+      <Link className='nav-link' to='/vms'>My Lab VMs</Link>
+      {(role === 'Teacher' || role === 'Admin') && <><Link className='nav-link' to='/admin/sessions'>Sessions</Link><Link className='nav-link' to='/pools'>Pools</Link><Link className='nav-link' to='/telemetry'>Telemetry</Link><Link className='nav-link' to='/operations'>Operations</Link><Link className='nav-link' to='/troubleshooting'>Troubleshooting</Link></>}
+      {role === 'Admin' && <Link className='nav-link' to='/create'>Create VM</Link>}
       <button onClick={logout} style={{marginTop: 10, width: '100%'}}>Logout</button>
       <div style={{marginTop:14, color:'#a7b0d6', fontSize:12}}>Current: {loc.pathname}</div>
     </aside>

@@ -148,3 +148,16 @@ class DesktopPool(Base):
     enabled = Column(Boolean, nullable=False, default=True, index=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class WorkerRun(Base):
+    __tablename__ = 'worker_runs'
+    id = Column(Integer, primary_key=True)
+    worker_name = Column(String(64), nullable=False, index=True)
+    status = Column(String(32), nullable=False, index=True)
+    started_at = Column(DateTime, server_default=func.now(), nullable=False, index=True)
+    finished_at = Column(DateTime, nullable=True)
+    duration_ms = Column(Integer, nullable=True)
+    summary_json = Column(String, nullable=True)
+    error = Column(String(255), nullable=True)
+    request_id = Column(String(100), nullable=True)

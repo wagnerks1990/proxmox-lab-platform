@@ -9,6 +9,10 @@ import DashboardPage from './pages/DashboardPage'
 import VmsPage from './pages/VmsPage'
 import CreateVmPage from './pages/CreateVmPage'
 import SessionActivityPage from './pages/SessionActivityPage'
+import TelemetryPage from './pages/TelemetryPage'
+import PoolsPage from './pages/PoolsPage'
+import OperationsPage from './pages/OperationsPage'
+import TroubleshootingPage from './pages/TroubleshootingPage'
 import './styles.css'
 
 function App() {
@@ -16,7 +20,7 @@ function App() {
   const [message, setMessage] = React.useState(null)
   if (loading) return <div className='login-wrap'>Loading...</div>
   if (user === false) return <><MessageBanner message={message} /><LoginPage onLogin={refresh} setMessage={setMessage} /></>
-  return <BrowserRouter><AppLayout setUser={setUser} user={user}><MessageBanner message={message} /><Routes><Route path='/' element={<DashboardPage user={user} />} /><Route path='/vms' element={<VmsPage setMessage={setMessage} />} /><Route path='/create' element={<CreateVmPage setMessage={setMessage} />} /><Route path='/admin/sessions' element={<SessionActivityPage setMessage={setMessage} />} /><Route path='*' element={<Navigate to='/' />} /></Routes></AppLayout></BrowserRouter>
+  return <BrowserRouter><AppLayout setUser={setUser} user={user}><MessageBanner message={message} /><Routes><Route path='/' element={<DashboardPage user={user} />} /><Route path='/vms' element={<VmsPage setMessage={setMessage} />} /><Route path='/create' element={<CreateVmPage setMessage={setMessage} />} /><Route path='/admin/sessions' element={<SessionActivityPage setMessage={setMessage} />} /><Route path='/telemetry' element={<TelemetryPage />} /><Route path='/pools' element={<PoolsPage />} /><Route path='/operations' element={<OperationsPage />} /><Route path='/troubleshooting' element={<TroubleshootingPage />} /><Route path='*' element={<Navigate to='/' />} /></Routes></AppLayout></BrowserRouter>
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App />)
