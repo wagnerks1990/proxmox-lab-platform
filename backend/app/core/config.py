@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     reconnect_token_ttl_seconds: int = 300
     reconnect_token_secret: str | None = None
 
-    worker_scheduler_enabled: bool = False
+    worker_scheduler_enabled: bool = True
     session_cleanup_interval_seconds: int = 60
     health_poll_interval_seconds: int = 60
     reconciliation_interval_seconds: int = 300

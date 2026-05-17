@@ -12,8 +12,8 @@ from app.telemetry.event_stream import event_stream
 router = APIRouter()
 
 
-def _sse_pack(event: str, data: str) -> str:
-    return f"event: {event}\ndata: {data}\n\n"
+def _sse_pack(_event: str, data: str) -> str:
+    return f"data: {data}\n\n"
 
 
 @router.get('/admin/events/stream')
