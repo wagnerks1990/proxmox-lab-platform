@@ -38,8 +38,13 @@ async def events_stream(request: Request, db: Session = Depends(get_db)):
                     evt = await asyncio.wait_for(q.get(), timeout=10)
                     yield _sse_pack(json.dumps(evt))
                 except asyncio.TimeoutError:
-                    yield _sse_pack(json.dumps({'type': 'heartbeat', 'status': 'ok'}))
+                    yield _sse_pack('{"type":"heartbeat","status":"ok"}')
         finally:
             event_stream.unsubscribe(q)
 
-    return StreamingResponse(gen(), media_type='text/event-stream')
+    headers = {
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+    }
+    return StreamingResponse(gen(), media_type='text/event-stream', headers=headers)
