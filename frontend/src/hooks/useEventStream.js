@@ -14,92 +14,87 @@ export default function useEventStream(url = '/api/admin/events/stream') {
   const [events, setEvents] = useState([])
   const [tokenExpiry, setTokenExpiry] = useState(null)
   const retryRef = useRef(null)
-  const lastTokenRef = useRef(null)
+  const openTimeoutRef = useRef(null)
 
   useEffect(() => {
     let es = null
     let stopped = false
 
-    const clearRetry = () => {
-      if (retryRef.current) {
-        clearTimeout(retryRef.current)
-        retryRef.current = null
-      }
+    const clearTimers = () => {
+      if (retryRef.current) clearTimeout(retryRef.current)
+      if (openTimeoutRef.current) clearTimeout(openTimeoutRef.current)
+      retryRef.current = null
+      openTimeoutRef.current = null
     }
 
     const scheduleReconnect = (ms = 3000) => {
-      clearRetry()
-      retryRef.current = setTimeout(() => {
-        if (!stopped) connect()
-      }, ms)
+      if (stopped) return
+      if (retryRef.current) clearTimeout(retryRef.current)
+      retryRef.current = setTimeout(connect, ms)
     }
 
-    const isTokenExpired = (token) => {
+    const tokenState = () => {
+      const token = localStorage.getItem('token') || ''
       const exp = parseJwtExp(token)
       setTokenExpiry(exp)
-      if (!exp) return false
-      const now = Math.floor(Date.now() / 1000)
-      return exp <= now
+      if (!token) return { token, state: 'auth_missing' }
+      if (exp && exp <= Math.floor(Date.now() / 1000)) return { token, state: 'auth_expired' }
+      return { token, state: 'ok' }
     }
 
-    const buildSseUrl = (token) => `${url}${url.includes('?') ? '&' : '?'}token=${encodeURIComponent(token || '')}`
+    const buildUrl = (token) => `${url}${url.includes('?') ? '&' : '?'}token=${encodeURIComponent(token || '')}`
 
-    const probeAuth = async (token) => {
-      const probe = await fetch(buildSseUrl(token), { method: 'GET', headers: { Accept: 'text/event-stream' } })
-      return probe.status
-    }
+    const connect = () => {
+      if (stopped) return
+      clearTimers()
 
-    const connect = async () => {
-      const token = localStorage.getItem('token') || ''
-
-      if (!token) {
-        setStatus('auth_missing')
+      const { token, state } = tokenState()
+      if (state !== 'ok') {
+        setStatus(state)
         scheduleReconnect(5000)
         return
       }
 
-      if (isTokenExpired(token)) {
-        setStatus('auth_expired')
-        scheduleReconnect(5000)
-        return
-      }
+      setStatus('connecting')
+      es = new EventSource(buildUrl(token))
 
-      try {
-        const statusCode = await probeAuth(token)
-        if (statusCode === 401) {
-          setStatus('auth_expired')
-          scheduleReconnect(5000)
-          return
+      openTimeoutRef.current = setTimeout(() => {
+        if (es && es.readyState !== EventSource.OPEN) {
+          setStatus('error')
+          es.close()
+          scheduleReconnect(3000)
         }
-      } catch {
-        setStatus('disconnected')
-        scheduleReconnect(3000)
-        return
+      }, 8000)
+
+      es.onopen = () => {
+        if (openTimeoutRef.current) clearTimeout(openTimeoutRef.current)
+        setStatus('connected')
       }
 
-      lastTokenRef.current = token
-      es = new EventSource(buildSseUrl(token))
-      es.onopen = () => setStatus('live')
-      es.onmessage = (e) => setEvents((p) => [e.data, ...p].slice(0, 30))
+      es.onmessage = (e) => {
+        setEvents((prev) => [e.data, ...prev].slice(0, 30))
+      }
+
       es.onerror = () => {
         es?.close()
-        const currentToken = localStorage.getItem('token') || ''
-        if (!currentToken || currentToken !== lastTokenRef.current || isTokenExpired(currentToken)) {
-          setStatus(currentToken ? 'auth_expired' : 'auth_missing')
-          scheduleReconnect(5000)
-          return
-        }
-        setStatus('disconnected')
-        scheduleReconnect(3000)
+        const nowState = tokenState().state
+        setStatus(nowState === 'ok' ? 'error' : nowState)
+        scheduleReconnect(nowState === 'ok' ? 3000 : 5000)
       }
     }
+
+    const onStorage = (evt) => {
+      if (evt.key === 'token') connect()
+    }
+    window.addEventListener('storage', onStorage)
 
     connect()
 
     return () => {
       stopped = true
-      clearRetry()
+      clearTimers()
       es?.close()
+      window.removeEventListener('storage', onStorage)
     }
   }, [url])
 
