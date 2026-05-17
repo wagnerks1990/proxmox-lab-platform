@@ -93,6 +93,13 @@ It checks:
 
 This command validates the *current* deployment state and does not treat stale historical journal entries from older restarts as active failures.
 
+## SSE proxy requirement (production)
+For `/api/admin/events/stream` (EventSource/SSE), include the dedicated NGINX location block from:
+
+- `deploy/nginx/sse-events-stream.conf`
+
+This disables proxy buffering and keeps the stream open so live telemetry status transitions to connected in the GUI.
+
 ## Future expansion-ready
 Architecture leaves space for:
 - class/group and quota tables
