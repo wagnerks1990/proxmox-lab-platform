@@ -12,7 +12,7 @@ from app.telemetry.event_stream import event_stream
 router = APIRouter()
 
 
-def _sse_pack(_event: str, data: str) -> str:
+def _sse_pack(data: str) -> str:
     return f"data: {data}\n\n"
 
 
@@ -35,10 +35,10 @@ async def events_stream(request: Request, db: Session = Depends(get_db)):
         try:
             while True:
                 try:
-                    evt = await asyncio.wait_for(q.get(), timeout=15)
-                    yield _sse_pack(evt.get('event', 'event'), json.dumps(evt))
+                    evt = await asyncio.wait_for(q.get(), timeout=10)
+                    yield _sse_pack(json.dumps(evt))
                 except asyncio.TimeoutError:
-                    yield ': heartbeat\n\n'
+                    yield _sse_pack(json.dumps({'type': 'heartbeat', 'status': 'ok'}))
         finally:
             event_stream.unsubscribe(q)
 

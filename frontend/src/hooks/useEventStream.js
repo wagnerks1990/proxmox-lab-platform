@@ -9,6 +9,9 @@ function parseJwtExp(token) {
   }
 }
 
+const DEBUG = typeof window !== 'undefined' && window.localStorage?.getItem('debug_sse') === '1'
+const dlog = (...args) => { if (DEBUG) console.debug('[SSE]', ...args) }
+
 export default function useEventStream(url = '/api/admin/events/stream') {
   const [status, setStatus] = useState('connecting')
   const [connected, setConnected] = useState(false)
@@ -28,6 +31,7 @@ export default function useEventStream(url = '/api/admin/events/stream') {
 
     const scheduleReconnect = (ms = 3000) => {
       if (stopped) return
+      dlog('schedule reconnect in', ms)
       clearRetry()
       retryRef.current = setTimeout(connect, ms)
     }
@@ -36,9 +40,10 @@ export default function useEventStream(url = '/api/admin/events/stream') {
       const token = localStorage.getItem('token') || ''
       const exp = parseJwtExp(token)
       setTokenExpiry(exp)
-      if (!token) return { token, state: 'auth_missing' }
-      if (exp && exp <= Math.floor(Date.now() / 1000)) return { token, state: 'auth_expired' }
-      return { token, state: 'ok' }
+      const now = Math.floor(Date.now() / 1000)
+      const state = !token ? 'auth_missing' : (exp && exp <= now ? 'auth_expired' : 'ok')
+      dlog('token state', { state, exp, now })
+      return { token, state }
     }
 
     const buildUrl = (token) => `${url}${url.includes('?') ? '&' : '?'}token=${encodeURIComponent(token || '')}`
@@ -59,24 +64,27 @@ export default function useEventStream(url = '/api/admin/events/stream') {
       setConnected(false)
       setError(null)
 
-      es = new EventSource(buildUrl(token))
+      const sseUrl = buildUrl(token)
+      dlog('opening EventSource', sseUrl)
+      es = new EventSource(sseUrl)
 
       es.onopen = () => {
+        dlog('onopen')
         setStatus('connected')
         setConnected(true)
         setError(null)
       }
 
       es.onmessage = (e) => {
+        dlog('onmessage', e.data)
         setEvents((prev) => [e.data, ...prev].slice(0, 30))
-        if (!connected) {
-          setStatus('connected')
-          setConnected(true)
-          setError(null)
-        }
+        setStatus('connected')
+        setConnected(true)
+        setError(null)
       }
 
       es.onerror = () => {
+        dlog('onerror')
         es?.close()
         const nowState = tokenState().state
         setConnected(false)
@@ -93,7 +101,10 @@ export default function useEventStream(url = '/api/admin/events/stream') {
     }
 
     const onStorage = (evt) => {
-      if (evt.key === 'token') connect()
+      if (evt.key === 'token') {
+        dlog('token changed via storage event')
+        connect()
+      }
     }
     window.addEventListener('storage', onStorage)
 
