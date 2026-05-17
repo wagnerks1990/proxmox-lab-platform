@@ -1,2 +1,7 @@
-import { useEffect, useState } from 'react'
-export default function LiveEventStreamPanel(){const [items,setItems]=useState([]); const [status,setStatus]=useState('connecting'); useEffect(()=>{let retry=null; let es=null; const connect=()=>{const t=localStorage.getItem('token')||''; es=new EventSource(`/api/admin/events/stream?token=${encodeURIComponent(t)}`); es.onmessage=(e)=>setItems(p=>[e.data,...p].slice(0,20)); es.onerror=()=>{setStatus('degraded'); es.close(); retry=setTimeout(connect,3000)}; es.onopen=()=>setStatus('live')}; connect(); return ()=>{if(retry) clearTimeout(retry); if(es) es.close()}},[]); return <div className='panel'><h4>Live stream ({status})</h4><pre>{items.join('\n')}</pre></div>}
+import useEventStream from '../../hooks/useEventStream'
+
+export default function LiveEventStreamPanel(){
+  const { status, events, tokenExpiry } = useEventStream('/api/admin/events/stream')
+  const expiryText = tokenExpiry ? new Date(tokenExpiry * 1000).toISOString() : 'unknown'
+  return <div className='panel'><h4>Live stream ({status})</h4><div className='muted'>Token exp: {expiryText}</div><pre>{events.join('\n')}</pre></div>
+}
