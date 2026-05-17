@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 
-const state = { status: 'connecting', events: [] }
+const state = { status: 'connecting', connected: false, error: null, events: [] }
 const listeners = new Set()
 
 export function updateOperational(partial){ Object.assign(state, partial); listeners.forEach(l=>l()) }

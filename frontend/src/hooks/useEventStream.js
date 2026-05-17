@@ -11,25 +11,24 @@ function parseJwtExp(token) {
 
 export default function useEventStream(url = '/api/admin/events/stream') {
   const [status, setStatus] = useState('connecting')
+  const [connected, setConnected] = useState(false)
+  const [error, setError] = useState(null)
   const [events, setEvents] = useState([])
   const [tokenExpiry, setTokenExpiry] = useState(null)
   const retryRef = useRef(null)
-  const openTimeoutRef = useRef(null)
 
   useEffect(() => {
     let es = null
     let stopped = false
 
-    const clearTimers = () => {
+    const clearRetry = () => {
       if (retryRef.current) clearTimeout(retryRef.current)
-      if (openTimeoutRef.current) clearTimeout(openTimeoutRef.current)
       retryRef.current = null
-      openTimeoutRef.current = null
     }
 
     const scheduleReconnect = (ms = 3000) => {
       if (stopped) return
-      if (retryRef.current) clearTimeout(retryRef.current)
+      clearRetry()
       retryRef.current = setTimeout(connect, ms)
     }
 
@@ -46,40 +45,50 @@ export default function useEventStream(url = '/api/admin/events/stream') {
 
     const connect = () => {
       if (stopped) return
-      clearTimers()
 
       const { token, state } = tokenState()
       if (state !== 'ok') {
         setStatus(state)
+        setConnected(false)
+        setError(state)
         scheduleReconnect(5000)
         return
       }
 
       setStatus('connecting')
+      setConnected(false)
+      setError(null)
+
       es = new EventSource(buildUrl(token))
 
-      openTimeoutRef.current = setTimeout(() => {
-        if (es && es.readyState !== EventSource.OPEN) {
-          setStatus('error')
-          es.close()
-          scheduleReconnect(3000)
-        }
-      }, 8000)
-
       es.onopen = () => {
-        if (openTimeoutRef.current) clearTimeout(openTimeoutRef.current)
         setStatus('connected')
+        setConnected(true)
+        setError(null)
       }
 
       es.onmessage = (e) => {
         setEvents((prev) => [e.data, ...prev].slice(0, 30))
+        if (!connected) {
+          setStatus('connected')
+          setConnected(true)
+          setError(null)
+        }
       }
 
       es.onerror = () => {
         es?.close()
         const nowState = tokenState().state
-        setStatus(nowState === 'ok' ? 'error' : nowState)
-        scheduleReconnect(nowState === 'ok' ? 3000 : 5000)
+        setConnected(false)
+        if (nowState === 'ok') {
+          setStatus('error')
+          setError('stream_error')
+          scheduleReconnect(3000)
+        } else {
+          setStatus(nowState)
+          setError(nowState)
+          scheduleReconnect(5000)
+        }
       }
     }
 
@@ -92,11 +101,11 @@ export default function useEventStream(url = '/api/admin/events/stream') {
 
     return () => {
       stopped = true
-      clearTimers()
+      clearRetry()
       es?.close()
       window.removeEventListener('storage', onStorage)
     }
   }, [url])
 
-  return { status, events, tokenExpiry }
+  return { status, connected, error, events, tokenExpiry }
 }
