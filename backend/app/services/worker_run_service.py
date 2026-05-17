@@ -22,9 +22,13 @@ class WorkerRunService:
         if not row:
             return None
         row.status = status
-        row.finished_at = datetime.now(timezone.utc)
+        finished_at = datetime.now(timezone.utc)
+        row.finished_at = finished_at
         if row.started_at:
-            row.duration_ms = int((row.finished_at - row.started_at).total_seconds() * 1000)
+            started_at = row.started_at
+            if started_at.tzinfo is None:
+                started_at = started_at.replace(tzinfo=timezone.utc)
+            row.duration_ms = int((finished_at - started_at).total_seconds() * 1000)
         row.summary_json = json.dumps(summary or {})
         row.error = error
         self.db.commit(); self.db.refresh(row)
