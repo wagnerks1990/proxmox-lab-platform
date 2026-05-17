@@ -1,0 +1,3 @@
+import { useEffect, useState } from 'react'
+import { listPools } from '../services/poolsApi'
+export default function PoolsPage(){const [rows,setRows]=useState([]); useEffect(()=>{listPools().then(setRows)},[]); return <section><h2>Pools</h2><p className='muted'>Provisioning automation is not enabled yet.</p><table className='vm-table'><thead><tr><th>Name</th><th>Type</th><th>Enabled</th><th>Maintenance</th><th>Desired</th><th>Protocol</th></tr></thead><tbody>{rows.map(r=><tr key={r.id}><td>{r.name}</td><td>{r.pool_type}</td><td>{String(r.enabled)}</td><td>{String(r.maintenance_mode)}</td><td>{r.desired_size}</td><td>{r.default_protocol}</td></tr>)}</tbody></table></section>}
