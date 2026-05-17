@@ -18,11 +18,18 @@ export default function useEventStream(url = '/api/admin/events/stream') {
   const [error, setError] = useState(null)
   const [events, setEvents] = useState([])
   const [tokenExpiry, setTokenExpiry] = useState(null)
+  const [lastOnOpenAt, setLastOnOpenAt] = useState(null)
+  const [lastOnMessageAt, setLastOnMessageAt] = useState(null)
+  const [lastHeartbeatAt, setLastHeartbeatAt] = useState(null)
+  const [reconnectCount, setReconnectCount] = useState(0)
+  const [readyState, setReadyState] = useState(null)
   const retryRef = useRef(null)
+  const esRef = useRef(null)
 
   useEffect(() => {
-    let es = null
     let stopped = false
+
+    const transition = (next, meta = {}) => dlog('transition', { from: status, to: next, ...meta })
 
     const clearRetry = () => {
       if (retryRef.current) clearTimeout(retryRef.current)
@@ -31,7 +38,7 @@ export default function useEventStream(url = '/api/admin/events/stream') {
 
     const scheduleReconnect = (ms = 3000) => {
       if (stopped) return
-      dlog('schedule reconnect in', ms)
+      setReconnectCount((n) => n + 1)
       clearRetry()
       retryRef.current = setTimeout(connect, ms)
     }
@@ -40,9 +47,8 @@ export default function useEventStream(url = '/api/admin/events/stream') {
       const token = localStorage.getItem('token') || ''
       const exp = parseJwtExp(token)
       setTokenExpiry(exp)
-      const now = Math.floor(Date.now() / 1000)
-      const state = !token ? 'auth_missing' : (exp && exp <= now ? 'auth_expired' : 'ok')
-      dlog('token state', { state, exp, now })
+      const state = !token ? 'auth_missing' : (exp && exp <= Math.floor(Date.now() / 1000) ? 'auth_expired' : 'ok')
+      dlog('token state', state, exp)
       return { token, state }
     }
 
@@ -50,9 +56,9 @@ export default function useEventStream(url = '/api/admin/events/stream') {
 
     const connect = () => {
       if (stopped) return
-
       const { token, state } = tokenState()
       if (state !== 'ok') {
+        transition(state)
         setStatus(state)
         setConnected(false)
         setError(state)
@@ -60,39 +66,54 @@ export default function useEventStream(url = '/api/admin/events/stream') {
         return
       }
 
+      transition('connecting')
       setStatus('connecting')
       setConnected(false)
       setError(null)
 
-      const sseUrl = buildUrl(token)
-      dlog('opening EventSource', sseUrl)
-      es = new EventSource(sseUrl)
+      const es = new EventSource(buildUrl(token))
+      esRef.current = es
+      setReadyState(es.readyState)
 
       es.onopen = () => {
-        dlog('onopen')
+        const ts = new Date().toISOString()
+        dlog('onopen', ts)
+        setLastOnOpenAt(ts)
+        transition('connected', { ts })
         setStatus('connected')
         setConnected(true)
         setError(null)
+        setReadyState(es.readyState)
       }
 
       es.onmessage = (e) => {
+        const ts = new Date().toISOString()
+        setLastOnMessageAt(ts)
+        try {
+          const parsed = JSON.parse(e.data)
+          if (parsed?.type === 'heartbeat') setLastHeartbeatAt(ts)
+        } catch {}
         dlog('onmessage', e.data)
         setEvents((prev) => [e.data, ...prev].slice(0, 30))
         setStatus('connected')
         setConnected(true)
         setError(null)
+        setReadyState(es.readyState)
       }
 
       es.onerror = () => {
         dlog('onerror')
-        es?.close()
+        es.close()
+        setReadyState(es.readyState)
         const nowState = tokenState().state
         setConnected(false)
         if (nowState === 'ok') {
+          transition('error')
           setStatus('error')
           setError('stream_error')
           scheduleReconnect(3000)
         } else {
+          transition(nowState)
           setStatus(nowState)
           setError(nowState)
           scheduleReconnect(5000)
@@ -100,23 +121,16 @@ export default function useEventStream(url = '/api/admin/events/stream') {
       }
     }
 
-    const onStorage = (evt) => {
-      if (evt.key === 'token') {
-        dlog('token changed via storage event')
-        connect()
-      }
-    }
-    window.addEventListener('storage', onStorage)
-
     connect()
+    const iv = setInterval(() => setReadyState(esRef.current ? esRef.current.readyState : null), 1000)
 
     return () => {
       stopped = true
       clearRetry()
-      es?.close()
-      window.removeEventListener('storage', onStorage)
+      clearInterval(iv)
+      esRef.current?.close()
     }
   }, [url])
 
-  return { status, connected, error, events, tokenExpiry }
+  return { status, connected, error, events, tokenExpiry, lastOnOpenAt, lastOnMessageAt, lastHeartbeatAt, reconnectCount, readyState }
 }
