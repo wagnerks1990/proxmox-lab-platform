@@ -16,3 +16,5 @@ class UserResponse(BaseModel):
     username: str
     email: EmailStr
     role: str
+    role_id: int | None = None
+    is_active: bool = True
