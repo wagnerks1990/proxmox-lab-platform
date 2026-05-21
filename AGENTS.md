@@ -1,0 +1,72 @@
+# Proxmox Lab Platform — AGENT Guardrails
+
+## Project
+- This is the Proxmox Lab Platform.
+- It is a classroom VM orchestration/control-plane app.
+- Backend is FastAPI.
+- Frontend is React/Vite.
+- Database is PostgreSQL.
+- ORM is SQLAlchemy.
+- Migrations use Alembic.
+- Runtime deployment uses Ubuntu, nginx, and systemd.
+- Proxmox API access must remain backend-only.
+- Remote access direction is Guacamole-first, with ttyd only as fallback/debug if already present.
+
+## Workflow
+- Never work directly on `main`.
+- Always use focused feature branches.
+- Avoid broad rewrites unless explicitly requested.
+- Preserve existing working behavior.
+- Prefer incremental, testable changes.
+- Keep frontend API base URL as `/api`.
+
+## Preserve
+- login
+- RBAC
+- `/api/auth/me`
+- `/api/health`
+- VM list/create/start/stop/reboot/delete
+- guest-agent IP discovery
+- template permissions
+- session activity
+- telemetry summary/events
+- SSE operational stream
+- Operations page
+- Troubleshooting page
+- scheduler/worker visibility
+- Alembic migration chain
+- frontend build behavior
+
+## Security
+- Never expose Proxmox API tokens to frontend code.
+- Never expose VM credentials to frontend code.
+- Never expose SSH credentials to frontend code.
+- Never expose Guacamole credentials to frontend code.
+- Never commit `.env` files.
+- Never commit secrets, private keys, certificates, passwords, tokens, local databases, or generated runtime artifacts.
+- Students may only access their own VMs.
+- Teachers/Admins may manage all VMs.
+- Enforce RBAC on backend endpoints.
+
+## VM/API rules
+- VM route identity should use the app database VM id unless explicitly documented otherwise.
+- Do not confuse app database VM id with Proxmox VMID.
+- Return clean JSON errors.
+- Do not fake successful VM, terminal, or protocol behavior.
+- Unsupported protocol buttons must be hidden or clearly disabled.
+- WEB TERMINAL should prefer Guacamole-first architecture long term.
+- ttyd may remain only as fallback/debug if already present.
+
+## Alembic
+- Use Alembic for all schema changes.
+- Migrations must be idempotent where practical.
+- Migrations must be replay-safe.
+- Migrations must be branch-safe.
+- Do not create multiple Alembic heads.
+- Do not destructively alter production data.
+- Do not rely on manual `ALTER TABLE` instructions.
+
+## Codex Cloud
+- Codex Cloud can inspect repo structure, make safe source changes, run local compile/build checks when dependencies are available, and create PRs.
+- Codex Cloud must not claim to validate production nginx, systemd, PostgreSQL state, live Proxmox behavior, live SSE browser behavior, Guacamole/ttyd runtime behavior, or production login.
+- PRs must clearly list what was validated in Cloud and what still requires Ubuntu server validation.
