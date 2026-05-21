@@ -77,6 +77,29 @@ The token is used only by backend service (`app/services/proxmox.py`) and never 
 - VM create action logs to `audit_logs`.
 - Secret values sourced from environment variables.
 
+## Post-pull validation (recommended)
+Run this single command to validate current live backend health after pulling changes:
+
+```bash
+python backend/scripts/validate_deploy.py
+```
+
+It checks:
+- backend app modules compile
+- `SESSION_EXPIRED` exists in `app.architecture.events`
+- Alembic reports exactly one head
+- database connectivity (`SELECT 1`)
+- live `/api/health` response is fully OK (`backend`, `database`, `proxmox`)
+
+This command validates the *current* deployment state and does not treat stale historical journal entries from older restarts as active failures.
+
+## SSE proxy requirement (production)
+For `/api/admin/events/stream` (EventSource/SSE), include the dedicated NGINX location block from:
+
+- `deploy/nginx/sse-events-stream.conf`
+
+This disables proxy buffering and keeps the stream open so live telemetry status transitions to connected in the GUI.
+
 ## Future expansion-ready
 Architecture leaves space for:
 - class/group and quota tables
