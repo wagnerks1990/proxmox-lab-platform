@@ -1,9 +1,9 @@
 import os
 import importlib
-import bcrypt
 from sqlalchemy.orm import Session
 
 from app.models.models import Role, User
+from app.services.security import hash_password
 
 
 def require_env(name: str) -> str:
@@ -36,10 +36,6 @@ def import_sessionlocal():
         "Could not find SessionLocal. Run: grep -R \"SessionLocal\" -n app"
     )
 
-
-def hash_password(password: str) -> str:
-    # Compatible with bcrypt-based auth storage.
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 def main() -> None:
