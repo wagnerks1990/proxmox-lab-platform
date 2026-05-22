@@ -6,6 +6,7 @@ from app.api.deps import require_role
 from app.db.session import get_db
 from app.models.models import ProxmoxCluster, ProxmoxNode, ProxmoxClusterDefault
 from app.services.proxmox_bootstrap import ProxmoxBootstrapService
+from app.services.proxmox_resource_stats import ProxmoxResourceStatsService
 
 router = APIRouter()
 
@@ -216,3 +217,32 @@ async def manual_token(payload: dict, _user=Depends(require_role('Admin')), db: 
     if not result.get('ok'):
         raise HTTPException(status_code=400, detail=result)
     return result
+
+
+@router.get('/admin/proxmox/resource-stats')
+async def active_resource_stats(_user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    try:
+        return await ProxmoxResourceStatsService(db).active_cluster_stats()
+    except RuntimeError as exc:
+        return {
+            'config_source': 'not_configured',
+            'cluster': {'id': None, 'name': None, 'api_url': None},
+            'summary': {
+                'total_nodes': 0, 'online_nodes': 0, 'offline_nodes': 0,
+                'total_cpu_cores': 0, 'cpu_usage_percent': None,
+                'memory_used_bytes': 0, 'memory_total_bytes': 0, 'memory_usage_percent': None,
+                'disk_used_bytes': 0, 'disk_total_bytes': 0, 'disk_usage_percent': None,
+                'total_vms': 0, 'running_vms': 0, 'stopped_vms': 0, 'paused_vms': 0, 'templates': 0, 'unknown_vms': 0
+            },
+            'nodes': [],
+            'warnings': [str(exc)],
+            'fetched_at': datetime.utcnow().isoformat() + 'Z',
+        }
+
+
+@router.get('/admin/proxmox/clusters/{id}/resource-stats')
+async def cluster_resource_stats(id: int, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    row = db.query(ProxmoxCluster).filter(ProxmoxCluster.id == id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail='Cluster not found')
+    return await ProxmoxResourceStatsService(db).cluster_stats(row)
