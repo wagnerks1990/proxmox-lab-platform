@@ -18,6 +18,7 @@ from app.api.routers.admin_validation import router as validation_router
 from app.api.routers.admin_runtime import router as runtime_router
 from app.api.routers.admin_reconciliation import router as reconciliation_router
 from app.api.routers.admin_analytics import router as analytics_router
+from app.api.routers.admin_proxmox_setup import router as proxmox_setup_router
 
 router = APIRouter(prefix='/api')
 
@@ -40,3 +41,4 @@ router.include_router(validation_router)
 router.include_router(reconciliation_router)
 
 router.include_router(analytics_router)
+router.include_router(proxmox_setup_router)

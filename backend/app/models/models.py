@@ -161,3 +161,50 @@ class WorkerRun(Base):
     summary_json = Column(String, nullable=True)
     error = Column(String(255), nullable=True)
     request_id = Column(String(100), nullable=True)
+
+
+class ProxmoxCluster(Base):
+    __tablename__ = 'proxmox_clusters'
+    id = Column(Integer, primary_key=True)
+    name = Column(String(120), nullable=False, unique=True)
+    api_url = Column(String(255), nullable=False)
+    verify_ssl = Column(Boolean, nullable=False, default=False)
+    auth_mode = Column(String(32), nullable=False, default='token')
+    root_username = Column(String(120), nullable=True)
+    token_user = Column(String(120), nullable=True)
+    token_id = Column(String(120), nullable=True)
+    encrypted_token_secret = Column(String, nullable=True)
+    token_created_by_app = Column(Boolean, nullable=False, default=False)
+    is_active = Column(Boolean, nullable=False, default=False)
+    last_validated_at = Column(DateTime, nullable=True)
+    last_validation_status = Column(String(32), nullable=True)
+    last_validation_error = Column(String(512), nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class ProxmoxNode(Base):
+    __tablename__ = 'proxmox_nodes'
+    id = Column(Integer, primary_key=True)
+    cluster_id = Column(Integer, ForeignKey('proxmox_clusters.id'), nullable=False, index=True)
+    node_name = Column(String(120), nullable=False)
+    status = Column(String(32), nullable=True)
+    cpu_total = Column(Integer, nullable=True)
+    cpu_used = Column(Integer, nullable=True)
+    memory_total = Column(Integer, nullable=True)
+    memory_used = Column(Integer, nullable=True)
+    last_seen_at = Column(DateTime, nullable=True)
+    raw_summary_json = Column(String, nullable=True)
+
+
+class ProxmoxClusterDefault(Base):
+    __tablename__ = 'proxmox_cluster_defaults'
+    id = Column(Integer, primary_key=True)
+    cluster_id = Column(Integer, ForeignKey('proxmox_clusters.id'), nullable=False, unique=True, index=True)
+    default_node = Column(String(120), nullable=True)
+    default_storage = Column(String(120), nullable=True)
+    default_bridge = Column(String(120), nullable=True)
+    default_template_vmid = Column(Integer, nullable=True)
+    clone_mode = Column(String(50), nullable=True)
+    placement_policy = Column(String(50), nullable=True)
+    notes = Column(String(500), nullable=True)
