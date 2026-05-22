@@ -206,4 +206,5 @@ class ProxmoxClusterDefault(Base):
     default_bridge = Column(String(120), nullable=True)
     default_template_vmid = Column(Integer, nullable=True)
     clone_mode = Column(String(50), nullable=True)
+    placement_policy = Column(String(50), nullable=True)
     notes = Column(String(500), nullable=True)

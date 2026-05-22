@@ -87,6 +87,7 @@ def get_cluster(id: int, _user=Depends(require_role('Admin')), db: Session = Dep
             'default_bridge': getattr(defaults, 'default_bridge', None),
             'default_template_vmid': getattr(defaults, 'default_template_vmid', None),
             'clone_mode': getattr(defaults, 'clone_mode', None),
+            'placement_policy': getattr(defaults, 'placement_policy', None),
             'notes': getattr(defaults, 'notes', None),
         },
     }
@@ -125,7 +126,7 @@ def patch_defaults(id: int, payload: dict, _user=Depends(require_role('Admin')),
     if d is None:
         d = ProxmoxClusterDefault(cluster_id=id)
         db.add(d)
-    for key in ['default_node', 'default_storage', 'default_bridge', 'default_template_vmid', 'clone_mode', 'notes']:
+    for key in ['default_node', 'default_storage', 'default_bridge', 'default_template_vmid', 'clone_mode', 'placement_policy', 'notes']:
         if key in payload:
             setattr(d, key, payload[key])
     db.commit()
@@ -137,6 +138,7 @@ def patch_defaults(id: int, payload: dict, _user=Depends(require_role('Admin')),
             'default_bridge': d.default_bridge,
             'default_template_vmid': d.default_template_vmid,
             'clone_mode': d.clone_mode,
+            'placement_policy': d.placement_policy,
             'notes': d.notes,
         },
     }

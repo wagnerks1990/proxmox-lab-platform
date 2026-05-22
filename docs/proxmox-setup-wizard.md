@@ -12,3 +12,8 @@
   - VM templates
   - bridges/networks
 - If discovery is empty/unavailable, manual defaults input is still supported.
+
+- Placement policy options:
+  - `manual` (requires online default node)
+  - `balanced` (resource-aware node scoring)
+  - `prefer_default_then_balance`

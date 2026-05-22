@@ -3,7 +3,7 @@ import api from '../services/api'
 
 const bootstrapInit = { name:'Primary Proxmox', api_url:'', verify_ssl:false, root_username:'root@pam', root_password:'', token_id:'proxmox-lab-platform' }
 const manualInit = { name:'Primary Proxmox', api_url:'', verify_ssl:false, token_user:'root@pam', token_id:'proxmox-lab-platform', token_secret:'' }
-const defaultsInit = { default_node:'', default_storage:'', default_bridge:'', default_template_vmid:'', clone_mode:'full', notes:'' }
+const defaultsInit = { default_node:'', default_storage:'', default_bridge:'', default_template_vmid:'', clone_mode:'full', placement_policy:'', notes:'' }
 
 export default function ProxmoxSetupPage(){
   const [clusters,setClusters]=useState([])
@@ -106,13 +106,14 @@ export default function ProxmoxSetupPage(){
 
     {selectedId ? <div className='panel'>
       <h3>Defaults</h3>
-      <p className='muted'>Default node = where new VMs are created by default. Default storage = target storage for VM disks. Default bridge = VM network bridge. Default template VMID = template clone source.</p>
+      <p className='muted'>Default node = where new VMs are created unless placement policy selects another. Default storage = target storage for VM disks. Default bridge = VM network bridge. Default template VMID = template clone source.</p><p className='muted'>If resource data is unavailable, placement uses online node list with deterministic fallback rules.</p>
       <div className='group'>
         {nodes.length ? <select className='input' value={defaultsForm.default_node || ''} onChange={e=>setDefaultsForm({...defaultsForm,default_node:e.target.value})}><option value=''>Default node (optional)</option>{nodes.map(n=><option key={n.id} value={n.node_name}>{n.node_name}</option>)}</select> : <input className='input' placeholder='Default node' value={defaultsForm.default_node || ''} onChange={e=>setDefaultsForm({...defaultsForm,default_node:e.target.value})}/>}
         {storage.length ? <select className='input' value={defaultsForm.default_storage || ''} onChange={e=>setDefaultsForm({...defaultsForm,default_storage:e.target.value})}><option value=''>Default storage (optional)</option>{storage.map((s,idx)=><option key={`${s.node}-${s.storage}-${idx}`} value={s.storage}>{s.storage} ({s.node})</option>)}</select> : <input className='input' placeholder='Default storage' value={defaultsForm.default_storage || ''} onChange={e=>setDefaultsForm({...defaultsForm,default_storage:e.target.value})}/>}
         {networks.length ? <select className='input' value={defaultsForm.default_bridge || ''} onChange={e=>setDefaultsForm({...defaultsForm,default_bridge:e.target.value})}><option value=''>Default bridge (optional)</option>{networks.map((n,idx)=><option key={`${n.node}-${n.bridge}-${idx}`} value={n.bridge}>{n.bridge} ({n.node})</option>)}</select> : <input className='input' placeholder='Default bridge' value={defaultsForm.default_bridge || ''} onChange={e=>setDefaultsForm({...defaultsForm,default_bridge:e.target.value})}/>}
         {templates.length ? <select className='input' value={defaultsForm.default_template_vmid || ''} onChange={e=>setDefaultsForm({...defaultsForm,default_template_vmid:e.target.value})}><option value=''>Default template VMID (optional)</option>{templates.map((t,idx)=><option key={`${t.node}-${t.vmid}-${idx}`} value={t.vmid}>{t.vmid} - {t.name} ({t.node})</option>)}</select> : <input className='input' placeholder='Default template VMID' value={defaultsForm.default_template_vmid || ''} onChange={e=>setDefaultsForm({...defaultsForm,default_template_vmid:e.target.value})}/>}
         <select className='input' value={defaultsForm.clone_mode || 'full'} onChange={e=>setDefaultsForm({...defaultsForm,clone_mode:e.target.value})}><option value='full'>full</option><option value='linked'>linked</option></select>
+        <select className='input' value={defaultsForm.placement_policy || ''} onChange={e=>setDefaultsForm({...defaultsForm,placement_policy:e.target.value})}><option value=''>Placement policy (auto)</option><option value='manual'>Manual/default node only</option><option value='balanced'>Balanced across online nodes</option><option value='prefer_default_then_balance'>Prefer default, fallback balanced</option></select>
         <input className='input' placeholder='Notes' value={defaultsForm.notes || ''} onChange={e=>setDefaultsForm({...defaultsForm,notes:e.target.value})}/>
         <button disabled={loading} onClick={()=>refreshDiscovery(selectedId)}>Refresh Discovery</button>
         <button disabled={loading} onClick={doSaveDefaults}>Save Defaults</button>
