@@ -35,6 +35,7 @@ export default function DashboardPage({ user }) {
   const [loadingStats, setLoadingStats] = useState(false)
   const [statsError, setStatsError] = useState('')
   const [appTemplatesCount, setAppTemplatesCount] = useState(0)
+  const [nodeStorage, setNodeStorage] = useState({})
 
   const loadTop = async () => {
     const [v, t] = await Promise.all([api.get('/vms'), api.get('/templates')])
@@ -48,6 +49,24 @@ export default function DashboardPage({ user }) {
     try {
       const r = await api.get('/admin/proxmox/resource-stats')
       setResourceStats(r.data)
+      try {
+        const c = await api.get('/admin/proxmox/clusters')
+        const active = (Array.isArray(c.data) ? c.data : []).find(x => x.is_active)
+        if (active?.id) {
+          const st = await api.get(`/admin/proxmox/clusters/${active.id}/storage`)
+          const grouped = {}
+          for (const item of (Array.isArray(st.data) ? st.data : [])) {
+            const node = item?.node || 'unknown'
+            if (!grouped[node]) grouped[node] = []
+            grouped[node].push(item)
+          }
+          setNodeStorage(grouped)
+        } else {
+          setNodeStorage({})
+        }
+      } catch {
+        setNodeStorage({})
+      }
     } catch (e) {
       setStatsError(JSON.stringify(e?.response?.data?.detail || e?.response?.data || e.message))
     } finally {
@@ -105,7 +124,7 @@ export default function DashboardPage({ user }) {
         <h4>Per-node inventory</h4>
         {!Array.isArray(resourceStats.nodes) || resourceStats.nodes.length === 0 ? <p className='muted'>No node data available.</p> : (
           <table className='vm-table'>
-            <thead><tr><th>Node</th><th>Status</th><th>CPU</th><th>Memory</th><th>Disk</th><th>VMs</th><th>Running</th><th>Stopped</th><th>Templates</th><th>Uptime</th></tr></thead>
+            <thead><tr><th>Node</th><th>Status</th><th>CPU</th><th>Memory</th><th>Disk</th><th>Storage</th><th>VMs</th><th>Running</th><th>Stopped</th><th>Templates</th><th>Uptime</th></tr></thead>
             <tbody>
               {resourceStats.nodes.map((n)=><tr key={n.name}>
                 <td>{n.name}</td>
@@ -113,6 +132,7 @@ export default function DashboardPage({ user }) {
                 <td>{formatPct(n.cpu_usage_percent)} ({n.cpu_count ?? '—'} cores)</td>
                 <td>{formatPct(n.memory_usage_percent)} ({formatBytes(n.memory_used_bytes)} / {formatBytes(n.memory_total_bytes)})</td>
                 <td>{formatPct(n.disk_usage_percent)} ({formatBytes(n.disk_used_bytes)} / {formatBytes(n.disk_total_bytes)})</td>
+                <td>{(nodeStorage[n.name] || []).length ? (nodeStorage[n.name] || []).map((st, i) => <div key={i} className='muted'>{st.storage || 'unknown'} {st.type ? `(${st.type})` : ''}</div>) : <span className='muted'>—</span>}</td>
                 <td>{n.vm_count ?? 0}</td>
                 <td>{n.running_vm_count ?? 0}</td>
                 <td>{n.stopped_vm_count ?? 0}</td>
