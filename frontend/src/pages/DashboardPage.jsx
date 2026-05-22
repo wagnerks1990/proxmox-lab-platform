@@ -34,11 +34,12 @@ export default function DashboardPage({ user }) {
   const [resourceStats, setResourceStats] = useState(null)
   const [loadingStats, setLoadingStats] = useState(false)
   const [statsError, setStatsError] = useState('')
+  const [appTemplatesCount, setAppTemplatesCount] = useState(0)
 
   const loadTop = async () => {
     const [v, t] = await Promise.all([api.get('/vms'), api.get('/templates')])
     setVms(Array.isArray(v.data) ? v.data : [])
-    setTemplates(Array.isArray(t.data) ? t.data : [])
+    const tr = Array.isArray(t.data) ? t.data : []; setTemplates(tr); setAppTemplatesCount(tr.length)
   }
 
   const loadResourceStats = async () => {
@@ -85,6 +86,7 @@ export default function DashboardPage({ user }) {
       {resourceStats ? <>
         {resourceStats.config_source === 'env_fallback' ? <p className='muted'>Using .env Proxmox fallback. Configure Admin &gt; Proxmox Setup for database-managed cluster access.</p> : null}
         {resourceStats.config_source === 'not_configured' ? <p className='muted'>Proxmox is not configured. <Link to='/admin/proxmox-setup'>Open Proxmox Setup</Link>.</p> : null}
+        {(resourceStats.summary?.templates ?? 0) > 0 && appTemplatesCount === 0 ? <p className='muted'>{resourceStats.summary?.templates} Proxmox templates discovered. <Link to='/admin/proxmox-inventory'>Import templates to enable Create VM</Link>.</p> : null}
 
         <div className='card-grid'>
           <div className='stat-card'><div className='label'>CLUSTER</div><div className='value'>{resourceStats.cluster?.name || 'N/A'}</div></div>
