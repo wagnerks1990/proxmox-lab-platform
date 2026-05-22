@@ -14,8 +14,21 @@ async def health_summary(db: Session):
         db_ok = False
         db_error = str(exc)
     try:
-        await ProxmoxClient().list_nodes()
+        client = ProxmoxClient()
+        nodes = await client.list_nodes()
     except Exception as exc:
         pmx_ok = False
         pmx_error = str(exc)
-    return {'backend': 'ok', 'database': {'ok': db_ok, 'error': db_error}, 'proxmox': {'ok': pmx_ok, 'error': pmx_error}}
+        client = None
+        nodes = []
+    return {
+        'backend': 'ok',
+        'database': {'ok': db_ok, 'error': db_error},
+        'proxmox': {
+            'ok': pmx_ok,
+            'error': pmx_error,
+            'config_source': getattr(client, 'config_source', 'not_configured'),
+            'nodes_discovered_count': len(nodes),
+            'credential_status': 'present' if pmx_ok or client else 'missing',
+        },
+    }
