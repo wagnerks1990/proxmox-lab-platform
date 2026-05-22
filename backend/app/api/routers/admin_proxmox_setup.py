@@ -47,6 +47,18 @@ async def bootstrap_root(payload: dict, _user=Depends(require_role('Admin')), db
     try:
         return await svc.bootstrap_with_root(payload)
     except Exception as exc:
+        if str(exc) == 'TOKEN_EXISTS':
+            return {
+                'ok': False,
+                'token_exists': True,
+                'message': 'Token already exists in Proxmox for this user/token id.',
+                'suggested_actions': [
+                    'Choose a different token ID and retry bootstrap.',
+                    'Use manual token entry with an existing token secret.',
+                    'Delete/recreate token in Proxmox manually, then retry.',
+                    'Delete the app cluster record if stale and re-run setup.',
+                ],
+            }
         raise HTTPException(status_code=400, detail={'error': str(exc)})
 
 
@@ -78,6 +90,30 @@ def get_cluster(id: int, _user=Depends(require_role('Admin')), db: Session = Dep
             'notes': getattr(defaults, 'notes', None),
         },
     }
+
+
+@router.patch('/admin/proxmox/clusters/{id}')
+def patch_cluster(id: int, payload: dict, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    row = db.query(ProxmoxCluster).filter(ProxmoxCluster.id == id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail='Cluster not found')
+    for key in ['name', 'api_url', 'verify_ssl']:
+        if key in payload:
+            setattr(row, key, payload[key])
+    db.commit()
+    return {'ok': True}
+
+
+@router.delete('/admin/proxmox/clusters/{id}')
+def delete_cluster(id: int, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    row = db.query(ProxmoxCluster).filter(ProxmoxCluster.id == id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail='Cluster not found')
+    db.query(ProxmoxNode).filter(ProxmoxNode.cluster_id == id).delete()
+    db.query(ProxmoxClusterDefault).filter(ProxmoxClusterDefault.cluster_id == id).delete()
+    db.delete(row)
+    db.commit()
+    return {'ok': True, 'deleted_cluster_id': id}
 
 
 @router.patch('/admin/proxmox/clusters/{id}/defaults')
@@ -125,3 +161,16 @@ async def validate_cluster(id: int, _user=Depends(require_role('Admin')), db: Se
 @router.get('/admin/proxmox/clusters/{id}/nodes')
 def list_cluster_nodes(id: int, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
     return [{'id': n.id, 'node_name': n.node_name, 'status': n.status, 'last_seen_at': n.last_seen_at} for n in db.query(ProxmoxNode).filter(ProxmoxNode.cluster_id == id).all()]
+
+
+@router.post('/admin/proxmox/clusters/manual-token')
+async def manual_token(payload: dict, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    required = ['name', 'api_url', 'token_user', 'token_id', 'token_secret']
+    missing = [k for k in required if not payload.get(k)]
+    if missing:
+        raise HTTPException(status_code=422, detail={'error': f'Missing fields: {", ".join(missing)}'})
+    svc = ProxmoxBootstrapService(db)
+    result = await svc.upsert_manual_token(payload)
+    if not result.get('ok'):
+        raise HTTPException(status_code=400, detail=result)
+    return result

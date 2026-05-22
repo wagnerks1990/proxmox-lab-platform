@@ -8,7 +8,7 @@ from app.db.session import SessionLocal
 
 def main() -> None:
     username = os.getenv("DEV_ADMIN_USERNAME", "admin")
-    email = os.getenv("DEV_ADMIN_EMAIL", "admin@example.local")
+    email = os.getenv("DEV_ADMIN_EMAIL", "admin@example.com")
     password = os.getenv("DEV_ADMIN_PASSWORD", "admin")
 
     db: Session = SessionLocal()
