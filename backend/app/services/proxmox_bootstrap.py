@@ -108,15 +108,93 @@ class ProxmoxBootstrapService:
         return {'ok': True, 'cluster_id': cluster.id, 'nodes_discovered': probe.get('nodes_count', 0)}
 
     async def validate_cluster(self, cluster: ProxmoxCluster) -> dict:
-        secret = decrypt_secret(cluster.encrypted_token_secret) if cluster.encrypted_token_secret else None
-        if not secret:
+        headers = self._cluster_headers(cluster)
+        if not headers:
             return {'ok': False, 'error': 'missing token secret'}
-        headers = {'Authorization': f'PVEAPIToken={cluster.token_user}!{cluster.token_id}={secret}'}
         async with httpx.AsyncClient(verify=cluster.verify_ssl, timeout=20) as client:
             r = await client.get(f"{cluster.api_url}/nodes", headers=headers)
             r.raise_for_status()
             nodes = r.json().get('data', [])
         return {'ok': True, 'nodes_count': len(nodes)}
+
+    async def discover_storage(self, cluster: ProxmoxCluster) -> list[dict]:
+        headers = self._cluster_headers(cluster)
+        if not headers:
+            return []
+        out: list[dict] = []
+        async with httpx.AsyncClient(verify=cluster.verify_ssl, timeout=20, headers=headers) as client:
+            nodes_resp = await client.get(f"{cluster.api_url}/nodes")
+            nodes_resp.raise_for_status()
+            for node in nodes_resp.json().get('data', []):
+                node_name = node.get('node')
+                if not node_name:
+                    continue
+                s = await client.get(f"{cluster.api_url}/nodes/{node_name}/storage")
+                if s.status_code >= 400:
+                    continue
+                for st in s.json().get('data', []):
+                    out.append({
+                        'node': node_name,
+                        'storage': st.get('storage'),
+                        'type': st.get('type'),
+                        'content': st.get('content'),
+                        'enabled': st.get('enabled'),
+                        'active': st.get('active'),
+                    })
+        return out
+
+    async def discover_templates(self, cluster: ProxmoxCluster) -> list[dict]:
+        headers = self._cluster_headers(cluster)
+        if not headers:
+            return []
+        out: list[dict] = []
+        async with httpx.AsyncClient(verify=cluster.verify_ssl, timeout=20, headers=headers) as client:
+            nodes_resp = await client.get(f"{cluster.api_url}/nodes")
+            nodes_resp.raise_for_status()
+            for node in nodes_resp.json().get('data', []):
+                node_name = node.get('node')
+                if not node_name:
+                    continue
+                v = await client.get(f"{cluster.api_url}/nodes/{node_name}/qemu")
+                if v.status_code >= 400:
+                    continue
+                for vm in v.json().get('data', []):
+                    if vm.get('template') != 1:
+                        continue
+                    out.append({
+                        'node': node_name,
+                        'vmid': vm.get('vmid'),
+                        'name': vm.get('name'),
+                        'status': vm.get('status'),
+                        'template': True,
+                    })
+        return out
+
+    async def discover_networks(self, cluster: ProxmoxCluster) -> list[dict]:
+        headers = self._cluster_headers(cluster)
+        if not headers:
+            return []
+        out: list[dict] = []
+        async with httpx.AsyncClient(verify=cluster.verify_ssl, timeout=20, headers=headers) as client:
+            nodes_resp = await client.get(f"{cluster.api_url}/nodes")
+            nodes_resp.raise_for_status()
+            for node in nodes_resp.json().get('data', []):
+                node_name = node.get('node')
+                if not node_name:
+                    continue
+                n = await client.get(f"{cluster.api_url}/nodes/{node_name}/network")
+                if n.status_code >= 400:
+                    continue
+                for net in n.json().get('data', []):
+                    if (net.get('iface') or '').startswith('vmbr'):
+                        out.append({
+                            'node': node_name,
+                            'bridge': net.get('iface'),
+                            'type': net.get('type'),
+                            'active': net.get('active'),
+                            'autostart': net.get('autostart'),
+                        })
+        return out
 
     async def _login(self, api_url: str, verify_ssl: bool, username: str, password: str) -> dict:
         async with httpx.AsyncClient(verify=verify_ssl, timeout=20) as client:
@@ -161,3 +239,9 @@ class ProxmoxBootstrapService:
         for item in resources:
             if item.get('type') == 'node':
                 self.db.add(ProxmoxNode(cluster_id=cluster_id, node_name=item.get('node'), status=item.get('status'), raw_summary_json=str(item)))
+
+    def _cluster_headers(self, cluster: ProxmoxCluster) -> dict | None:
+        secret = decrypt_secret(cluster.encrypted_token_secret) if cluster.encrypted_token_secret else None
+        if not secret:
+            return None
+        return {'Authorization': f'PVEAPIToken={cluster.token_user}!{cluster.token_id}={secret}'}

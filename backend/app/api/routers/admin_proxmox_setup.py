@@ -129,7 +129,17 @@ def patch_defaults(id: int, payload: dict, _user=Depends(require_role('Admin')),
         if key in payload:
             setattr(d, key, payload[key])
     db.commit()
-    return {'ok': True}
+    return {
+        'ok': True,
+        'defaults': {
+            'default_node': d.default_node,
+            'default_storage': d.default_storage,
+            'default_bridge': d.default_bridge,
+            'default_template_vmid': d.default_template_vmid,
+            'clone_mode': d.clone_mode,
+            'notes': d.notes,
+        },
+    }
 
 
 @router.post('/admin/proxmox/clusters/{id}/activate')
@@ -161,6 +171,30 @@ async def validate_cluster(id: int, _user=Depends(require_role('Admin')), db: Se
 @router.get('/admin/proxmox/clusters/{id}/nodes')
 def list_cluster_nodes(id: int, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
     return [{'id': n.id, 'node_name': n.node_name, 'status': n.status, 'last_seen_at': n.last_seen_at} for n in db.query(ProxmoxNode).filter(ProxmoxNode.cluster_id == id).all()]
+
+
+@router.get('/admin/proxmox/clusters/{id}/storage')
+async def list_cluster_storage(id: int, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    row = db.query(ProxmoxCluster).filter(ProxmoxCluster.id == id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail='Cluster not found')
+    return await ProxmoxBootstrapService(db).discover_storage(row)
+
+
+@router.get('/admin/proxmox/clusters/{id}/templates')
+async def list_cluster_templates(id: int, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    row = db.query(ProxmoxCluster).filter(ProxmoxCluster.id == id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail='Cluster not found')
+    return await ProxmoxBootstrapService(db).discover_templates(row)
+
+
+@router.get('/admin/proxmox/clusters/{id}/networks')
+async def list_cluster_networks(id: int, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    row = db.query(ProxmoxCluster).filter(ProxmoxCluster.id == id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail='Cluster not found')
+    return await ProxmoxBootstrapService(db).discover_networks(row)
 
 
 @router.post('/admin/proxmox/clusters/manual-token')
