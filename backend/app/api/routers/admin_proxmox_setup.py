@@ -174,6 +174,8 @@ def list_cluster_nodes(id: int, _user=Depends(require_role('Admin')), db: Sessio
 
 
 @router.get('/admin/proxmox/clusters/{id}/storage')
+@router.get('/admin/proxmox/cluster/{id}/storage')
+@router.get('/admin/proxmox/clusters/{id}/storage/')
 async def list_cluster_storage(id: int, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
     row = db.query(ProxmoxCluster).filter(ProxmoxCluster.id == id).first()
     if not row:
@@ -182,6 +184,8 @@ async def list_cluster_storage(id: int, _user=Depends(require_role('Admin')), db
 
 
 @router.get('/admin/proxmox/clusters/{id}/templates')
+@router.get('/admin/proxmox/cluster/{id}/templates')
+@router.get('/admin/proxmox/clusters/{id}/templates/')
 async def list_cluster_templates(id: int, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
     row = db.query(ProxmoxCluster).filter(ProxmoxCluster.id == id).first()
     if not row:
@@ -190,6 +194,8 @@ async def list_cluster_templates(id: int, _user=Depends(require_role('Admin')), 
 
 
 @router.get('/admin/proxmox/clusters/{id}/networks')
+@router.get('/admin/proxmox/cluster/{id}/networks')
+@router.get('/admin/proxmox/clusters/{id}/networks/')
 async def list_cluster_networks(id: int, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
     row = db.query(ProxmoxCluster).filter(ProxmoxCluster.id == id).first()
     if not row:
