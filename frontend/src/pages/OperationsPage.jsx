@@ -15,10 +15,10 @@ export default function OperationsPage(){
   useOperationalEvents()
 
   useEffect(()=>{
-    getOperationsHealth().then(setH)
-    getWorkerRuns().then(setRuns)
-    getReconciliationSummary().then(setRec)
+    getOperationsHealth().then(setH).catch(()=>setH({}))
+    getWorkerRuns().then((rows)=>setRuns(Array.isArray(rows)?rows:[])).catch(()=>setRuns([]))
+    getReconciliationSummary().then(setRec).catch(()=>setRec({}))
   },[])
 
-  return <section><h2>Operations</h2><div>Live stream: <HealthBadge value={live.connected?'ok':'error'}/> ({live.status})</div><div className='group'><StatCard label='Pools' value={rec.pools_total}/><StatCard label='Stale Sessions' value={rec.stale_sessions}/><StatCard label='Reconciliation Warnings' value={rec.warnings}/></div><div>Database: <HealthBadge value={h.database||h.db_status}/></div><div>Scheduler Running: {String(Boolean(h.scheduler_running))}</div><table className='vm-table'><thead><tr><th>Worker</th><th>Status</th><th>Started</th></tr></thead><tbody>{runs.map(r=><tr key={r.id}><td>{r.worker_name}</td><td>{r.status}</td><td>{r.started_at}</td></tr>)}</tbody></table></section>
+  return <section><h2>Operations</h2><div>Live stream: <HealthBadge value={live.connected?'ok':'error'}/> ({live.status})</div><div className='group'><StatCard label='Pools' value={rec.pools_total}/><StatCard label='Stale Sessions' value={rec.stale_sessions}/><StatCard label='Reconciliation Warnings' value={rec.warnings}/></div><div>Database: <HealthBadge value={h.database||h.db_status}/></div><div>Scheduler Running: {String(Boolean(h.scheduler_running))}</div>{runs.length===0?<p className='muted'>No worker runs recorded yet.</p>:null}<table className='vm-table'><thead><tr><th>Worker</th><th>Status</th><th>Started</th></tr></thead><tbody>{runs.map(r=><tr key={r.id}><td>{r.worker_name}</td><td>{r.status}</td><td>{r.started_at}</td></tr>)}</tbody></table></section>
 }
