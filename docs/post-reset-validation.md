@@ -13,8 +13,14 @@ These scripts **do not call live Proxmox APIs** and **do not create Proxmox VMs*
 ## PASS/WARN/FAIL
 
 - `PASS`: check succeeded.
-- `WARN`: non-blocking condition (for example, empty templates/pools/VMs).
-- `FAIL`: hard blocker (missing roles, missing active admin, or required table query failure).
+- `WARN`: non-blocking condition (for example, empty templates/pools/VMs or missing optional tables such as `resource_pools` when that table is not required by active routes/services).
+- `FAIL`: hard blocker (missing roles, missing active admin, or missing/unqueryable required app tables such as `desktop_pools`).
+
+If `validate_post_reset_state.py` reports a missing **required** table, run the latest migration before re-validating:
+
+```bash
+alembic upgrade heads
+```
 
 ## Ubuntu commands
 

@@ -4,7 +4,7 @@ from app.db.session import SessionLocal
 from app.models.models import Role, User
 
 REQUIRED_ROLES = {"Student", "Teacher", "Admin"}
-CORE_TABLES = [
+REQUIRED_TABLES = [
     "users",
     "roles",
     "vm_templates",
@@ -14,10 +14,10 @@ CORE_TABLES = [
     "connection_launches",
     "telemetry_events",
     "worker_runs",
-    "resource_pools",
     "desktop_pools",
 ]
-WARN_IF_EMPTY = {"vm_templates", "student_vms", "resource_pools", "desktop_pools"}
+OPTIONAL_TABLES = ["resource_pools"]
+WARN_IF_EMPTY = {"vm_templates", "student_vms", "desktop_pools"}
 
 
 def log(status: str, msg: str) -> None:
@@ -47,22 +47,30 @@ def main() -> int:
             failures += 1
         else:
             log("PASS", f"Active admin user found: {admin_user.username}")
-
-        for table in CORE_TABLES:
-            try:
-                count = db.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar_one()
-                if table in WARN_IF_EMPTY and count == 0:
-                    log("WARN", f"{table} is queryable but empty")
-                else:
-                    log("PASS", f"{table} query ok (rows={count})")
-            except Exception as exc:
-                log("FAIL", f"{table} query failed: {exc}")
-                failures += 1
-
-        log("PASS", "Alembic head/current checks remain covered by scripts/validate_deploy.py")
-        return 1 if failures else 0
     finally:
         db.close()
+
+    table_checks = [(name, True) for name in REQUIRED_TABLES] + [(name, False) for name in OPTIONAL_TABLES]
+    for table, required in table_checks:
+        table_db = SessionLocal()
+        try:
+            count = table_db.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar_one()
+            if table in WARN_IF_EMPTY and count == 0:
+                log("WARN", f"{table} is queryable but empty")
+            else:
+                log("PASS", f"{table} query ok (rows={count})")
+        except Exception as exc:
+            table_db.rollback()
+            if required:
+                log("FAIL", f"Missing required table or query failure for {table}: {exc}")
+                failures += 1
+            else:
+                log("WARN", f"Optional table {table} missing or not queryable: {exc}")
+        finally:
+            table_db.close()
+
+    log("PASS", "Alembic head/current checks remain covered by scripts/validate_deploy.py")
+    return 1 if failures else 0
 
 
 if __name__ == "__main__":

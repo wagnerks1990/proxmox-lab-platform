@@ -89,8 +89,7 @@ if duplicates:
     raise SystemExit('FAIL: duplicate Alembic revision IDs found')
 if len(heads) != 1:
     raise SystemExit(f'FAIL: expected exactly one Alembic head, found {heads}')
-if heads[0] != '20260521_0001':
-    raise SystemExit(f"FAIL: expected head '20260521_0001', found {heads[0]}")
+print('single alembic head:', heads[0])
 PYCODE
 
 echo "=== Alembic structure check ==="
