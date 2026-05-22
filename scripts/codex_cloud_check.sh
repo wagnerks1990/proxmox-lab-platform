@@ -16,6 +16,8 @@ test -f .gitignore && echo ".gitignore present" || echo ".gitignore missing"
 test -d docs && echo "docs/ present" || echo "docs/ missing"
 test -d scripts && echo "scripts/ present" || echo "scripts/ missing"
 test -f backend/requirements.txt && echo "backend/requirements.txt present" || echo "backend/requirements.txt missing"
+test -f backend/scripts/validate_post_reset_state.py && echo "backend/scripts/validate_post_reset_state.py present" || echo "backend/scripts/validate_post_reset_state.py missing"
+test -f backend/scripts/seed_dev_admin.py && echo "backend/scripts/seed_dev_admin.py present" || echo "backend/scripts/seed_dev_admin.py missing"
 test -f frontend/package.json && echo "frontend/package.json present" || echo "frontend/package.json missing"
 test -f frontend/package-lock.json && echo "frontend/package-lock.json present" || echo "frontend/package-lock.json missing"
 test -d backend/alembic && echo "backend/alembic present" || echo "backend/alembic missing"
@@ -34,6 +36,62 @@ if [ -d backend/app ]; then
 else
   echo "backend/app not found; skipping backend compile."
 fi
+
+echo "=== Alembic static DAG check ==="
+python3 - <<'PYCODE'
+import ast
+from pathlib import Path
+
+versions_dir = Path('backend/alembic/versions')
+revision_to_down = {}
+revisions = []
+for path in sorted(versions_dir.glob('*.py')):
+    mod = ast.parse(path.read_text(), filename=str(path))
+    rev = None
+    down = None
+    for node in mod.body:
+        if isinstance(node, ast.Assign):
+            for t in node.targets:
+                if isinstance(t, ast.Name) and t.id == 'revision' and isinstance(node.value, ast.Constant):
+                    rev = node.value.value
+                if isinstance(t, ast.Name) and t.id == 'down_revision':
+                    if isinstance(node.value, ast.Constant):
+                        down = node.value.value
+                    elif isinstance(node.value, (ast.Tuple, ast.List)):
+                        down = tuple(e.value for e in node.value.elts if isinstance(e, ast.Constant))
+    if rev:
+        revisions.append(rev)
+        revision_to_down[rev] = down
+
+seen = set()
+duplicates = []
+for r in revisions:
+    if r in seen:
+        duplicates.append(r)
+    seen.add(r)
+
+all_down = set()
+for d in revision_to_down.values():
+    if d is None:
+        continue
+    if isinstance(d, tuple):
+        all_down.update(x for x in d if x)
+    else:
+        all_down.add(d)
+heads = sorted([r for r in revisions if r not in all_down])
+
+print('revisions:', revisions)
+print('down_revisions:', revision_to_down)
+print('duplicate revision IDs:', duplicates if duplicates else 'none')
+print('calculated heads:', heads)
+
+if duplicates:
+    raise SystemExit('FAIL: duplicate Alembic revision IDs found')
+if len(heads) != 1:
+    raise SystemExit(f'FAIL: expected exactly one Alembic head, found {heads}')
+if heads[0] != '20260521_0001':
+    raise SystemExit(f"FAIL: expected head '20260521_0001', found {heads[0]}")
+PYCODE
 
 echo "=== Alembic structure check ==="
 if [ -d backend/alembic ]; then
