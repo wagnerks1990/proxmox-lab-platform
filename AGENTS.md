@@ -79,3 +79,10 @@
 - After any development DB reset, run `backend/scripts/validate_post_reset_state.py`.
 - Seed scripts must be idempotent and safe to rerun.
 - Seed scripts must not call live Proxmox APIs.
+- `CONFIG_ENCRYPTION_KEY` belongs in `backend/.env` or deployment secret stores.
+- Never generate encryption keys inside committed migrations.
+- Do not rotate `CONFIG_ENCRYPTION_KEY` casually after encrypted tokens are stored.
+- Default dev admin may be `admin/admin` only in development.
+- Never use `admin/admin` in production.
+- `reset_dev_users.py` must never run automatically.
+- Do not remove force-password-change behavior globally; only seed dev admin with `force_password_change=false`.

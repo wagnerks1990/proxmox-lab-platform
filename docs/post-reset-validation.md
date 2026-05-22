@@ -27,17 +27,14 @@ alembic upgrade heads
 ```bash
 cd /opt/proxmox-lab-platform/backend
 source venv/bin/activate
-set -a
-source .env
-set +a
 export PYTHONPATH=/opt/proxmox-lab-platform/backend
 
-export DEV_ADMIN_USERNAME=Kyle
-export DEV_ADMIN_EMAIL="wagnerks1@carlisleschools.org"
-export DEV_ADMIN_PASSWORD="<new-password>"
-python scripts/seed_dev_admin.py
+python scripts/ensure_config_encryption_key.py
+
+RESET_DEV_USERS_CONFIRM=YES python scripts/reset_dev_users.py
 
 python scripts/validate_post_reset_state.py
+python scripts/validate_deploy.py
 
 # Optional development lab seed values
 export DEV_TEMPLATE_NAME="Linux Lab Template"
@@ -52,3 +49,13 @@ python scripts/validate_post_reset_state.py
 ```
 
 Actual Proxmox template VMIDs/nodes must be supplied by an administrator (or set through env vars) when seeding template/pool defaults.
+
+Default development login after reset:
+- username: `admin`
+- password: `admin`
+
+Warnings:
+- `admin/admin` is development-only; never use in production.
+- `CONFIG_ENCRYPTION_KEY` is written to `backend/.env` and must not be committed.
+- Back up `CONFIG_ENCRYPTION_KEY`; losing it prevents decrypting stored Proxmox token secrets.
+- Do not rotate `CONFIG_ENCRYPTION_KEY` casually after token storage.

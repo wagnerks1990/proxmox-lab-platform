@@ -1,49 +1,16 @@
 import os
-import importlib
 from sqlalchemy.orm import Session
 
 from app.models.models import Role, User
 from app.services.security import hash_password
-
-
-def require_env(name: str) -> str:
-    value = os.getenv(name)
-    if not value:
-        raise SystemExit(f"Missing required environment variable: {name}")
-    return value
-
-
-def import_sessionlocal():
-    candidates = [
-        "app.core.database",
-        "app.db.database",
-        "app.db.session",
-        "app.db",
-        "app.database",
-    ]
-
-    for module_name in candidates:
-        try:
-            module = importlib.import_module(module_name)
-            session_local = getattr(module, "SessionLocal", None)
-            if session_local is not None:
-                print(f"Using SessionLocal from {module_name}")
-                return session_local
-        except Exception:
-            continue
-
-    raise SystemExit(
-        "Could not find SessionLocal. Run: grep -R \"SessionLocal\" -n app"
-    )
-
+from app.db.session import SessionLocal
 
 
 def main() -> None:
-    username = require_env("DEV_ADMIN_USERNAME")
-    email = require_env("DEV_ADMIN_EMAIL")
-    password = require_env("DEV_ADMIN_PASSWORD")
+    username = os.getenv("DEV_ADMIN_USERNAME", "admin")
+    email = os.getenv("DEV_ADMIN_EMAIL", "admin@example.local")
+    password = os.getenv("DEV_ADMIN_PASSWORD", "admin")
 
-    SessionLocal = import_sessionlocal()
     db: Session = SessionLocal()
 
     try:
@@ -83,6 +50,8 @@ def main() -> None:
 
         if hasattr(admin, "is_active"):
             admin.is_active = True
+        if hasattr(admin, "force_password_change"):
+            admin.force_password_change = False
 
         db.commit()
         print(f"Admin user seeded/updated: {username}")
