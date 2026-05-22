@@ -1,69 +1,102 @@
-#!/usr/bin/env python3
-from __future__ import annotations
-
 import os
-import sys
+import importlib
+import bcrypt
+from sqlalchemy.orm import Session
 
-from app.core.security import get_password_hash
-from app.db.session import SessionLocal
 from app.models.models import Role, User
 
 
-def main() -> int:
-    username = os.getenv("DEV_ADMIN_USERNAME", "admin")
-    email = os.getenv("DEV_ADMIN_EMAIL", "admin@example.local")
-    password = os.getenv("DEV_ADMIN_PASSWORD")
+def require_env(name: str) -> str:
+    value = os.getenv(name)
+    if not value:
+        raise SystemExit(f"Missing required environment variable: {name}")
+    return value
 
-    if not password:
-        print("DEV_ADMIN_PASSWORD is required.", file=sys.stderr)
-        return 1
 
-    db = SessionLocal()
+def import_sessionlocal():
+    candidates = [
+        "app.core.database",
+        "app.db.database",
+        "app.db.session",
+        "app.db",
+        "app.database",
+    ]
+
+    for module_name in candidates:
+        try:
+            module = importlib.import_module(module_name)
+            session_local = getattr(module, "SessionLocal", None)
+            if session_local is not None:
+                print(f"Using SessionLocal from {module_name}")
+                return session_local
+        except Exception:
+            continue
+
+    raise SystemExit(
+        "Could not find SessionLocal. Run: grep -R \"SessionLocal\" -n app"
+    )
+
+
+def hash_password(password: str) -> str:
+    # Compatible with bcrypt-based auth storage.
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+def main() -> None:
+    username = require_env("DEV_ADMIN_USERNAME")
+    email = require_env("DEV_ADMIN_EMAIL")
+    password = require_env("DEV_ADMIN_PASSWORD")
+
+    SessionLocal = import_sessionlocal()
+    db: Session = SessionLocal()
+
     try:
-        role_names = ["Student", "Teacher", "Admin"]
-        role_map: dict[str, Role] = {}
-        for role_name in role_names:
-            role = db.query(Role).filter(Role.name == role_name).first()
+        roles = {
+            1: "Student",
+            2: "Teacher",
+            3: "Admin",
+        }
+
+        for role_id, role_name in roles.items():
+            role = db.query(Role).filter(Role.id == role_id).first()
             if role is None:
-                role = Role(name=role_name)
+                role = Role(id=role_id, name=role_name)
                 db.add(role)
-                db.flush()
-            role_map[role_name] = role
+            else:
+                role.name = role_name
 
-        admin_role = role_map["Admin"]
+        admin = db.query(User).filter(User.username == username).first()
 
-        user = db.query(User).filter(User.username == username).first()
-        if user is None:
-            user = db.query(User).filter(User.email == email).first()
+        password_hash = hash_password(password)
 
-        password_hash = get_password_hash(password)
-        if user is None:
-            user = User(
+        if admin is None:
+            admin = User(
                 username=username,
                 email=email,
                 password_hash=password_hash,
-                role_id=admin_role.id,
-                role=admin_role.name,
-                is_active=True,
-                force_password_change=False,
+                role_id=3,
             )
-            db.add(user)
-            action = "created"
+            db.add(admin)
         else:
-            user.username = username
-            user.email = email
-            user.password_hash = password_hash
-            user.role_id = admin_role.id
-            user.role = admin_role.name
-            user.is_active = True
-            action = "updated"
+            admin.email = email
+            admin.password_hash = password_hash
+            admin.role_id = 3
+
+        if hasattr(admin, "role"):
+            admin.role = "Admin"
+
+        if hasattr(admin, "is_active"):
+            admin.is_active = True
 
         db.commit()
-        print(f"Development admin {action}: username={username} email={email}")
-        return 0
+        print(f"Admin user seeded/updated: {username}")
+
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()
