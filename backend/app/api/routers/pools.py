@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import require_role
 from app.db.session import get_db
-from app.models.models import DesktopPool, VMTemplate, ProxmoxCluster, ProxmoxNode, ProxmoxClusterDefault, StudentVM
+from app.models.models import DesktopPool, VMTemplate, ProxmoxCluster, ProxmoxNode, ProxmoxClusterDefault, StudentVM, GroupTemplatePermission
 from app.schemas.common import ApiEnvelope
 from app.schemas.pools import PoolCreate, PoolOut, PoolPatch
 from app.services.pool_service import PoolService
@@ -14,9 +14,28 @@ from app.services.proxmox_bootstrap import ProxmoxBootstrapService
 router = APIRouter()
 
 
+def _attach_pool_counts(db: Session, row: DesktopPool) -> DesktopPool:
+    if row.template_vmid:
+        tpl = db.query(VMTemplate).filter(VMTemplate.source_vmid == row.template_vmid).first()
+        row.linked_vm_count = db.query(StudentVM).filter(StudentVM.template_id == tpl.id).count() if tpl else 0
+    else:
+        row.linked_vm_count = 0
+    row.linked_template_count = 1 if row.template_vmid else 0
+    row.linked_group_count = (
+        db.query(GroupTemplatePermission)
+        .join(VMTemplate, VMTemplate.id == GroupTemplatePermission.template_id)
+        .filter(VMTemplate.source_vmid == row.template_vmid)
+        .count()
+        if row.template_vmid
+        else 0
+    )
+    return row
+
+
 @router.get('/pools', response_model=ApiEnvelope[list[PoolOut]])
 def list_pools(_user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
-    return ApiEnvelope(success=True, data=db.query(DesktopPool).order_by(DesktopPool.id.desc()).all())
+    rows = db.query(DesktopPool).order_by(DesktopPool.id.desc()).all()
+    return ApiEnvelope(success=True, data=[_attach_pool_counts(db, r) for r in rows])
 
 
 @router.post('/pools', response_model=ApiEnvelope[PoolOut])
@@ -34,7 +53,7 @@ async def create_pool(payload: PoolCreate, _user=Depends(require_role('Teacher',
             data['template_node'] = tpl.proxmox_node
     row = DesktopPool(**data)
     db.add(row); db.commit(); db.refresh(row)
-    return ApiEnvelope(success=True, data=row)
+    return ApiEnvelope(success=True, data=_attach_pool_counts(db, row))
 
 
 @router.get('/pools/{id}', response_model=ApiEnvelope[PoolOut])
@@ -42,7 +61,7 @@ def get_pool(id: int, _user=Depends(require_role('Teacher', 'Admin')), db: Sessi
     row = db.query(DesktopPool).filter(DesktopPool.id == id).first()
     if not row:
         raise HTTPException(status_code=404, detail='Pool not found')
-    return ApiEnvelope(success=True, data=row)
+    return ApiEnvelope(success=True, data=_attach_pool_counts(db, row))
 
 
 @router.patch('/pools/{id}', response_model=ApiEnvelope[PoolOut])
@@ -57,7 +76,7 @@ async def patch_pool(id: int, payload: PoolPatch, _user=Depends(require_role('Te
     for k, v in payload.model_dump(exclude_none=True).items():
         setattr(row, k, v)
     db.commit(); db.refresh(row)
-    return ApiEnvelope(success=True, data=row)
+    return ApiEnvelope(success=True, data=_attach_pool_counts(db, row))
 
 
 @router.delete('/pools/{id}', response_model=ApiEnvelope[dict])
@@ -80,7 +99,7 @@ def patch_pool_enabled(id: int, payload: dict, _user=Depends(require_role('Teach
         raise HTTPException(status_code=404, detail='Pool not found')
     row.enabled = bool(payload.get('enabled'))
     db.commit(); db.refresh(row)
-    return ApiEnvelope(success=True, data=row)
+    return ApiEnvelope(success=True, data=_attach_pool_counts(db, row))
 
 
 @router.patch('/pools/{id}/maintenance', response_model=ApiEnvelope[PoolOut])
@@ -90,7 +109,7 @@ def patch_pool_maintenance(id: int, payload: dict, _user=Depends(require_role('T
         raise HTTPException(status_code=404, detail='Pool not found')
     row.maintenance_mode = bool(payload.get('maintenance_mode'))
     db.commit(); db.refresh(row)
-    return ApiEnvelope(success=True, data=row)
+    return ApiEnvelope(success=True, data=_attach_pool_counts(db, row))
 
 
 @router.get('/pools/{id}/members', response_model=ApiEnvelope[list[dict]])

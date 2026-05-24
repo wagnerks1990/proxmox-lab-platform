@@ -37,3 +37,6 @@ class PoolOut(PoolBase):
     id: int
     created_at: datetime
     updated_at: datetime
+    linked_vm_count: int | None = None
+    linked_template_count: int | None = None
+    linked_group_count: int | None = None

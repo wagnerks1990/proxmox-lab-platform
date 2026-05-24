@@ -16,7 +16,8 @@ REQUIRED_TABLES = [
     "worker_runs",
     "desktop_pools",
 ]
-OPTIONAL_TABLES = ["resource_pools"]
+# resource_pools is deprecated in this codebase; desktop_pools is the active pool model.
+OPTIONAL_TABLES = []
 WARN_IF_EMPTY = {"vm_templates", "student_vms", "desktop_pools"}
 
 
