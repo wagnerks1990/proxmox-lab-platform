@@ -19,6 +19,71 @@ def _mask(v: str | None) -> str | None:
     return f"{v[:2]}***{v[-2:]}"
 
 
+def _compute_asset_constraints(
+    *,
+    online_nodes: set[str],
+    eligible_nodes: set[str],
+    templates: list[dict],
+    iso_items: list[dict],
+    placement_policy: str | None,
+):
+    template_by_vmid: dict[int, set[str]] = {}
+    for t in templates:
+        vmid = t.get('vmid')
+        node = t.get('node')
+        if vmid is None or not node:
+            continue
+        try:
+            ivmid = int(vmid)
+        except Exception:
+            continue
+        template_by_vmid.setdefault(ivmid, set()).add(str(node))
+
+    iso_by_content: dict[str, set[str]] = {}
+    iso_by_node: dict[str, set[str]] = {}
+    for i in iso_items:
+        node = i.get('node')
+        key = i.get('content_id') or i.get('name')
+        if not node or not key:
+            continue
+        node = str(node)
+        key = str(key)
+        iso_by_content.setdefault(key, set()).add(node)
+        iso_by_node.setdefault(node, set()).add(key)
+
+    required_nodes = set(eligible_nodes or set())
+    if placement_policy in {'balanced', 'prefer_default_then_balance'} and len(online_nodes) > 1:
+        required_nodes = set(online_nodes)
+
+    missing_templates_by_node: dict[str, list[int]] = {}
+    for node in sorted(required_nodes):
+        missing = sorted([vmid for vmid, ns in template_by_vmid.items() if node not in ns])
+        if missing:
+            missing_templates_by_node[node] = missing
+
+    missing_isos_by_node: dict[str, list[str]] = {}
+    all_isos = set(iso_by_content.keys())
+    for node in sorted(required_nodes):
+        node_isos = iso_by_node.get(node, set())
+        missing = sorted([iso for iso in all_isos if iso not in node_isos])
+        if missing and all_isos:
+            missing_isos_by_node[node] = missing
+
+    asset_ready_nodes = sorted([
+        node for node in required_nodes
+        if node not in missing_templates_by_node and node not in missing_isos_by_node
+    ])
+    constrained_nodes = sorted([n for n in required_nodes if n not in set(asset_ready_nodes)])
+    return {
+        'template_by_vmid': template_by_vmid,
+        'iso_by_content': iso_by_content,
+        'asset_ready_nodes': asset_ready_nodes,
+        'constrained_nodes': constrained_nodes,
+        'missing_templates_by_node': missing_templates_by_node,
+        'missing_isos_by_node': missing_isos_by_node,
+    }
+
+
 @router.get('/admin/proxmox/clusters')
 def list_clusters(_user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
     rows = db.query(ProxmoxCluster).order_by(ProxmoxCluster.id.desc()).all()
@@ -580,24 +645,20 @@ async def cluster_readiness(id: int, _user=Depends(require_role('Admin')), db: S
         if not br_nodes:
             failures.append(f'Default bridge {default_bridge} not found on discovered nodes.')
         eligible_nodes &= br_nodes
-    discovered_template_node_coverage = {}
-    for t in templates:
-        vmid = int(t.get('vmid', -1))
-        if vmid < 0:
-            continue
-        discovered_template_node_coverage.setdefault(vmid, set()).add(str(t.get('node')))
+    constraints = _compute_asset_constraints(
+        online_nodes=online_nodes,
+        eligible_nodes=eligible_nodes,
+        templates=templates,
+        iso_items=isos_result.get('items', []),
+        placement_policy=policy,
+    )
+    discovered_template_node_coverage = constraints['template_by_vmid']
     node_limited_templates = [vmid for vmid, ns in discovered_template_node_coverage.items() if len(ns) == 1 and len(online_nodes) > 1]
-
-    iso_nodes = {}
-    for i in isos_result.get('items', []):
-        key = i.get('content_id') or i.get('name')
-        if not key:
-            continue
-        iso_nodes.setdefault(key, set()).add(str(i.get('node')))
+    iso_nodes = constraints['iso_by_content']
     node_limited_isos = [k for k, ns in iso_nodes.items() if len(ns) == 1 and len(online_nodes) > 1]
 
-    if policy == 'balanced' and template_vmid and len(eligible_nodes) <= 1:
-        warnings.append('Balanced placement is limited because template/storage/network constraints reduce eligible nodes.')
+    if policy == 'balanced' and (constraints['constrained_nodes'] or len(eligible_nodes) <= 1):
+        warnings.append('Balanced placement is constrained because required assets are not available on all eligible nodes.')
     if not template_vmid and node_limited_templates:
         warnings.append('Discovered templates are node-limited; balanced placement may be constrained until templates are prepared cluster-wide.')
     if node_limited_isos:
@@ -626,6 +687,9 @@ async def cluster_readiness(id: int, _user=Depends(require_role('Admin')), db: S
         recommended_next_steps.append('Fix FAIL conditions before provisioning.')
     if warnings:
         recommended_next_steps.append('Use prefer_default_then_balance or manual policy until assets are available cluster-wide.')
+    if constraints['constrained_nodes']:
+        recommended_next_steps.append(f'Constrain placement to asset-ready nodes ({", ".join(constraints["asset_ready_nodes"]) or "none"}) until assets are available cluster-wide.')
+        recommended_next_steps.append('Use shared storage for templates/ISOs, or replicate/prepare required assets on all eligible nodes.')
     if template_vmid and len(eligible_nodes) <= 1:
         recommended_next_steps.append('Replicate/prepare template on additional nodes or use shared template storage.')
     if node_limited_isos:
@@ -645,6 +709,10 @@ async def cluster_readiness(id: int, _user=Depends(require_role('Admin')), db: S
         'networks': networks,
         'isos': isos_result.get('items', []),
         'eligible_nodes': sorted(eligible_nodes),
+        'asset_ready_nodes': constraints['asset_ready_nodes'],
+        'constrained_nodes': constraints['constrained_nodes'],
+        'missing_templates_by_node': constraints['missing_templates_by_node'],
+        'missing_isos_by_node': constraints['missing_isos_by_node'],
         'excluded_nodes': excluded_nodes,
         'excluded_node_reasons': excluded_reasons,
         'warnings': warnings,
