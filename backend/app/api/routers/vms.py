@@ -187,15 +187,29 @@ async def delete_app_record_admin(id: int, force: bool = False, _user: User = De
         raise HTTPException(status_code=403, detail='Admin access required')
     vm = db.query(StudentVM).filter(StudentVM.id == id).first()
     if not vm:
-        raise HTTPException(status_code=404, detail='VM not found')
-    exists_in_proxmox = False
-    try:
-        await ProxmoxClient().get_vm_status(vm.proxmox_node, vm.vmid)
-        exists_in_proxmox = True
-    except Exception:
-        exists_in_proxmox = False
-    if exists_in_proxmox and not force:
-        raise HTTPException(status_code=409, detail='VM exists in Proxmox; refuse app-record delete without force=true')
+        raise HTTPException(status_code=404, detail='App VM record not found')
+
+    if vm.status not in {'missing', 'error'}:
+        try:
+            await ProxmoxClient().get_vm_status(vm.proxmox_node, vm.vmid)
+            if not force:
+                raise HTTPException(status_code=409, detail='VM exists in Proxmox; refusing to remove app record without force=true')
+        except HTTPException:
+            raise
+        except Exception as exc:
+            err = str(exc).lower()
+            # Allow delete if VM is effectively not found in Proxmox; otherwise surface an integration error.
+            if not any(x in err for x in ['not found', 'does not exist', '404']):
+                raise HTTPException(status_code=502, detail='Unable to verify Proxmox VM state; refusing app-record delete until Proxmox check succeeds')
+
     db.delete(vm)
     db.commit()
-    return {'ok': True, 'deleted_app_vm_id': id, 'deleted_record_only': True, 'proxmox_vm_deleted': False}
+    return {
+        'ok': True,
+        'deleted': True,
+        'deleted_app_vm_id': id,
+        'vmid': vm.vmid,
+        'deleted_record_only': True,
+        'proxmox_vm_deleted': False,
+        'message': 'Removed app VM record only. No Proxmox VM was deleted.',
+    }
