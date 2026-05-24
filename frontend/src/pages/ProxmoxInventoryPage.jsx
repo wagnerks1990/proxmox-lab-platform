@@ -6,14 +6,16 @@ export default function ProxmoxInventoryPage(){
   const [templates,setTemplates]=useState([])
   const [filters,setFilters]=useState({q:'',status:'',node:'',template:''})
   const [busy,setBusy]=useState(false)
+  const [availability,setAvailability]=useState([])
   const [msg,setMsg]=useState('')
 
   const load = async ()=>{
     setBusy(true); setMsg('')
     try {
-      const [inv,disc] = await Promise.all([api.get('/admin/proxmox/inventory/vms'), api.get('/admin/proxmox/templates/discovered')])
+      const [inv,disc,av] = await Promise.all([api.get('/admin/proxmox/inventory/vms'), api.get('/admin/proxmox/templates/discovered'), api.get('/admin/proxmox/templates/availability')])
       setRows(Array.isArray(inv.data)?inv.data:[])
       setTemplates(Array.isArray(disc.data)?disc.data:[])
+      setAvailability(Array.isArray(av.data)?av.data:[])
     } catch(e){ setMsg(JSON.stringify(e?.response?.data?.detail || e.message)) }
     finally{ setBusy(false) }
   }
@@ -60,9 +62,9 @@ export default function ProxmoxInventoryPage(){
       <button disabled={busy} onClick={syncAll}>Sync all templates</button>
     </div>
 
-    <h4>Discovered templates</h4>
-    <table className='vm-table'><thead><tr><th>VMID</th><th>Name</th><th>Node</th><th>Imported</th><th>Action</th></tr></thead><tbody>
-      {templates.map(t=><tr key={`${t.node}-${t.vmid}`}><td>{t.vmid}</td><td>{t.name}</td><td>{t.node}</td><td>{t.already_imported?'Yes':'No'}</td><td>{t.already_imported?'—':<button disabled={busy} onClick={()=>importOne(t)}>Import</button>}</td></tr>)}
+    <h4>Discovered templates</h4><p className='muted'>Template availability across nodes is shown below.</p>
+    <table className='vm-table'><thead><tr><th>VMID</th><th>Name</th><th>Node</th><th>Imported</th><th>Available Nodes</th><th>Action</th></tr></thead><tbody>
+      {templates.map(t=>{ const av = availability.find(a => Number(a.template_vmid)===Number(t.vmid)); return <tr key={`${t.node}-${t.vmid}`}><td>{t.vmid}</td><td>{t.name}</td><td>{t.node}</td><td>{t.already_imported?'Yes':'No'}</td><td>{av ? (av.available_nodes||[]).join(', ') : '—'}</td><td>{t.already_imported?'—':<button disabled={busy} onClick={()=>importOne(t)}>Import</button>}</td></tr>})}
     </tbody></table>
 
     <h4>All Proxmox VMs/Templates</h4>

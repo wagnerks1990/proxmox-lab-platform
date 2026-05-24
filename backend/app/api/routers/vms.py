@@ -89,12 +89,49 @@ async def create_vm(payload: CreateVMRequest, user: User = Depends(get_current_u
 
     vmid = 200000 + user.id * 100 + db.query(StudentVM).count() + 1
     vm_name = f"{user.username}-{vmid}"
+
     vm = StudentVM(owner_id=user.id, template_id=template.id, vm_name=vm_name, vmid=vmid, proxmox_node=selected_node, status='provisioning', operating_system='linux', access_protocols='novnc,ssh,spice')
     db.add(vm)
     db.flush()
+
+    proxmox = ProxmoxClient()
+    message = f'VM created. Placement: {placement_reason} ({selected_node})'
+    try:
+        resp = await proxmox.clone_vm(template.proxmox_node, template.source_vmid, vmid, vm_name)
+        upid = resp.get('data')
+        if upid:
+            task = await proxmox.wait_for_task(template.proxmox_node, upid)
+            if task.get('exitstatus') not in ['OK', None]:
+                vm.status = 'error'
+                db.commit()
+                raise HTTPException(status_code=502, detail={'success': False, 'error': 'Clone task failed', 'exitstatus': task.get('exitstatus'), 'proxmox_node': selected_node, 'requested_vmid': vmid, 'selected_template': template.source_vmid, 'placement_reason': placement_reason})
+
+        try:
+            live = await proxmox.get_vm_status(selected_node, vmid)
+            vm.status = live.get('status', 'stopped')
+        except Exception:
+            vm.status = 'missing'
+            db.commit()
+            raise HTTPException(status_code=502, detail={'success': False, 'error': 'Clone completed but VM not found on selected node', 'proxmox_node': selected_node, 'requested_vmid': vmid, 'selected_template': template.source_vmid, 'placement_reason': placement_reason})
+
+        if payload.auto_start and vm.status != 'running':
+            try:
+                await proxmox.start_vm(selected_node, vmid)
+                live = await proxmox.get_vm_status(selected_node, vmid)
+                vm.status = live.get('status', vm.status)
+            except Exception as start_exc:
+                message = f'VM cloned successfully but auto-start failed: {start_exc}'
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        vm.status = 'error'
+        db.commit()
+        raise HTTPException(status_code=502, detail={'success': False, 'error': str(exc), 'proxmox_node': selected_node, 'requested_vmid': vmid, 'selected_template': template.source_vmid, 'placement_reason': placement_reason})
+
     db.add(AuditLog(actor_id=user.id, action='vm.create.placement', target_type='student_vm', target_id=str(vm.id)))
     db.commit(); db.refresh(vm)
-    return VMCreateResponse(**vm.__dict__, message=f'VM created. Placement: {placement_reason} ({selected_node})')
+    return VMCreateResponse(**vm.__dict__, message=message)
 
 
 @router.post('/vms/{id}/start', response_model=VMResponse)

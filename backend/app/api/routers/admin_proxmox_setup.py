@@ -378,3 +378,63 @@ async def admin_shutdown_vm(node: str, vmid: int, _user=Depends(require_role('Ad
 @router.get('/admin/proxmox/vms/{node}/{vmid}/status')
 async def admin_vm_status(node: str, vmid: int, _user=Depends(require_role('Admin'))):
     return await ProxmoxClient().get_vm_status(node, vmid)
+
+
+@router.get('/admin/proxmox/templates/availability')
+async def template_availability(_user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    active = db.query(ProxmoxCluster).filter(ProxmoxCluster.is_active.is_(True)).first()
+    if not active:
+        raise HTTPException(status_code=404, detail='No active Proxmox cluster configured')
+    svc = ProxmoxBootstrapService(db)
+    discovered = await svc.discover_templates(active)
+    nodes = [n.node_name for n in db.query(ProxmoxNode).filter(ProxmoxNode.cluster_id == active.id).all()]
+    out = []
+    by_vmid = {}
+    for t in discovered:
+        by_vmid.setdefault(int(t.get('vmid')), []).append(t)
+    for row in db.query(VMTemplate).all():
+        vmid = int(row.source_vmid)
+        found = by_vmid.get(vmid, [])
+        available_nodes = sorted({str(x.get('node')) for x in found if x.get('node')})
+        missing_nodes = sorted([n for n in nodes if n not in available_nodes])
+        out.append({'template_id': row.id, 'template_vmid': vmid, 'name': row.name, 'source_node': row.proxmox_node, 'available_nodes': available_nodes, 'missing_nodes': missing_nodes, 'can_balance_across_all_nodes': len(missing_nodes)==0, 'warnings': [] if len(missing_nodes)==0 else [f'Only available on {", ".join(available_nodes) or "no nodes"}']})
+    return out
+
+
+@router.get('/admin/proxmox/reconciliation/vms')
+async def reconcile_vms(_user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    inv = await proxmox_inventory_vms(_user=_user, db=db)
+    inv_map = {(x.get('node'), int(x.get('vmid'))): x for x in inv}
+    report = []
+    for vm in db.query(StudentVM).all():
+        key = (vm.proxmox_node, int(vm.vmid))
+        found = inv_map.get(key)
+        if not found:
+            vm.status = 'missing'
+            report.append({'app_vm_id': vm.id, 'vmid': vm.vmid, 'node': vm.proxmox_node, 'state': 'app_only_missing_in_proxmox'})
+        else:
+            pstatus = found.get('status')
+            state = 'matched' if pstatus == vm.status else 'status_mismatch'
+            report.append({'app_vm_id': vm.id, 'vmid': vm.vmid, 'node': vm.proxmox_node, 'state': state, 'app_status': vm.status, 'proxmox_status': pstatus})
+    db.commit()
+    proxmox_only = [x for x in inv if not x.get('app_vm_id')]
+    return {'report': report, 'proxmox_only_count': len(proxmox_only), 'proxmox_only': proxmox_only}
+
+
+@router.post('/admin/proxmox/templates/{vmid}/sync')
+async def sync_template_to_nodes(vmid: int, payload: dict, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    active = db.query(ProxmoxCluster).filter(ProxmoxCluster.is_active.is_(True)).first()
+    if not active:
+        raise HTTPException(status_code=404, detail='No active Proxmox cluster configured')
+    source_node = payload.get('source_node')
+    target_nodes = payload.get('target_nodes') or []
+    target_storage = payload.get('target_storage')
+    if not source_node or not target_nodes:
+        raise HTTPException(status_code=422, detail={'error': 'source_node and target_nodes are required'})
+    # Validation-only/dry-run to avoid unsafe assumptions on cross-node template replication semantics
+    svc = ProxmoxBootstrapService(db)
+    storage = await svc.discover_storage(active)
+    unavailable = [n for n in target_nodes if target_storage and not any(s.get('node')==n and s.get('storage')==target_storage for s in storage)]
+    if unavailable:
+        return {'ok': False, 'supported': False, 'message': 'Some target nodes do not have requested storage.', 'unavailable_nodes': unavailable}
+    return {'ok': False, 'supported': False, 'message': 'Automated cross-node template replication is not enabled in cloud-safe mode. Use Proxmox native replication/clone workflow, then refresh discovery.'}
