@@ -14,6 +14,7 @@ export default function AppLayout({ children, setUser, user }) {
       <Link className='nav-link' to='/'>Dashboard</Link>
       <Link className='nav-link' to='/vms'>My Lab VMs</Link>
       {isTeacherOrAdmin && <><Link className='nav-link' to='/admin/sessions'>Sessions</Link><Link className='nav-link' to='/pools'>Pools</Link><Link className='nav-link' to='/telemetry'>Telemetry</Link><Link className='nav-link' to='/operations'>Operations</Link><Link className='nav-link' to='/troubleshooting'>Troubleshooting</Link></>}
+      {isTeacherOrAdmin && <Link className='nav-link' to='/events'>Events / Tasks</Link>}
       {isAdmin && <Link className='nav-link' to='/create'>Create VM</Link>}
       {isAdmin && <Link className='nav-link' to='/admin/proxmox-setup'>Proxmox Setup</Link>}
       {isAdmin && <Link className='nav-link' to='/admin/proxmox-inventory'>Proxmox Inventory</Link>}
