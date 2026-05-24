@@ -47,7 +47,19 @@ class ProxmoxAssetsService:
         out = []
         for node in nodes:
             rows = await self._get(f'/nodes/{node}/storage/{storage_id}/content', {'content': 'vztmpl'})
-            out.append({'node': node, 'storage_id': storage_id, 'content_type': 'vztmpl', 'items': rows})
+            out.append({
+                'node': node,
+                'storage_id': storage_id,
+                'content_type': 'vztmpl',
+                'items': [
+                    {
+                        'volid': r.get('volid'),
+                        'filename': (r.get('volid') or '').split('/')[-1] if r.get('volid') else None,
+                        'format': r.get('content') or 'vztmpl',
+                        'size': r.get('size'),
+                    } for r in rows
+                ]
+            })
         return out
 
     async def discover_vm_templates_by_node(self, nodes: list[str]):
@@ -69,3 +81,6 @@ class ProxmoxAssetsService:
             'filename': filename,
             'url': source_url,
         })
+
+    async def task_status(self, node: str, upid: str):
+        return await self._get(f'/nodes/{node}/tasks/{upid}/status')
