@@ -40,3 +40,10 @@ class PoolOut(PoolBase):
     linked_vm_count: int | None = None
     linked_template_count: int | None = None
     linked_group_count: int | None = None
+    readiness_status: str | None = None
+    placement_warning: str | None = None
+    asset_ready_nodes: list[str] | None = None
+    constrained_nodes: list[str] | None = None
+    missing_templates_by_node: dict | None = None
+    missing_isos_by_node: dict | None = None
+    recommended_next_steps: list[str] | None = None

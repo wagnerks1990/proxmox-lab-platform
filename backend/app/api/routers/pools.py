@@ -32,16 +32,79 @@ def _attach_pool_counts(db: Session, row: DesktopPool) -> DesktopPool:
     return row
 
 
+async def _attach_pool_readiness_hints(db: Session, row: DesktopPool) -> DesktopPool:
+    row.readiness_status = None
+    row.placement_warning = None
+    row.asset_ready_nodes = []
+    row.constrained_nodes = []
+    row.missing_templates_by_node = {}
+    row.missing_isos_by_node = {}
+    row.recommended_next_steps = []
+    active = db.query(ProxmoxCluster).filter(ProxmoxCluster.is_active.is_(True)).first()
+    if not active:
+        row.readiness_status = 'FAIL'
+        row.placement_warning = 'No active Proxmox cluster configured.'
+        row.recommended_next_steps = ['Configure and activate a Proxmox cluster before using this pool.']
+        return row
+    svc = ProxmoxBootstrapService(db)
+    templates = await svc.discover_templates(active)
+    isos = await svc.discover_isos(active)
+    nodes = [n.node_name for n in db.query(ProxmoxNode).filter(ProxmoxNode.cluster_id == active.id).all() if (n.status or '').lower() in {'online', 'up'}]
+    template_nodes = {str(t.get('node')) for t in templates if row.template_vmid and int(t.get('vmid', -1)) == int(row.template_vmid)}
+    row.asset_ready_nodes = sorted(list(template_nodes)) if row.template_vmid else []
+    row.constrained_nodes = sorted([n for n in nodes if n not in template_nodes]) if row.template_vmid else []
+    if row.template_vmid:
+        row.missing_templates_by_node = {n: [row.template_vmid] for n in row.constrained_nodes}
+    else:
+        row.missing_templates_by_node = {}
+    iso_items = isos.get('items', [])
+    iso_by_node = {}
+    all_iso_ids = set()
+    for i in iso_items:
+        key = i.get('content_id') or i.get('name')
+        if not key or not i.get('node'):
+            continue
+        all_iso_ids.add(str(key))
+        iso_by_node.setdefault(str(i.get('node')), set()).add(str(key))
+    row.missing_isos_by_node = {}
+    for n in nodes:
+        missing = sorted(list(all_iso_ids - iso_by_node.get(n, set())))
+        if missing:
+            row.missing_isos_by_node[n] = missing
+    defaults = db.query(ProxmoxClusterDefault).filter(ProxmoxClusterDefault.cluster_id == active.id).first()
+    policy = getattr(defaults, 'placement_policy', None)
+    if policy == 'balanced' and row.constrained_nodes:
+        row.readiness_status = 'WARN'
+        row.placement_warning = 'Balanced placement is constrained because required assets are not available on all eligible nodes.'
+        row.recommended_next_steps = [
+            'Use shared storage for templates/ISOs.',
+            'Replicate or prepare required assets on all eligible nodes.',
+            f'Constrain placement to asset-ready nodes ({", ".join(row.asset_ready_nodes) or "none"}) until assets are available cluster-wide.',
+        ]
+    else:
+        row.readiness_status = 'PASS'
+    return row
+
+
 @router.get('/pools', response_model=ApiEnvelope[list[PoolOut]])
-def list_pools(_user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+async def list_pools(_user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
     rows = db.query(DesktopPool).order_by(DesktopPool.id.desc()).all()
-    return ApiEnvelope(success=True, data=[_attach_pool_counts(db, r) for r in rows])
+    out = []
+    for r in rows:
+        out.append(await _attach_pool_readiness_hints(db, _attach_pool_counts(db, r)))
+    return ApiEnvelope(success=True, data=out)
 
 
 @router.post('/pools', response_model=ApiEnvelope[PoolOut])
 async def create_pool(payload: PoolCreate, _user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
     svc = PoolService(db)
     data = payload.model_dump()
+    if not data.get('name'):
+        raise HTTPException(status_code=422, detail={'errors': ['name is required']})
+    size_min = int((data.get('size_min') or 0))
+    size_max = int((data.get('size_max') or data.get('desired_size') or 0))
+    if size_min < 0 or size_max < 0 or size_min > size_max:
+        raise HTTPException(status_code=422, detail={'errors': ['size_min/size_max must be non-negative and size_min <= size_max']})
     errs = svc.validate_pool_config(data)
     if errs:
         raise HTTPException(status_code=422, detail={'errors': errs})
@@ -53,15 +116,16 @@ async def create_pool(payload: PoolCreate, _user=Depends(require_role('Teacher',
             data['template_node'] = tpl.proxmox_node
     row = DesktopPool(**data)
     db.add(row); db.commit(); db.refresh(row)
-    return ApiEnvelope(success=True, data=_attach_pool_counts(db, row))
+    _write_audit(db, _user.id, 'POOL_CREATED', str(row.id), f'Pool {row.name} created')
+    return ApiEnvelope(success=True, data=await _attach_pool_readiness_hints(db, _attach_pool_counts(db, row)))
 
 
 @router.get('/pools/{id}', response_model=ApiEnvelope[PoolOut])
-def get_pool(id: int, _user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+async def get_pool(id: int, _user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
     row = db.query(DesktopPool).filter(DesktopPool.id == id).first()
     if not row:
         raise HTTPException(status_code=404, detail='Pool not found')
-    return ApiEnvelope(success=True, data=_attach_pool_counts(db, row))
+    return ApiEnvelope(success=True, data=await _attach_pool_readiness_hints(db, _attach_pool_counts(db, row)))
 
 
 @router.patch('/pools/{id}', response_model=ApiEnvelope[PoolOut])
@@ -76,7 +140,8 @@ async def patch_pool(id: int, payload: PoolPatch, _user=Depends(require_role('Te
     for k, v in payload.model_dump(exclude_none=True).items():
         setattr(row, k, v)
     db.commit(); db.refresh(row)
-    return ApiEnvelope(success=True, data=_attach_pool_counts(db, row))
+    _write_audit(db, _user.id, 'POOL_UPDATED', str(row.id), f'Pool {row.name} updated')
+    return ApiEnvelope(success=True, data=await _attach_pool_readiness_hints(db, _attach_pool_counts(db, row)))
 
 
 @router.delete('/pools/{id}', response_model=ApiEnvelope[dict])
@@ -84,9 +149,11 @@ def delete_pool(id: int, force: bool = False, _user=Depends(require_role('Teache
     row = db.query(DesktopPool).filter(DesktopPool.id == id).first()
     if not row:
         raise HTTPException(status_code=404, detail='Pool not found')
-    attached = db.query(StudentVM).filter(StudentVM.template_id.isnot(None)).count()
+    tpl = db.query(VMTemplate).filter(VMTemplate.source_vmid == row.template_vmid).first() if row.template_vmid else None
+    attached = db.query(StudentVM).filter(StudentVM.template_id == tpl.id).count() if tpl else 0
     if attached > 0 and not force:
         raise HTTPException(status_code=409, detail='Pool may have VM dependencies; pass force=true to remove app pool record')
+    _write_audit(db, _user.id, 'POOL_DELETED', str(row.id), f'Pool {row.name} deleted')
     db.delete(row)
     db.commit()
     return ApiEnvelope(success=True, data={'deleted': True, 'id': id, 'message': 'Pool app record deleted. No Proxmox VMs were changed.'})
@@ -167,3 +234,13 @@ def plan_pool(id: int, _user=Depends(require_role('Teacher', 'Admin')), db: Sess
         raise HTTPException(status_code=404, detail='Pool not found')
     plan = PoolPlanningService().build_plan(row)
     return ApiEnvelope(success=True, data=plan)
+def _write_audit(db: Session, actor_id: int, action: str, target_id: str, details: str | None = None):
+    try:
+        from app.models.models import AuditLog
+        row = AuditLog(actor_id=actor_id, action=action, target_type='desktop_pool', target_id=target_id)
+        db.add(row)
+        if details:
+            # Keep details in action text if separate column is unavailable in schema.
+            row.action = f'{action}: {details}'
+    except Exception:
+        pass
