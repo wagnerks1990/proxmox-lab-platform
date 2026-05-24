@@ -46,6 +46,11 @@ class AssetSyncService:
     def _log(self, job_id: int, level: str, message: str, meta: dict | None = None):
         self.db.add(AssetSyncJobEvent(job_id=job_id, level=level, message=message, metadata_json=str(meta or {})))
 
+    def _finish(self, job: AssetSyncJob, state: str, error: str | None = None):
+        job.state = state
+        job.error = error
+        job.finished_at = datetime.utcnow()
+
     async def sync_iso(self, filename: str, storage_id: str, source_url: str, target_nodes: list[str]):
         self._validate_url(source_url)
         await self._validate_targets(target_nodes, storage_id)
@@ -55,7 +60,7 @@ class AssetSyncService:
             current = await self.assets.discover_isos_by_node([node], storage_id)
             have = any((x.get('filename') == filename) for x in (current[0].get('items') if current else []))
             if have:
-                job.state = 'verified'
+                self._finish(job, 'verified')
                 self._log(job.id, 'info', f'ISO already present on {node}; verified idempotently.')
                 jobs.append(job)
                 continue
@@ -68,11 +73,10 @@ class AssetSyncService:
             current_after = await self.assets.discover_isos_by_node([node], storage_id)
             have_after = any((x.get('filename') == filename) for x in (current_after[0].get('items') if current_after else []))
             if have_after:
-                job.state = 'verified'
+                self._finish(job, 'verified')
                 self._log(job.id, 'info', 'ISO verified on target node.')
             else:
-                job.state = 'failed'
-                job.error = 'ISO not verified after download-url submission.'
+                self._finish(job, 'failed', 'ISO not verified after download-url submission.')
                 self._log(job.id, 'error', job.error)
             jobs.append(job)
         self.db.commit()
@@ -87,7 +91,7 @@ class AssetSyncService:
             current = await self.assets.discover_ct_templates_by_node([node], storage_id)
             have = any((x.get('filename') == filename) for x in (current[0].get('items') if current else []))
             if have:
-                job.state = 'verified'
+                self._finish(job, 'verified')
                 self._log(job.id, 'info', f'CT template already present on {node}; verified idempotently.')
                 jobs.append(job)
                 continue
@@ -99,11 +103,10 @@ class AssetSyncService:
             current_after = await self.assets.discover_ct_templates_by_node([node], storage_id)
             have_after = any((x.get('filename') == filename) for x in (current_after[0].get('items') if current_after else []))
             if have_after:
-                job.state = 'verified'
+                self._finish(job, 'verified')
                 self._log(job.id, 'info', 'CT template verified on target node.')
             else:
-                job.state = 'failed'
-                job.error = 'CT template not verified after download-url submission.'
+                self._finish(job, 'failed', 'CT template not verified after download-url submission.')
                 self._log(job.id, 'error', job.error)
             jobs.append(job)
         self.db.commit()
@@ -114,8 +117,7 @@ class AssetSyncService:
         jobs = []
         for node in target_nodes:
             job = self._new_job('local_clone_migrate_template', node, source_node=source_node, source_vmid=source_vmid)
-            job.state = 'failed'
-            job.error = 'VM template sync requires configured command runner (qm/pvesh) and is not enabled in this environment.'
+            self._finish(job, 'failed', 'VM template sync requires configured command runner (qm/pvesh) and is not enabled in this environment.')
             self._log(job.id, 'error', job.error, {'template_name': template_name, 'storage_id': storage_id})
             jobs.append(job)
         self.db.commit()

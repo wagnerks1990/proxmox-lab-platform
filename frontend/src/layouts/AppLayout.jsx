@@ -18,6 +18,7 @@ export default function AppLayout({ children, setUser, user }) {
       {isAdmin && <Link className='nav-link' to='/create'>Create VM</Link>}
       {isAdmin && <Link className='nav-link' to='/admin/proxmox-setup'>Proxmox Setup</Link>}
       {isAdmin && <Link className='nav-link' to='/admin/proxmox-inventory'>Proxmox Inventory</Link>}
+      {isAdmin && <Link className='nav-link' to='/admin/proxmox-assets'>Proxmox Assets</Link>}
       {isAdmin && <Link className='nav-link' to='/admin/users'>Users</Link>}
       {isAdmin && <Link className='nav-link' to='/admin/groups'>Groups</Link>}
       <button onClick={logout} style={{marginTop: 10, width: '100%'}}>Logout</button>
