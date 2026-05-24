@@ -56,6 +56,18 @@ def check_required_settings_present() -> None:
     ok('environment settings', 'required settings are present')
 
 
+def check_encryption_key_presence() -> None:
+    has_config_key = bool(os.getenv('CONFIG_ENCRYPTION_KEY'))
+    has_app_secret = bool(os.getenv('APP_SECRET_KEY'))
+    if has_config_key:
+        ok('encryption key', 'CONFIG_ENCRYPTION_KEY is present')
+        return
+    if has_app_secret:
+        print('[WARN] encryption key: CONFIG_ENCRYPTION_KEY not set; APP_SECRET_KEY fallback is present')
+        return
+    fail('encryption key', 'missing CONFIG_ENCRYPTION_KEY and APP_SECRET_KEY')
+
+
 def ok(name: str, detail: str) -> None:
     print(f"[OK] {name}: {detail}")
 
@@ -149,6 +161,7 @@ async def main() -> int:
 
     checks = [
         ('environment settings', check_required_settings_present),
+        ('encryption key', check_encryption_key_presence),
         ('python compile', check_imports_compile),
         ('SESSION_EXPIRED symbol', check_session_expired_symbol),
         ('alembic heads', check_alembic_single_head),
