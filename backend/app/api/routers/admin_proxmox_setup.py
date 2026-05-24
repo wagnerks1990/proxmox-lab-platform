@@ -580,8 +580,30 @@ async def cluster_readiness(id: int, _user=Depends(require_role('Admin')), db: S
         if not br_nodes:
             failures.append(f'Default bridge {default_bridge} not found on discovered nodes.')
         eligible_nodes &= br_nodes
+    discovered_template_node_coverage = {}
+    for t in templates:
+        vmid = int(t.get('vmid', -1))
+        if vmid < 0:
+            continue
+        discovered_template_node_coverage.setdefault(vmid, set()).add(str(t.get('node')))
+    node_limited_templates = [vmid for vmid, ns in discovered_template_node_coverage.items() if len(ns) == 1 and len(online_nodes) > 1]
+
+    iso_nodes = {}
+    for i in isos_result.get('items', []):
+        key = i.get('content_id') or i.get('name')
+        if not key:
+            continue
+        iso_nodes.setdefault(key, set()).add(str(i.get('node')))
+    node_limited_isos = [k for k, ns in iso_nodes.items() if len(ns) == 1 and len(online_nodes) > 1]
+
     if policy == 'balanced' and template_vmid and len(eligible_nodes) <= 1:
         warnings.append('Balanced placement is limited because template/storage/network constraints reduce eligible nodes.')
+    if not template_vmid and node_limited_templates:
+        warnings.append('Discovered templates are node-limited; balanced placement may be constrained until templates are prepared cluster-wide.')
+    if node_limited_isos:
+        warnings.append('Discovered ISO/media files are node-limited; provisioning requiring ISO/media may be constrained on other nodes.')
+    if policy == 'prefer_default_then_balance' and (node_limited_templates or node_limited_isos):
+        warnings.append('Fallback balancing is limited by template/ISO node availability.')
     excluded_nodes = sorted(list(online_nodes - eligible_nodes))
     excluded_reasons = {}
     for node_name in excluded_nodes:
@@ -606,6 +628,8 @@ async def cluster_readiness(id: int, _user=Depends(require_role('Admin')), db: S
         recommended_next_steps.append('Use prefer_default_then_balance or manual policy until assets are available cluster-wide.')
     if template_vmid and len(eligible_nodes) <= 1:
         recommended_next_steps.append('Replicate/prepare template on additional nodes or use shared template storage.')
+    if node_limited_isos:
+        recommended_next_steps.append('Use shared ISO storage or replicate required media to additional nodes before balanced provisioning.')
     if default_storage:
         recommended_next_steps.append(f'Ensure storage {default_storage} exists and is active on intended target nodes.')
     if default_bridge:
@@ -626,6 +650,20 @@ async def cluster_readiness(id: int, _user=Depends(require_role('Admin')), db: S
         'warnings': warnings,
         'failures': failures,
         'recommended_next_steps': recommended_next_steps,
+        'asset_summary': {
+            'templates_total': len(discovered_template_node_coverage),
+            'templates_cluster_wide': len([1 for _, ns in discovered_template_node_coverage.items() if len(ns) == len(online_nodes) and len(online_nodes) > 0]),
+            'templates_node_limited': len(node_limited_templates),
+            'isos_total': len(iso_nodes),
+            'isos_cluster_wide': len([1 for _, ns in iso_nodes.items() if len(ns) == len(online_nodes) and len(online_nodes) > 0]),
+            'isos_node_limited': len(node_limited_isos),
+        },
+        'placement_limitations': {
+            'template': ['node_limited_templates'] if node_limited_templates else [],
+            'storage': ['default_storage_not_cluster_wide'] if default_storage and any('storage' in w.lower() for w in warnings + failures) else [],
+            'bridge': ['default_bridge_not_cluster_wide'] if default_bridge and any('bridge' in w.lower() for w in warnings + failures) else [],
+            'iso_media': ['node_limited_isos'] if node_limited_isos else [],
+        },
     }
 
 
@@ -669,7 +707,11 @@ async def assets_sync_plan(payload: dict, _user=Depends(require_role('Admin')), 
     isos = await svc.discover_isos(active)
     nodes = [n.node_name for n in db.query(ProxmoxNode).filter(ProxmoxNode.cluster_id == active.id).all()]
 
-    if payload.get('type') == 'template':
+    req_type = payload.get('type') or payload.get('kind')
+    if req_type == 'media':
+        req_type = 'iso'
+
+    if req_type == 'template':
         vmid = int(payload.get('template_vmid', 0) or 0)
         source_node = payload.get('source_node')
         target_nodes = payload.get('target_nodes') or []
@@ -709,7 +751,7 @@ async def assets_sync_plan(payload: dict, _user=Depends(require_role('Admin')), 
             'warnings': warnings,
         }
 
-    if payload.get('type') == 'iso':
+    if req_type == 'iso':
         source_node = payload.get('source_node')
         source_storage = payload.get('source_storage')
         volume = payload.get('volume')
@@ -745,7 +787,7 @@ async def assets_sync_plan(payload: dict, _user=Depends(require_role('Admin')), 
         'ok': True,
         'status': 'dry_run',
         'supported': False,
-        'message': 'Specify payload.type as template or iso for detailed dry-run planning.',
+        'message': 'Specify payload.type or payload.kind as template or iso for detailed dry-run planning.',
         'request': payload,
     }
 

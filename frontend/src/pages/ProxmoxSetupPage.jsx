@@ -20,6 +20,8 @@ export default function ProxmoxSetupPage(){
   const [networks,setNetworks]=useState([])
   const [readiness,setReadiness]=useState(null)
   const [assetPlanMsg, setAssetPlanMsg] = useState('')
+  const [selectedTemplateVmid, setSelectedTemplateVmid] = useState('')
+  const [selectedIsoId, setSelectedIsoId] = useState('')
 
   const activeCluster = useMemo(()=>clusters.find(c=>c.is_active),[clusters])
 
@@ -43,6 +45,10 @@ export default function ProxmoxSetupPage(){
     setTemplates(Array.isArray(t.data)?t.data:[])
     setNetworks(Array.isArray(net.data)?net.data:[])
     setReadiness(ready.data || null)
+    const tpl = Array.isArray(t.data) ? t.data : []
+    if (!selectedTemplateVmid && tpl.length) setSelectedTemplateVmid(String(tpl[0].vmid))
+    const isos = ready.data?.isos || []
+    if (!selectedIsoId && isos.length) setSelectedIsoId(isos[0].content_id || isos[0].name || '')
     setDefaultsForm({ ...defaultsInit, ...(cfg.data?.defaults || {}) })
     setMsg('Discovery refreshed.')
   })
@@ -72,12 +78,21 @@ export default function ProxmoxSetupPage(){
   const doDelete = (id)=>run(async ()=>{ if(!window.confirm('Delete this app cluster record only?')) return; await api.delete(`/admin/proxmox/clusters/${id}`); await loadClusters(); if(selectedId===id){setSelectedId(null)} setMsg('Cluster record deleted (Proxmox VMs untouched).') })
   const doSaveDefaults = ()=>run(async ()=>{ if(!selectedId) return; await api.patch(`/admin/proxmox/clusters/${selectedId}/defaults`, { ...defaultsForm, default_template_vmid: defaultsForm.default_template_vmid ? Number(defaultsForm.default_template_vmid) : null }); setMsg('Defaults saved.') })
   const runTemplateSyncPlan = ()=>run(async ()=>{
-    const payload = { type:'template', template_vmid: defaultsForm.default_template_vmid ? Number(defaultsForm.default_template_vmid) : null, source_node: defaultsForm.default_node || null, target_nodes: nodes.map(n=>n.node_name).filter(n=>n!==defaultsForm.default_node), target_storage: defaultsForm.default_storage || null }
+    const selected = templates.find(t => String(t.vmid) === String(selectedTemplateVmid))
+    if (!selected) { setMsg('Select a template before generating sync plan.'); return }
+    const sourceNode = selected.node
+    const targetNodes = nodes.map(n=>n.node_name).filter(n=>n!==sourceNode)
+    const targetStorage = 'local-lvm'
+    const payload = { type:'template', template_vmid: Number(selected.vmid), source_node: sourceNode, target_nodes: targetNodes, target_storage: targetStorage, mode: 'full' }
     const { data } = await api.post('/admin/proxmox/assets/sync-plan', payload)
     setAssetPlanMsg(JSON.stringify(data))
   })
   const runIsoSyncPlan = ()=>run(async ()=>{
-    const payload = { type:'iso', source_node: defaultsForm.default_node || null, source_storage: defaultsForm.default_storage || null, volume: null, target_nodes: nodes.map(n=>n.node_name).filter(n=>n!==defaultsForm.default_node), target_storage: defaultsForm.default_storage || null }
+    const isos = readiness?.isos || []
+    const selected = isos.find(i => (i.content_id || i.name) === selectedIsoId)
+    if (!selected) { setMsg('Select ISO/media before generating sync plan.'); return }
+    const sourceNode = selected.node
+    const payload = { type:'iso', source_node: sourceNode, source_storage: selected.storage, volume: selected.content_id, target_nodes: nodes.map(n=>n.node_name).filter(n=>n!==sourceNode), target_storage: 'local' }
     const { data } = await api.post('/admin/proxmox/assets/sync-plan', payload)
     setAssetPlanMsg(JSON.stringify(data))
   })
@@ -129,8 +144,16 @@ export default function ProxmoxSetupPage(){
         {(readiness.recommended_next_steps || []).length ? <ul>{readiness.recommended_next_steps.map((w,i)=><li key={i} className='muted'>{w}</li>)}</ul> : null}
         <p className='muted'>Template/media sync automation may be unsupported. Use shared storage or manual Proxmox replication when guided below.</p>
         <button disabled={loading} onClick={()=>refreshDiscovery(selectedId)}>Refresh Readiness</button>
-        <button disabled={loading} onClick={runTemplateSyncPlan}>Template Sync Plan (Dry-run)</button>
-        <button disabled={loading} onClick={runIsoSyncPlan}>ISO Sync Plan (Dry-run)</button>
+        <select className='input' value={selectedTemplateVmid} onChange={e=>setSelectedTemplateVmid(e.target.value)}>
+          <option value=''>Select template for dry-run</option>
+          {(templates || []).map((t,idx)=><option key={`${t.node}-${t.vmid}-${idx}`} value={t.vmid}>{t.vmid} - {t.name} ({t.node})</option>)}
+        </select>
+        <button disabled={loading || !selectedTemplateVmid} onClick={runTemplateSyncPlan}>Template Sync Plan (Dry-run)</button>
+        <select className='input' value={selectedIsoId} onChange={e=>setSelectedIsoId(e.target.value)}>
+          <option value=''>Select ISO/media for dry-run</option>
+          {(readiness?.isos || []).map((i,idx)=><option key={`${i.node}-${i.storage}-${i.content_id||idx}`} value={i.content_id || i.name}>{i.name} ({i.node}/{i.storage})</option>)}
+        </select>
+        <button disabled={loading || !selectedIsoId} onClick={runIsoSyncPlan}>ISO Sync Plan (Dry-run)</button>
         {readiness?.isos?.length===0 ? <p className='muted'>ISO/media readiness: empty or unsupported in current cluster discovery.</p> : <p className='muted'>ISO/media discovered: {readiness.isos.length}</p>}
         {assetPlanMsg ? <pre className='muted' style={{whiteSpace:'pre-wrap'}}>{assetPlanMsg}</pre> : null}
       </div> : null}
