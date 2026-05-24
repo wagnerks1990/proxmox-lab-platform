@@ -10,6 +10,7 @@ from app.core.config import settings
 import hashlib
 from app.services.proxmox_bootstrap import ProxmoxBootstrapService
 from app.services.proxmox_resource_stats import ProxmoxResourceStatsService
+from app.services.asset_server_control import AssetServerControl
 
 router = APIRouter()
 
@@ -228,6 +229,38 @@ def host_access_validate(payload: dict, _user=Depends(require_role('Admin')), db
     if not result:
         return {'ok': False, 'cluster_id': cluster_id, 'validated_nodes': [], 'message': 'Host runner is not configured for any cluster nodes.'}
     return {'ok': True, 'cluster_id': cluster_id, 'validated_nodes': result}
+
+
+@router.get('/admin/proxmox/asset-server/status')
+def asset_server_status(kind: str, cluster_id: int | None = None, source_node: str | None = None, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    try:
+        return AssetServerControl(db).status(kind=kind, cluster_id=cluster_id, source_node=source_node)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post('/admin/proxmox/asset-server/install')
+def asset_server_install(payload: dict, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    try:
+        return AssetServerControl(db).action('install', kind=payload.get('kind'), cluster_id=payload.get('cluster_id'), source_node=payload.get('source_node'), bind_address=payload.get('bind_address'), port=payload.get('port'))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post('/admin/proxmox/asset-server/start')
+def asset_server_start(payload: dict, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    try:
+        return AssetServerControl(db).action('start', kind=payload.get('kind'), cluster_id=payload.get('cluster_id'), source_node=payload.get('source_node'), bind_address=payload.get('bind_address'), port=payload.get('port'))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post('/admin/proxmox/asset-server/stop')
+def asset_server_stop(payload: dict, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    try:
+        return AssetServerControl(db).action('stop', kind=payload.get('kind'), cluster_id=payload.get('cluster_id'), source_node=payload.get('source_node'), bind_address=payload.get('bind_address'), port=payload.get('port'))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get('/admin/proxmox/clusters/{id}')

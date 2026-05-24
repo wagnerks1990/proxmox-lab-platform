@@ -9,6 +9,7 @@ export default function ProxmoxAssetsPage() {
   const [jobs, setJobs] = useState([])
   const [jobDetails, setJobDetails] = useState({})
   const [hostAccess, setHostAccess] = useState(null)
+  const [assetServer, setAssetServer] = useState({ iso: null, ct_template: null })
 
   const [isoForm, setIsoForm] = useState({ filename: '', source_url: '', target_nodes: [] })
   const [ctForm, setCtForm] = useState({ filename: '', source_url: '', target_nodes: [] })
@@ -29,6 +30,11 @@ export default function ProxmoxAssetsPage() {
         if (active?.id) {
           const hs = await api.get(`/admin/proxmox/host-access/status?cluster_id=${active.id}`)
           setHostAccess(hs.data)
+          const [isoSrv, ctSrv] = await Promise.all([
+            api.get(`/admin/proxmox/asset-server/status?kind=iso&cluster_id=${active.id}`),
+            api.get(`/admin/proxmox/asset-server/status?kind=ct_template&cluster_id=${active.id}`),
+          ])
+          setAssetServer({ iso: isoSrv.data, ct_template: ctSrv.data })
         }
       } catch (_) {}
     } catch (e) {
@@ -93,6 +99,18 @@ export default function ProxmoxAssetsPage() {
   const bg = status === 'PASS' ? '#ecfdf5' : status === 'WARN' ? '#fffbeb' : '#fef2f2'
 
   const vmSyncSupported = hostAccess?.mode === 'host_runner'
+  const assetServerManageSupported = hostAccess?.mode === 'host_runner'
+
+  const assetServerAction = async (kind, action) => {
+    setBusy(true); setMsg('')
+    try {
+      const clusters = await api.get('/admin/proxmox/clusters')
+      const active = (clusters.data || []).find(c => c.is_active)
+      if (!active?.id) return
+      await api.post(`/admin/proxmox/asset-server/${action}`, { kind, cluster_id: active.id })
+      await load()
+    } catch (e) { setMsg(JSON.stringify(e?.response?.data?.detail || e.message)) } finally { setBusy(false) }
+  }
 
   return <section className='panel'>
     <h3>Proxmox Assets</h3>
@@ -100,6 +118,19 @@ export default function ProxmoxAssetsPage() {
     <div className='group'>
       <button disabled={busy} onClick={load}>Refresh inventory/readiness</button>
       {readiness?.generated_at ? <span className='muted'>Generated: {readiness.generated_at}</span> : null}
+    </div>
+
+    <div className='panel'>
+      <h4>Asset Source Server</h4>
+      <p className='muted'>ISO base URL: {hostAccess?.asset_source_iso_base_url || 'not configured'}</p>
+      <p className='muted'>CT base URL: {hostAccess?.asset_source_ct_base_url || 'not configured'}</p>
+      {!assetServerManageSupported ? <p className='muted'>Host runner is not configured. Configure Host Access in Proxmox Setup before the app can manage source file serving.</p> : null}
+      <table className='vm-table'><thead><tr><th>Kind</th><th>Status</th><th>Source Node</th><th>Actions</th></tr></thead><tbody>
+        {['iso','ct_template'].map(k => {
+          const s = assetServer[k]
+          return <tr key={k}><td>{k}</td><td style={{color:s?.status==='running'?'#065f46':(s?.status==='stopped'?'#92400e':'#b45309')}}>{s?.status || 'unknown'}</td><td>{s?.source_node || '-'}</td><td><div className='group'><button disabled={busy || !assetServerManageSupported} onClick={()=>assetServerAction(k,'install')}>Install/Update</button><button disabled={busy || !assetServerManageSupported} onClick={()=>assetServerAction(k,'start')}>Start</button><button disabled={busy || !assetServerManageSupported} onClick={()=>assetServerAction(k,'stop')}>Stop</button></div></td></tr>
+        })}
+      </tbody></table>
     </div>
 
     <div className='panel'>
