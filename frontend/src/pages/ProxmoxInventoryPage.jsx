@@ -7,15 +7,23 @@ export default function ProxmoxInventoryPage(){
   const [filters,setFilters]=useState({q:'',status:'',node:'',template:''})
   const [busy,setBusy]=useState(false)
   const [availability,setAvailability]=useState([])
+  const [isoSummary,setIsoSummary]=useState({ items: [], warnings: [] })
   const [msg,setMsg]=useState('')
 
   const load = async ()=>{
     setBusy(true); setMsg('')
     try {
-      const [inv,disc,av] = await Promise.all([api.get('/admin/proxmox/inventory/vms'), api.get('/admin/proxmox/templates/discovered'), api.get('/admin/proxmox/templates/availability')])
+      const [inv,disc,av,clusters] = await Promise.all([api.get('/admin/proxmox/inventory/vms'), api.get('/admin/proxmox/templates/discovered'), api.get('/admin/proxmox/templates/availability'), api.get('/admin/proxmox/clusters')])
       setRows(Array.isArray(inv.data)?inv.data:[])
       setTemplates(Array.isArray(disc.data)?disc.data:[])
       setAvailability(Array.isArray(av.data)?av.data:[])
+      const active = (Array.isArray(clusters.data) ? clusters.data : []).find(c => c.is_active)
+      if (active?.id) {
+        const iso = await api.get(`/admin/proxmox/clusters/${active.id}/isos`)
+        setIsoSummary({ items: iso?.data?.items || [], warnings: iso?.data?.warnings || [] })
+      } else {
+        setIsoSummary({ items: [], warnings: ['No active cluster for ISO/media discovery.'] })
+      }
     } catch(e){ setMsg(JSON.stringify(e?.response?.data?.detail || e.message)) }
     finally{ setBusy(false) }
   }
@@ -64,6 +72,7 @@ export default function ProxmoxInventoryPage(){
     </div>
 
     <h4>Discovered templates</h4><p className='muted'>Template availability across nodes is shown below.</p>
+    <p className='muted'>ISO/media discovered: {isoSummary.items.length}{isoSummary.warnings.length ? ` · ${isoSummary.warnings.join('; ')}` : ''}</p>
     <table className='vm-table'><thead><tr><th>VMID</th><th>Name</th><th>Node</th><th>Imported</th><th>Available Nodes</th><th>Action</th></tr></thead><tbody>
       {templates.map(t=>{ const av = availability.find(a => Number(a.template_vmid)===Number(t.vmid)); return <tr key={`${t.node}-${t.vmid}`}><td>{t.vmid}</td><td>{t.name}</td><td>{t.node}</td><td>{t.already_imported?'Yes':'No'}</td><td>{av ? (av.available_nodes||[]).join(', ') : '—'}{av?.warnings?.length?<div className='muted'>{av.warnings.join('; ')}</div>:null}{av?.recommended_action?<div className='muted'>{av.recommended_action}</div>:null}</td><td>{t.already_imported?'—':<button disabled={busy} onClick={()=>importOne(t)}>Import</button>}<button disabled={busy} onClick={()=>syncTemplatePlan(t)}>Sync/Prepare</button></td></tr>})}
     </tbody></table>

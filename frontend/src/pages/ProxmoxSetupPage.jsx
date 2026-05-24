@@ -19,6 +19,7 @@ export default function ProxmoxSetupPage(){
   const [templates,setTemplates]=useState([])
   const [networks,setNetworks]=useState([])
   const [readiness,setReadiness]=useState(null)
+  const [assetPlanMsg, setAssetPlanMsg] = useState('')
 
   const activeCluster = useMemo(()=>clusters.find(c=>c.is_active),[clusters])
 
@@ -70,6 +71,16 @@ export default function ProxmoxSetupPage(){
   const doActivate = (id)=>run(async ()=>{ await api.post(`/admin/proxmox/clusters/${id}/activate`); await loadClusters(); setMsg('Cluster activated.') })
   const doDelete = (id)=>run(async ()=>{ if(!window.confirm('Delete this app cluster record only?')) return; await api.delete(`/admin/proxmox/clusters/${id}`); await loadClusters(); if(selectedId===id){setSelectedId(null)} setMsg('Cluster record deleted (Proxmox VMs untouched).') })
   const doSaveDefaults = ()=>run(async ()=>{ if(!selectedId) return; await api.patch(`/admin/proxmox/clusters/${selectedId}/defaults`, { ...defaultsForm, default_template_vmid: defaultsForm.default_template_vmid ? Number(defaultsForm.default_template_vmid) : null }); setMsg('Defaults saved.') })
+  const runTemplateSyncPlan = ()=>run(async ()=>{
+    const payload = { type:'template', template_vmid: defaultsForm.default_template_vmid ? Number(defaultsForm.default_template_vmid) : null, source_node: defaultsForm.default_node || null, target_nodes: nodes.map(n=>n.node_name).filter(n=>n!==defaultsForm.default_node), target_storage: defaultsForm.default_storage || null }
+    const { data } = await api.post('/admin/proxmox/assets/sync-plan', payload)
+    setAssetPlanMsg(JSON.stringify(data))
+  })
+  const runIsoSyncPlan = ()=>run(async ()=>{
+    const payload = { type:'iso', source_node: defaultsForm.default_node || null, source_storage: defaultsForm.default_storage || null, volume: null, target_nodes: nodes.map(n=>n.node_name).filter(n=>n!==defaultsForm.default_node), target_storage: defaultsForm.default_storage || null }
+    const { data } = await api.post('/admin/proxmox/assets/sync-plan', payload)
+    setAssetPlanMsg(JSON.stringify(data))
+  })
 
   return <section className='panel'>
     <h2>Proxmox Setup</h2>
@@ -116,7 +127,12 @@ export default function ProxmoxSetupPage(){
         {(readiness.warnings || []).length ? <ul>{readiness.warnings.map((w,i)=><li key={i} className='muted'>{w}</li>)}</ul> : null}
         {(readiness.failures || []).length ? <ul>{readiness.failures.map((w,i)=><li key={i} className='muted'>{w}</li>)}</ul> : null}
         {(readiness.recommended_next_steps || []).length ? <ul>{readiness.recommended_next_steps.map((w,i)=><li key={i} className='muted'>{w}</li>)}</ul> : null}
+        <p className='muted'>Template/media sync automation may be unsupported. Use shared storage or manual Proxmox replication when guided below.</p>
         <button disabled={loading} onClick={()=>refreshDiscovery(selectedId)}>Refresh Readiness</button>
+        <button disabled={loading} onClick={runTemplateSyncPlan}>Template Sync Plan (Dry-run)</button>
+        <button disabled={loading} onClick={runIsoSyncPlan}>ISO Sync Plan (Dry-run)</button>
+        {readiness?.isos?.length===0 ? <p className='muted'>ISO/media readiness: empty or unsupported in current cluster discovery.</p> : <p className='muted'>ISO/media discovered: {readiness.isos.length}</p>}
+        {assetPlanMsg ? <pre className='muted' style={{whiteSpace:'pre-wrap'}}>{assetPlanMsg}</pre> : null}
       </div> : null}
       <h3>Defaults</h3>
       <p className='muted'>Default node = where new VMs are created unless placement policy selects another. Default storage = target storage for VM disks. Default bridge = VM network bridge. Default template VMID = template clone source.</p><p className='muted'>If resource data is unavailable, placement uses online node list with deterministic fallback rules.</p>

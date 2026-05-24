@@ -147,6 +147,7 @@ async def start_vm(id: int, user: User = Depends(get_current_user), db: Session 
     vm = _get_vm_for_user(db, user, id)
     await ProxmoxClient().start_vm(vm.proxmox_node, vm.vmid)
     vm.status = (await ProxmoxClient().get_vm_status(vm.proxmox_node, vm.vmid)).get('status', vm.status)
+    db.add(AuditLog(actor_id=user.id, action='vm.start', target_type='student_vm', target_id=str(vm.id)))
     db.commit(); db.refresh(vm)
     bus.publish(DomainEvent(name=VM_STARTED, payload={'vm_id': vm.id, 'actor_id': user.id}))
     return vm
@@ -157,6 +158,7 @@ async def stop_vm(id: int, user: User = Depends(get_current_user), db: Session =
     vm = _get_vm_for_user(db, user, id)
     await ProxmoxClient().stop_vm(vm.proxmox_node, vm.vmid)
     vm.status = (await ProxmoxClient().get_vm_status(vm.proxmox_node, vm.vmid)).get('status', vm.status)
+    db.add(AuditLog(actor_id=user.id, action='vm.stop', target_type='student_vm', target_id=str(vm.id)))
     db.commit(); db.refresh(vm)
     return vm
 
@@ -166,6 +168,7 @@ async def reboot_vm(id: int, user: User = Depends(get_current_user), db: Session
     vm = _get_vm_for_user(db, user, id)
     await ProxmoxClient().reboot_vm(vm.proxmox_node, vm.vmid)
     vm.status = (await ProxmoxClient().get_vm_status(vm.proxmox_node, vm.vmid)).get('status', vm.status)
+    db.add(AuditLog(actor_id=user.id, action='vm.reboot', target_type='student_vm', target_id=str(vm.id)))
     db.commit(); db.refresh(vm)
     return vm
 
@@ -210,6 +213,7 @@ async def delete_app_record_admin(id: int, force: bool = False, _user: User = De
             if not any(x in err for x in ['not found', 'does not exist', '404']):
                 raise HTTPException(status_code=502, detail='Unable to verify Proxmox VM state; refusing app-record delete until Proxmox check succeeds')
 
+    db.add(AuditLog(actor_id=_user.id, action='vm.app_record.delete', target_type='student_vm', target_id=str(vm.id)))
     db.delete(vm)
     db.commit()
     return {

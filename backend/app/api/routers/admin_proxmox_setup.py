@@ -634,7 +634,27 @@ async def assets_readiness(_user=Depends(require_role('Admin')), db: Session = D
     active = db.query(ProxmoxCluster).filter(ProxmoxCluster.is_active.is_(True)).first()
     if not active:
         raise HTTPException(status_code=404, detail='No active Proxmox cluster configured')
-    return await cluster_readiness(active.id, _user=_user, db=db)
+    readiness = await cluster_readiness(active.id, _user=_user, db=db)
+    templates = readiness.get('templates', [])
+    storage = readiness.get('storage', [])
+    networks = readiness.get('networks', [])
+    isos = readiness.get('isos', [])
+    online_nodes = [n.get('node_name') for n in readiness.get('nodes', []) if (n.get('status') or '').lower() in {'online', 'up'}]
+    template_nodes = sorted({str(t.get('node')) for t in templates if t.get('node')})
+    storage_nodes = sorted({str(s.get('node')) for s in storage if str(s.get('active')).lower() not in {'0', 'false', 'none'}})
+    bridge_nodes = sorted({str(n.get('node')) for n in networks if n.get('bridge')})
+    return {
+        **readiness,
+        'summaries': {
+            'template_readiness': {'templates_discovered': len(templates), 'nodes_with_templates': template_nodes},
+            'iso_media_readiness': {'iso_items_discovered': len(isos)},
+            'storage_readiness': {'storage_entries': len(storage), 'nodes_with_active_storage': storage_nodes},
+            'bridge_readiness': {'bridge_entries': len(networks), 'nodes_with_bridges': bridge_nodes},
+            'placement_limitations': readiness.get('warnings', []),
+            'recommended_actions': readiness.get('recommended_next_steps', []),
+            'online_nodes': online_nodes,
+        },
+    }
 
 
 @router.post('/admin/proxmox/assets/sync-plan')
