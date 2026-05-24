@@ -17,4 +17,11 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
 
 @router.get('/auth/me', response_model=UserResponse)
 def me(user=Depends(get_current_user)):
-    return UserResponse(id=user.id, username=user.username, email=user.email, role=get_role_name(user))
+    return UserResponse(
+        id=user.id,
+        username=user.username,
+        email=user.email,
+        role=get_role_name(user),
+        role_id=getattr(user, 'role_id', None),
+        is_active=getattr(user, 'is_active', True),
+    )
