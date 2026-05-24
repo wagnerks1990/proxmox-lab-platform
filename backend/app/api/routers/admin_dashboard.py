@@ -1,5 +1,5 @@
 from datetime import datetime
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
@@ -9,14 +9,13 @@ from app.models.models import (
     ProxmoxCluster,
     ProxmoxNode,
     ProxmoxClusterDefault,
-    Role,
     StudentVM,
     User,
     VMTemplate,
     VMSession,
     AuditLog,
 )
-from app.services.health_service import HealthService
+from app.services.health_service import health_summary
 from app.services.rbac import get_role_name
 
 router = APIRouter()
@@ -25,8 +24,8 @@ router = APIRouter()
 @router.get('/admin/dashboard/summary')
 async def dashboard_summary(_user=Depends(get_current_user), db: Session = Depends(get_db)):
     if get_role_name(_user) not in {'Teacher', 'Admin'}:
-        return {'detail': 'Forbidden'}
-    health = await HealthService(db).check()
+        raise HTTPException(status_code=403, detail='Forbidden')
+    health = await health_summary(db)
     active = db.query(ProxmoxCluster).filter(ProxmoxCluster.is_active.is_(True)).first()
     defaults = db.query(ProxmoxClusterDefault).filter(ProxmoxClusterDefault.cluster_id == (active.id if active else -1)).first()
     nodes = db.query(ProxmoxNode).filter(ProxmoxNode.cluster_id == (active.id if active else -1)).all() if active else []
