@@ -18,6 +18,7 @@ export default function ProxmoxSetupPage(){
   const [storage,setStorage]=useState([])
   const [templates,setTemplates]=useState([])
   const [networks,setNetworks]=useState([])
+  const [readiness,setReadiness]=useState(null)
 
   const activeCluster = useMemo(()=>clusters.find(c=>c.is_active),[clusters])
 
@@ -27,18 +28,20 @@ export default function ProxmoxSetupPage(){
   useEffect(()=>{ loadClusters().catch(()=>setClusters([])) },[])
 
   const refreshDiscovery = (id)=>run(async ()=>{
-    const [n,s,t,net,cfg] = await Promise.all([
+    const [n,s,t,net,cfg,ready] = await Promise.all([
       api.get(`/admin/proxmox/clusters/${id}/nodes`),
       api.get(`/admin/proxmox/clusters/${id}/storage`),
       api.get(`/admin/proxmox/clusters/${id}/templates`),
       api.get(`/admin/proxmox/clusters/${id}/networks`),
       api.get(`/admin/proxmox/clusters/${id}`),
+      api.get(`/admin/proxmox/clusters/${id}/readiness`),
     ])
     setSelectedId(id)
     setNodes(Array.isArray(n.data)?n.data:[])
     setStorage(Array.isArray(s.data)?s.data:[])
     setTemplates(Array.isArray(t.data)?t.data:[])
     setNetworks(Array.isArray(net.data)?net.data:[])
+    setReadiness(ready.data || null)
     setDefaultsForm({ ...defaultsInit, ...(cfg.data?.defaults || {}) })
     setMsg('Discovery refreshed.')
   })
@@ -105,6 +108,13 @@ export default function ProxmoxSetupPage(){
     </tbody></table>}
 
     {selectedId ? <div className='panel'>
+      {readiness ? <div className='panel'>
+        <h3>Cluster Readiness: {readiness.status}</h3>
+        <p className='muted'>Eligible nodes: {(readiness.eligible_nodes || []).join(', ') || 'none'}</p>
+        {(readiness.warnings || []).length ? <ul>{readiness.warnings.map((w,i)=><li key={i} className='muted'>{w}</li>)}</ul> : null}
+        {(readiness.failures || []).length ? <ul>{readiness.failures.map((w,i)=><li key={i} className='muted'>{w}</li>)}</ul> : null}
+        <button disabled={loading} onClick={()=>refreshDiscovery(selectedId)}>Refresh Readiness</button>
+      </div> : null}
       <h3>Defaults</h3>
       <p className='muted'>Default node = where new VMs are created unless placement policy selects another. Default storage = target storage for VM disks. Default bridge = VM network bridge. Default template VMID = template clone source.</p><p className='muted'>If resource data is unavailable, placement uses online node list with deterministic fallback rules.</p>
       <div className='group'>

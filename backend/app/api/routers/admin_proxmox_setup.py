@@ -485,3 +485,96 @@ async def sync_template_to_nodes(vmid: int, payload: dict, _user=Depends(require
     if unavailable:
         return {'ok': False, 'supported': False, 'message': 'Some target nodes do not have requested storage.', 'unavailable_nodes': unavailable}
     return {'ok': False, 'supported': False, 'message': 'Automated cross-node template replication is not enabled in cloud-safe mode. Use Proxmox native replication/clone workflow, then refresh discovery.'}
+
+
+@router.get('/admin/proxmox/clusters/{id}/isos')
+async def list_cluster_isos(id: int, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    row = db.query(ProxmoxCluster).filter(ProxmoxCluster.id == id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail='Cluster not found')
+    result = await ProxmoxBootstrapService(db).discover_isos(row)
+    return {'items': result.get('items', []), 'warnings': result.get('warnings', [])}
+
+
+@router.get('/admin/proxmox/clusters/{id}/readiness')
+async def cluster_readiness(id: int, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    cluster = db.query(ProxmoxCluster).filter(ProxmoxCluster.id == id).first()
+    if not cluster:
+        raise HTTPException(status_code=404, detail='Cluster not found')
+    svc = ProxmoxBootstrapService(db)
+    nodes = [{'node_name': n.node_name, 'status': n.status, 'memory_total': n.memory_total, 'memory_used': n.memory_used, 'cpu_total': n.cpu_total, 'cpu_used': n.cpu_used} for n in db.query(ProxmoxNode).filter(ProxmoxNode.cluster_id == id).all()]
+    storage = await svc.discover_storage(cluster)
+    templates = await svc.discover_templates(cluster)
+    networks = await svc.discover_networks(cluster)
+    isos_result = await svc.discover_isos(cluster)
+    defaults = db.query(ProxmoxClusterDefault).filter(ProxmoxClusterDefault.cluster_id == id).first()
+    template_vmid = getattr(defaults, 'default_template_vmid', None)
+    default_storage = getattr(defaults, 'default_storage', None)
+    default_bridge = getattr(defaults, 'default_bridge', None)
+    policy = getattr(defaults, 'placement_policy', None)
+    online_nodes = {n['node_name'] for n in nodes if (n.get('status') or '').lower() in {'online', 'up'}}
+    eligible_nodes = set(online_nodes)
+    warnings = list(isos_result.get('warnings', []))
+    failures = []
+    if not online_nodes:
+        failures.append('No online nodes discovered in active cluster.')
+    if template_vmid:
+        tpl_nodes = {str(t.get('node')) for t in templates if int(t.get('vmid', -1)) == int(template_vmid)}
+        if not tpl_nodes:
+            failures.append(f'Default template VMID {template_vmid} was not found on discovered nodes.')
+        elif tpl_nodes != online_nodes:
+            warnings.append(f'Default template VMID {template_vmid} available only on: {", ".join(sorted(tpl_nodes))}.')
+        eligible_nodes &= tpl_nodes
+    if default_storage:
+        st_nodes = {str(s.get('node')) for s in storage if s.get('storage') == default_storage and str(s.get('active')).lower() not in {'0', 'false', 'none'}}
+        if not st_nodes:
+            failures.append(f'Default storage {default_storage} not available on any discovered node.')
+        eligible_nodes &= st_nodes
+    if default_bridge:
+        br_nodes = {str(n.get('node')) for n in networks if n.get('bridge') == default_bridge}
+        if not br_nodes:
+            failures.append(f'Default bridge {default_bridge} not found on discovered nodes.')
+        eligible_nodes &= br_nodes
+    if policy == 'balanced' and template_vmid and len(eligible_nodes) <= 1:
+        warnings.append('Balanced placement is limited because template/storage/network constraints reduce eligible nodes.')
+    status = 'FAIL' if failures else ('WARN' if warnings else 'PASS')
+    return {
+        'status': status,
+        'cluster': {'id': cluster.id, 'name': cluster.name, 'api_url': cluster.api_url, 'is_active': cluster.is_active},
+        'defaults': {'default_node': getattr(defaults, 'default_node', None), 'default_storage': default_storage, 'default_bridge': default_bridge, 'default_template_vmid': template_vmid, 'placement_policy': policy, 'clone_mode': getattr(defaults, 'clone_mode', None)},
+        'nodes': nodes,
+        'storage': storage,
+        'templates': templates,
+        'networks': networks,
+        'isos': isos_result.get('items', []),
+        'eligible_nodes': sorted(eligible_nodes),
+        'warnings': warnings,
+        'failures': failures,
+    }
+
+
+@router.get('/admin/proxmox/assets/readiness')
+async def assets_readiness(_user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    active = db.query(ProxmoxCluster).filter(ProxmoxCluster.is_active.is_(True)).first()
+    if not active:
+        raise HTTPException(status_code=404, detail='No active Proxmox cluster configured')
+    return await cluster_readiness(active.id, _user=_user, db=db)
+
+
+@router.post('/admin/proxmox/assets/sync-plan')
+async def assets_sync_plan(payload: dict, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    return {'ok': True, 'status': 'dry_run', 'supported': False, 'message': 'Sync plan is dry-run only. Use Proxmox native replication/shared storage for real sync.', 'request': payload or {}}
+
+
+@router.post('/admin/proxmox/assets/sync-template')
+async def assets_sync_template(payload: dict, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    if not payload.get('confirm'):
+        raise HTTPException(status_code=400, detail={'error': 'confirm=true required for explicit admin sync action'})
+    return {'ok': False, 'status': 'unsupported', 'supported': False, 'message': 'Automated template sync is not enabled in cloud-safe mode. Use shared storage or manual Proxmox replication.'}
+
+
+@router.post('/admin/proxmox/assets/sync-iso')
+async def assets_sync_iso(payload: dict, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    if not payload.get('confirm'):
+        raise HTTPException(status_code=400, detail={'error': 'confirm=true required for explicit admin sync action'})
+    return {'ok': False, 'status': 'unsupported', 'supported': False, 'message': 'Automated ISO/media sync is not enabled in cloud-safe mode. Use shared storage or manual Proxmox copy.'}

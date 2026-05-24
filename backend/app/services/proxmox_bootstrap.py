@@ -196,6 +196,47 @@ class ProxmoxBootstrapService:
                         })
         return out
 
+    async def discover_isos(self, cluster: ProxmoxCluster) -> dict:
+        headers = self._cluster_headers(cluster)
+        if not headers:
+            return {'items': [], 'warnings': ['Missing token secret for cluster']}
+        out: list[dict] = []
+        warnings: list[str] = []
+        async with httpx.AsyncClient(verify=cluster.verify_ssl, timeout=20, headers=headers) as client:
+            nodes_resp = await client.get(f"{cluster.api_url}/nodes")
+            nodes_resp.raise_for_status()
+            for node in nodes_resp.json().get('data', []):
+                node_name = node.get('node')
+                if not node_name:
+                    continue
+                s = await client.get(f"{cluster.api_url}/nodes/{node_name}/storage")
+                if s.status_code >= 400:
+                    warnings.append(f'Could not read storage list for node {node_name}')
+                    continue
+                for st in s.json().get('data', []):
+                    storage = st.get('storage')
+                    if not storage:
+                        continue
+                    c = await client.get(f"{cluster.api_url}/nodes/{node_name}/storage/{storage}/content")
+                    if c.status_code >= 400:
+                        continue
+                    for item in c.json().get('data', []):
+                        volid = item.get('volid') or ''
+                        ctype = item.get('content')
+                        if ctype != 'iso' and '/iso/' not in volid and not volid.endswith('.iso'):
+                            continue
+                        out.append({
+                            'node': node_name,
+                            'storage': storage,
+                            'content_id': volid,
+                            'name': item.get('text') or volid.split('/')[-1],
+                            'content_type': ctype,
+                            'size': item.get('size'),
+                        })
+        if not out and not warnings:
+            warnings.append('No ISO/media content discovered. Configure ISO storage or use shared media.')
+        return {'items': out, 'warnings': warnings}
+
     async def _login(self, api_url: str, verify_ssl: bool, username: str, password: str) -> dict:
         async with httpx.AsyncClient(verify=verify_ssl, timeout=20) as client:
             r = await client.post(f'{api_url}/access/ticket', data={'username': username, 'password': password})
