@@ -17,3 +17,7 @@
   - `manual` (requires online default node)
   - `balanced` (resource-aware node scoring)
   - `prefer_default_then_balance`
+
+
+## Cluster readiness panel
+The Proxmox Setup page includes a Cluster Readiness panel with PASS/WARN/FAIL, eligible/excluded nodes, reasons, and recommended next steps.

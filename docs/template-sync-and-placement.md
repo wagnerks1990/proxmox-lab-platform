@@ -21,3 +21,10 @@ Load balancing is constrained by real template/storage/bridge availability per P
 3. Replicate templates to all intended nodes using Proxmox-native workflow where required.
 4. Confirm availability endpoint reports full node coverage.
 5. Use balanced placement.
+
+
+## Deskpool-inspired workflow note
+This project uses Deskpool concepts as workflow inspiration only (assignment reuse, idle/prepared preference, explicit provisioning), without copying proprietary/decompiled source.
+
+## VMID constraint reminder
+Proxmox VMIDs are cluster-wide identifiers. Do not assume a template can be duplicated to each node with the same VMID.

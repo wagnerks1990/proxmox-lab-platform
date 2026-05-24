@@ -397,7 +397,25 @@ async def template_availability(_user=Depends(require_role('Admin')), db: Sessio
         found = by_vmid.get(vmid, [])
         available_nodes = sorted({str(x.get('node')) for x in found if x.get('node')})
         missing_nodes = sorted([n for n in nodes if n not in available_nodes])
-        out.append({'template_id': row.id, 'template_vmid': vmid, 'name': row.name, 'source_node': row.proxmox_node, 'available_nodes': available_nodes, 'missing_nodes': missing_nodes, 'can_balance_across_all_nodes': len(missing_nodes)==0, 'warnings': [] if len(missing_nodes)==0 else [f'Only available on {", ".join(available_nodes) or "no nodes"}']})
+        warnings = [] if len(missing_nodes)==0 else [f'Only available on {", ".join(available_nodes) or "no nodes"}']
+        recommended_action = (
+            'Ready for balanced placement across all discovered nodes.'
+            if len(missing_nodes) == 0 else
+            'Use prefer_default_then_balance/manual policy, shared storage, or Proxmox-native replication before balanced placement.'
+        )
+        out.append({
+            'template_id': row.id,
+            'template_vmid': vmid,
+            'name': row.name,
+            'source_node': row.proxmox_node,
+            'available_nodes': available_nodes,
+            'missing_nodes': missing_nodes,
+            'can_balance_across_all_nodes': len(missing_nodes)==0,
+            'clone_target_supported': None,
+            'storage_compatibility': None,
+            'warnings': warnings,
+            'recommended_action': recommended_action,
+        })
     return out
 
 
@@ -537,6 +555,34 @@ async def cluster_readiness(id: int, _user=Depends(require_role('Admin')), db: S
         eligible_nodes &= br_nodes
     if policy == 'balanced' and template_vmid and len(eligible_nodes) <= 1:
         warnings.append('Balanced placement is limited because template/storage/network constraints reduce eligible nodes.')
+    excluded_nodes = sorted(list(online_nodes - eligible_nodes))
+    excluded_reasons = {}
+    for node_name in excluded_nodes:
+        reasons = []
+        if template_vmid:
+            tpl_nodes = {str(t.get('node')) for t in templates if int(t.get('vmid', -1)) == int(template_vmid)}
+            if node_name not in tpl_nodes:
+                reasons.append('template_unavailable')
+        if default_storage:
+            st_nodes = {str(s.get('node')) for s in storage if s.get('storage') == default_storage and str(s.get('active')).lower() not in {'0', 'false', 'none'}}
+            if node_name not in st_nodes:
+                reasons.append('storage_unavailable')
+        if default_bridge:
+            br_nodes = {str(n.get('node')) for n in networks if n.get('bridge') == default_bridge}
+            if node_name not in br_nodes:
+                reasons.append('bridge_unavailable')
+        excluded_reasons[node_name] = reasons or ['policy_filtered']
+    recommended_next_steps = []
+    if failures:
+        recommended_next_steps.append('Fix FAIL conditions before provisioning.')
+    if warnings:
+        recommended_next_steps.append('Use prefer_default_then_balance or manual policy until assets are available cluster-wide.')
+    if template_vmid and len(eligible_nodes) <= 1:
+        recommended_next_steps.append('Replicate/prepare template on additional nodes or use shared template storage.')
+    if default_storage:
+        recommended_next_steps.append(f'Ensure storage {default_storage} exists and is active on intended target nodes.')
+    if default_bridge:
+        recommended_next_steps.append(f'Ensure bridge {default_bridge} exists on intended target nodes.')
     status = 'FAIL' if failures else ('WARN' if warnings else 'PASS')
     return {
         'status': status,
@@ -548,8 +594,11 @@ async def cluster_readiness(id: int, _user=Depends(require_role('Admin')), db: S
         'networks': networks,
         'isos': isos_result.get('items', []),
         'eligible_nodes': sorted(eligible_nodes),
+        'excluded_nodes': excluded_nodes,
+        'excluded_node_reasons': excluded_reasons,
         'warnings': warnings,
         'failures': failures,
+        'recommended_next_steps': recommended_next_steps,
     }
 
 

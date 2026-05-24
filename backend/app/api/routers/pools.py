@@ -152,7 +152,12 @@ async def pool_readiness(id: int, _user=Depends(require_role('Teacher', 'Admin')
     elif warnings:
         status = 'WARN'
     defaults = db.query(ProxmoxClusterDefault).filter(ProxmoxClusterDefault.cluster_id == (active.id if active else -1)).first()
-    return ApiEnvelope(success=True, data={'status': status, 'warnings': warnings, 'failures': failures, 'pool_enabled': row.enabled, 'maintenance_mode': row.maintenance_mode, 'eligible_nodes': nodes, 'default_node': getattr(defaults, 'default_node', None), 'default_storage': getattr(defaults, 'default_storage', None), 'default_bridge': getattr(defaults, 'default_bridge', None)})
+    recommended_next_steps = []
+    if failures:
+        recommended_next_steps.append('Resolve FAIL conditions before provisioning from this pool.')
+    if any('not on all nodes' in w for w in warnings):
+        recommended_next_steps.append('Balanced placement may be limited until template availability is expanded or shared storage is used.')
+    return ApiEnvelope(success=True, data={'status': status, 'warnings': warnings, 'failures': failures, 'recommended_next_steps': recommended_next_steps, 'pool_enabled': row.enabled, 'maintenance_mode': row.maintenance_mode, 'eligible_nodes': nodes, 'default_node': getattr(defaults, 'default_node', None), 'default_storage': getattr(defaults, 'default_storage', None), 'default_bridge': getattr(defaults, 'default_bridge', None)})
 
 
 @router.get('/pools/{id}/plan', response_model=ApiEnvelope[PoolPlanResponse])

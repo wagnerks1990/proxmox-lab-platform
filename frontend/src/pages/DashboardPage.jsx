@@ -36,6 +36,7 @@ export default function DashboardPage({ user }) {
   const [statsError, setStatsError] = useState('')
   const [appTemplatesCount, setAppTemplatesCount] = useState(0)
   const [nodeStorage, setNodeStorage] = useState({})
+  const [assetReadiness, setAssetReadiness] = useState(null)
 
   const loadTop = async () => {
     const [v, t] = await Promise.all([api.get('/vms'), api.get('/templates')])
@@ -66,6 +67,12 @@ export default function DashboardPage({ user }) {
         }
       } catch {
         setNodeStorage({})
+      }
+      try {
+        const ar = await api.get('/admin/proxmox/assets/readiness')
+        setAssetReadiness(ar.data || null)
+      } catch {
+        setAssetReadiness(null)
       }
     } catch (e) {
       setStatsError(JSON.stringify(e?.response?.data?.detail || e?.response?.data || e.message))
@@ -106,6 +113,7 @@ export default function DashboardPage({ user }) {
         {resourceStats.config_source === 'env_fallback' ? <p className='muted'>Using .env Proxmox fallback. Configure Admin &gt; Proxmox Setup for database-managed cluster access.</p> : null}
         {resourceStats.config_source === 'not_configured' ? <p className='muted'>Proxmox is not configured. <Link to='/admin/proxmox-setup'>Open Proxmox Setup</Link>.</p> : null}
         {(resourceStats.summary?.templates ?? 0) > 0 && appTemplatesCount === 0 ? <p className='muted'>{resourceStats.summary?.templates} Proxmox templates discovered. <Link to='/admin/proxmox-inventory'>Import templates to enable Create VM</Link>.</p> : null}
+        {assetReadiness && assetReadiness.status !== 'PASS' ? <p className='muted'>Cluster asset readiness is {assetReadiness.status}. <Link to='/admin/proxmox-setup'>Review readiness warnings</Link> before balanced placement.</p> : null}
 
         <div className='card-grid'>
           <div className='stat-card'><div className='label'>CLUSTER</div><div className='value'>{resourceStats.cluster?.name || 'N/A'}</div></div>

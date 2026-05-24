@@ -111,8 +111,11 @@ export default function ProxmoxSetupPage(){
       {readiness ? <div className='panel'>
         <h3>Cluster Readiness: {readiness.status}</h3>
         <p className='muted'>Eligible nodes: {(readiness.eligible_nodes || []).join(', ') || 'none'}</p>
+        {(readiness.excluded_nodes || []).length ? <p className='muted'>Excluded nodes: {readiness.excluded_nodes.join(', ')}</p> : null}
+        {readiness.excluded_node_reasons ? <ul>{Object.entries(readiness.excluded_node_reasons).map(([n,rs])=><li key={n} className='muted'>{n}: {(rs || []).join(', ')}</li>)}</ul> : null}
         {(readiness.warnings || []).length ? <ul>{readiness.warnings.map((w,i)=><li key={i} className='muted'>{w}</li>)}</ul> : null}
         {(readiness.failures || []).length ? <ul>{readiness.failures.map((w,i)=><li key={i} className='muted'>{w}</li>)}</ul> : null}
+        {(readiness.recommended_next_steps || []).length ? <ul>{readiness.recommended_next_steps.map((w,i)=><li key={i} className='muted'>{w}</li>)}</ul> : null}
         <button disabled={loading} onClick={()=>refreshDiscovery(selectedId)}>Refresh Readiness</button>
       </div> : null}
       <h3>Defaults</h3>

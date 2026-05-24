@@ -65,7 +65,7 @@ export default function ProxmoxInventoryPage(){
 
     <h4>Discovered templates</h4><p className='muted'>Template availability across nodes is shown below.</p>
     <table className='vm-table'><thead><tr><th>VMID</th><th>Name</th><th>Node</th><th>Imported</th><th>Available Nodes</th><th>Action</th></tr></thead><tbody>
-      {templates.map(t=>{ const av = availability.find(a => Number(a.template_vmid)===Number(t.vmid)); return <tr key={`${t.node}-${t.vmid}`}><td>{t.vmid}</td><td>{t.name}</td><td>{t.node}</td><td>{t.already_imported?'Yes':'No'}</td><td>{av ? (av.available_nodes||[]).join(', ') : '—'}{av?.warnings?.length?<div className='muted'>{av.warnings.join('; ')}</div>:null}</td><td>{t.already_imported?'—':<button disabled={busy} onClick={()=>importOne(t)}>Import</button>}<button disabled={busy} onClick={()=>syncTemplatePlan(t)}>Sync/Prepare</button></td></tr>})}
+      {templates.map(t=>{ const av = availability.find(a => Number(a.template_vmid)===Number(t.vmid)); return <tr key={`${t.node}-${t.vmid}`}><td>{t.vmid}</td><td>{t.name}</td><td>{t.node}</td><td>{t.already_imported?'Yes':'No'}</td><td>{av ? (av.available_nodes||[]).join(', ') : '—'}{av?.warnings?.length?<div className='muted'>{av.warnings.join('; ')}</div>:null}{av?.recommended_action?<div className='muted'>{av.recommended_action}</div>:null}</td><td>{t.already_imported?'—':<button disabled={busy} onClick={()=>importOne(t)}>Import</button>}<button disabled={busy} onClick={()=>syncTemplatePlan(t)}>Sync/Prepare</button></td></tr>})}
     </tbody></table>
 
     <h4>All Proxmox VMs/Templates</h4>
