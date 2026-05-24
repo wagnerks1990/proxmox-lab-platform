@@ -301,3 +301,41 @@ class AssetSyncJobEvent(Base):
     message = Column(String(2048), nullable=False)
     metadata_json = Column(String, nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class Class(Base):
+    __tablename__ = 'classes'
+    id = Column(Integer, primary_key=True)
+    name = Column(String(120), nullable=False, unique=True)
+    term = Column(String(120), nullable=True)
+    instructor_id = Column(Integer, ForeignKey('users.id'), nullable=True, index=True)
+    join_code = Column(String(64), nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class Enrollment(Base):
+    __tablename__ = 'enrollments'
+    id = Column(Integer, primary_key=True)
+    class_id = Column(Integer, ForeignKey('classes.id'), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    role = Column(String(32), nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class Lab(Base):
+    __tablename__ = 'labs'
+    id = Column(Integer, primary_key=True)
+    class_id = Column(Integer, ForeignKey('classes.id'), nullable=False, index=True)
+    name = Column(String(120), nullable=False)
+    description = Column(String(255), nullable=True)
+    starts_at = Column(DateTime, nullable=True)
+    ends_at = Column(DateTime, nullable=True)
+    default_pool_id = Column(Integer, ForeignKey('desktop_pools.id'), nullable=False, index=True)
+    student_can_reset = Column(Boolean, nullable=False, default=False)
+    student_can_power_off = Column(Boolean, nullable=False, default=False)
+    terminal_enabled = Column(Boolean, nullable=False, default=False)
+    console_enabled = Column(Boolean, nullable=False, default=False)
+    rdp_enabled = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), nullable=False)
