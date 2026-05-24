@@ -161,3 +161,181 @@ class WorkerRun(Base):
     summary_json = Column(String, nullable=True)
     error = Column(String(255), nullable=True)
     request_id = Column(String(100), nullable=True)
+
+
+class ProxmoxCluster(Base):
+    __tablename__ = 'proxmox_clusters'
+    id = Column(Integer, primary_key=True)
+    name = Column(String(120), nullable=False, unique=True)
+    api_url = Column(String(255), nullable=False)
+    verify_ssl = Column(Boolean, nullable=False, default=False)
+    auth_mode = Column(String(32), nullable=False, default='token')
+    root_username = Column(String(120), nullable=True)
+    token_user = Column(String(120), nullable=True)
+    token_id = Column(String(120), nullable=True)
+    encrypted_token_secret = Column(String, nullable=True)
+    token_created_by_app = Column(Boolean, nullable=False, default=False)
+    is_active = Column(Boolean, nullable=False, default=False)
+    last_validated_at = Column(DateTime, nullable=True)
+    last_validation_status = Column(String(32), nullable=True)
+    last_validation_error = Column(String(512), nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class ProxmoxNode(Base):
+    __tablename__ = 'proxmox_nodes'
+    id = Column(Integer, primary_key=True)
+    cluster_id = Column(Integer, ForeignKey('proxmox_clusters.id'), nullable=False, index=True)
+    node_name = Column(String(120), nullable=False)
+    status = Column(String(32), nullable=True)
+    cpu_total = Column(Integer, nullable=True)
+    cpu_used = Column(Integer, nullable=True)
+    memory_total = Column(Integer, nullable=True)
+    memory_used = Column(Integer, nullable=True)
+    last_seen_at = Column(DateTime, nullable=True)
+    raw_summary_json = Column(String, nullable=True)
+
+
+class ProxmoxClusterDefault(Base):
+    __tablename__ = 'proxmox_cluster_defaults'
+    id = Column(Integer, primary_key=True)
+    cluster_id = Column(Integer, ForeignKey('proxmox_clusters.id'), nullable=False, unique=True, index=True)
+    default_node = Column(String(120), nullable=True)
+    default_storage = Column(String(120), nullable=True)
+    default_bridge = Column(String(120), nullable=True)
+    default_template_vmid = Column(Integer, nullable=True)
+    clone_mode = Column(String(50), nullable=True)
+    placement_policy = Column(String(50), nullable=True)
+    notes = Column(String(500), nullable=True)
+
+
+class Group(Base):
+    __tablename__ = 'groups'
+    id = Column(Integer, primary_key=True)
+    name = Column(String(120), nullable=False, unique=True)
+    description = Column(String(255), nullable=True)
+    enabled = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class GroupMembership(Base):
+    __tablename__ = 'group_memberships'
+    id = Column(Integer, primary_key=True)
+    group_id = Column(Integer, ForeignKey('groups.id'), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    role_in_group = Column(String(50), nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class GroupTemplatePermission(Base):
+    __tablename__ = 'group_template_permissions'
+    id = Column(Integer, primary_key=True)
+    group_id = Column(Integer, ForeignKey('groups.id'), nullable=False, index=True)
+    template_id = Column(Integer, ForeignKey('vm_templates.id'), nullable=False, index=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class AssetCatalog(Base):
+    __tablename__ = 'asset_catalog'
+    id = Column(Integer, primary_key=True)
+    asset_type = Column(String(32), nullable=False, index=True)  # iso|ct_template|vm_template
+    name = Column(String(255), nullable=False)
+    filename = Column(String(255), nullable=True)
+    storage_id = Column(String(120), nullable=True)
+    content_type = Column(String(32), nullable=True)  # iso|vztmpl
+    source_node = Column(String(120), nullable=True)
+    source_vmid = Column(Integer, nullable=True)
+    source_url = Column(String(1024), nullable=True)
+    size_bytes = Column(Integer, nullable=True)
+    sha256 = Column(String(128), nullable=True)
+    is_required = Column(Boolean, nullable=False, default=True)
+    sync_method = Column(String(64), nullable=False, default='download-url')
+    metadata_json = Column(String, nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class AssetNodeState(Base):
+    __tablename__ = 'asset_node_state'
+    id = Column(Integer, primary_key=True)
+    asset_id = Column(Integer, ForeignKey('asset_catalog.id'), nullable=False, index=True)
+    node_name = Column(String(120), nullable=False, index=True)
+    state = Column(String(32), nullable=False, default='missing', index=True)
+    target_vmid = Column(Integer, nullable=True)
+    target_volid = Column(String(255), nullable=True)
+    size_bytes = Column(Integer, nullable=True)
+    sha256 = Column(String(128), nullable=True)
+    last_checked_at = Column(DateTime, nullable=True)
+    last_synced_at = Column(DateTime, nullable=True)
+    last_error = Column(String(1024), nullable=True)
+    metadata_json = Column(String, nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class AssetSyncJob(Base):
+    __tablename__ = 'asset_sync_jobs'
+    id = Column(Integer, primary_key=True)
+    asset_id = Column(Integer, ForeignKey('asset_catalog.id'), nullable=True, index=True)
+    target_node = Column(String(120), nullable=False, index=True)
+    state = Column(String(32), nullable=False, default='queued', index=True)
+    method = Column(String(64), nullable=False)
+    source_node = Column(String(120), nullable=True)
+    source_vmid = Column(Integer, nullable=True)
+    target_vmid = Column(Integer, nullable=True)
+    proxmox_upid = Column(String(255), nullable=True)
+    started_at = Column(DateTime, nullable=True)
+    finished_at = Column(DateTime, nullable=True)
+    error = Column(String(2048), nullable=True)
+    metadata_json = Column(String, nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class AssetSyncJobEvent(Base):
+    __tablename__ = 'asset_sync_job_events'
+    id = Column(Integer, primary_key=True)
+    job_id = Column(Integer, ForeignKey('asset_sync_jobs.id'), nullable=False, index=True)
+    level = Column(String(16), nullable=False, default='info')
+    message = Column(String(2048), nullable=False)
+    metadata_json = Column(String, nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class Class(Base):
+    __tablename__ = 'classes'
+    id = Column(Integer, primary_key=True)
+    name = Column(String(120), nullable=False, unique=True)
+    term = Column(String(120), nullable=True)
+    instructor_id = Column(Integer, ForeignKey('users.id'), nullable=True, index=True)
+    join_code = Column(String(64), nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class Enrollment(Base):
+    __tablename__ = 'enrollments'
+    id = Column(Integer, primary_key=True)
+    class_id = Column(Integer, ForeignKey('classes.id'), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    role = Column(String(32), nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class Lab(Base):
+    __tablename__ = 'labs'
+    id = Column(Integer, primary_key=True)
+    class_id = Column(Integer, ForeignKey('classes.id'), nullable=False, index=True)
+    name = Column(String(120), nullable=False)
+    description = Column(String(255), nullable=True)
+    starts_at = Column(DateTime, nullable=True)
+    ends_at = Column(DateTime, nullable=True)
+    default_pool_id = Column(Integer, ForeignKey('desktop_pools.id'), nullable=False, index=True)
+    student_can_reset = Column(Boolean, nullable=False, default=False)
+    student_can_power_off = Column(Boolean, nullable=False, default=False)
+    terminal_enabled = Column(Boolean, nullable=False, default=False)
+    console_enabled = Column(Boolean, nullable=False, default=False)
+    rdp_enabled = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), nullable=False)
