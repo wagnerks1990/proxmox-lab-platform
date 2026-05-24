@@ -339,3 +339,20 @@ class Lab(Base):
     rdp_enabled = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class ProxmoxHostAccess(Base):
+    __tablename__ = 'proxmox_host_access'
+    id = Column(Integer, primary_key=True)
+    cluster_id = Column(Integer, ForeignKey('proxmox_clusters.id'), nullable=False, index=True)
+    node_name = Column(String(120), nullable=False, index=True)
+    runner_user = Column(String(120), nullable=False, default='proxmox-lab-runner')
+    auth_method = Column(String(32), nullable=False, default='ssh_key')
+    encrypted_private_key = Column(String, nullable=True)
+    key_ref = Column(String(255), nullable=True)
+    public_key_fingerprint = Column(String(255), nullable=True)
+    capabilities_json = Column(String, nullable=True)
+    status = Column(String(32), nullable=False, default='api_only')
+    last_checked_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), nullable=False)

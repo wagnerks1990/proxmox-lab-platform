@@ -8,6 +8,7 @@ export default function ProxmoxAssetsPage() {
   const [busy, setBusy] = useState(false)
   const [jobs, setJobs] = useState([])
   const [jobDetails, setJobDetails] = useState({})
+  const [hostAccess, setHostAccess] = useState(null)
 
   const [isoForm, setIsoForm] = useState({ filename: '', source_url: '', target_nodes: [] })
   const [ctForm, setCtForm] = useState({ filename: '', source_url: '', target_nodes: [] })
@@ -22,6 +23,14 @@ export default function ProxmoxAssetsPage() {
       ])
       setInventory(inv.data)
       setReadiness(ready.data)
+      try {
+        const clusters = await api.get('/admin/proxmox/clusters')
+        const active = (clusters.data || []).find(c => c.is_active)
+        if (active?.id) {
+          const hs = await api.get(`/admin/proxmox/host-access/status?cluster_id=${active.id}`)
+          setHostAccess(hs.data)
+        }
+      } catch (_) {}
     } catch (e) {
       setMsg(JSON.stringify(e?.response?.data?.detail || e.message))
     } finally {
@@ -83,6 +92,8 @@ export default function ProxmoxAssetsPage() {
   const tone = status === 'PASS' ? '#065f46' : status === 'WARN' ? '#92400e' : '#991b1b'
   const bg = status === 'PASS' ? '#ecfdf5' : status === 'WARN' ? '#fffbeb' : '#fef2f2'
 
+  const vmSyncSupported = hostAccess?.mode === 'host_runner'
+
   return <section className='panel'>
     <h3>Proxmox Assets</h3>
     {msg ? <p className='muted'>{msg}</p> : null}
@@ -115,9 +126,10 @@ export default function ProxmoxAssetsPage() {
 
     <div className='panel'>
       <h4>ISO Sync</h4>
+      {!hostAccess?.asset_source_iso_base_url ? <p className='muted'>Configure static asset source URLs or host runner in Proxmox Setup.</p> : null}
       <div className='group'>
         <select className='input' value={isoForm.filename} onChange={e=>setIsoForm({...isoForm, filename:e.target.value})}><option value=''>Select missing ISO</option>{missingIsoNames.map(v=><option key={v} value={v}>{v}</option>)}</select>
-        <input className='input' placeholder='Source URL (http/https)' value={isoForm.source_url} onChange={e=>setIsoForm({...isoForm, source_url:e.target.value})}/>
+        <input className='input' placeholder='Source URL (http/https)' value={isoForm.source_url || (hostAccess?.asset_source_iso_base_url ? `${hostAccess.asset_source_iso_base_url}/${isoForm.filename || ''}` : '')} onChange={e=>setIsoForm({...isoForm, source_url:e.target.value})}/>
         <select className='input' multiple value={isoForm.target_nodes} onChange={e=>setIsoForm({...isoForm, target_nodes:[...e.target.selectedOptions].map(o=>o.value)})}>{onlineNodes.map(n=><option key={n} value={n}>{n}</option>)}</select>
         <button disabled={busy || !isoForm.source_url || !isoForm.filename || isoForm.target_nodes.length===0} onClick={runIsoSync}>Sync ISO</button>
       </div>
@@ -125,9 +137,10 @@ export default function ProxmoxAssetsPage() {
 
     <div className='panel'>
       <h4>CT Template Sync</h4>
+      {!hostAccess?.asset_source_ct_base_url ? <p className='muted'>Configure static asset source URLs or host runner in Proxmox Setup.</p> : null}
       <div className='group'>
         <select className='input' value={ctForm.filename} onChange={e=>setCtForm({...ctForm, filename:e.target.value})}><option value=''>Select missing CT template</option>{missingCtNames.map(v=><option key={v} value={v}>{v}</option>)}</select>
-        <input className='input' placeholder='Source URL (http/https)' value={ctForm.source_url} onChange={e=>setCtForm({...ctForm, source_url:e.target.value})}/>
+        <input className='input' placeholder='Source URL (http/https)' value={ctForm.source_url || (hostAccess?.asset_source_ct_base_url ? `${hostAccess.asset_source_ct_base_url}/${ctForm.filename || ''}` : '')} onChange={e=>setCtForm({...ctForm, source_url:e.target.value})}/>
         <select className='input' multiple value={ctForm.target_nodes} onChange={e=>setCtForm({...ctForm, target_nodes:[...e.target.selectedOptions].map(o=>o.value)})}>{onlineNodes.map(n=><option key={n} value={n}>{n}</option>)}</select>
         <button disabled={busy || !ctForm.source_url || !ctForm.filename || ctForm.target_nodes.length===0} onClick={runCtSync}>Sync CT Template</button>
       </div>
@@ -141,9 +154,9 @@ export default function ProxmoxAssetsPage() {
         <input className='input' placeholder='Source VMID' value={vmForm.source_vmid} onChange={e=>setVmForm({...vmForm, source_vmid:e.target.value})}/>
         <input className='input' placeholder='Template name' value={vmForm.template_name} onChange={e=>setVmForm({...vmForm, template_name:e.target.value})}/>
         <select className='input' multiple value={vmForm.target_nodes} onChange={e=>setVmForm({...vmForm, target_nodes:[...e.target.selectedOptions].map(o=>o.value)})}>{onlineNodes.map(n=><option key={n} value={n}>{n}</option>)}</select>
-        <button disabled={busy || !vmForm.source_node || !vmForm.source_vmid || !vmForm.template_name || vmForm.target_nodes.length===0} onClick={runVmSync}>Try VM Template Sync</button>
+        <button disabled={busy || !vmSyncSupported || !vmForm.source_node || !vmForm.source_vmid || !vmForm.template_name || vmForm.target_nodes.length===0} onClick={runVmSync}>Try VM Template Sync</button>
       </div>
-      <p className='muted'>If command runner is not configured, backend returns unsupported/not configured. No fake success is shown.</p>
+      <p className='muted'>Mode: {hostAccess?.mode || 'api_only'}. If host runner is not configured, VM template sync stays guarded and unsupported.</p>
     </div>
 
     <div className='panel'>

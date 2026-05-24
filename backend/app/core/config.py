@@ -33,6 +33,11 @@ class Settings(BaseSettings):
 
     replay_store_backend: str = 'memory'
     worker_lock_backend: str = 'memory'
+    asset_source_node: str | None = None
+    asset_source_iso_base_url: str | None = None
+    asset_source_ct_base_url: str | None = None
+    host_runner_enabled: bool = False
+    host_runner_user: str = 'proxmox-lab-runner'
 
 
 settings = Settings()

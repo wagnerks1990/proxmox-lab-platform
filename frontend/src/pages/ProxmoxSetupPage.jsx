@@ -22,6 +22,8 @@ export default function ProxmoxSetupPage(){
   const [assetPlanMsg, setAssetPlanMsg] = useState('')
   const [selectedTemplateVmid, setSelectedTemplateVmid] = useState('')
   const [selectedIsoId, setSelectedIsoId] = useState('')
+  const [hostAccess, setHostAccess] = useState(null)
+  const [hostAccessForm, setHostAccessForm] = useState({ root_username: 'root@pam', root_password: '', node_names: [] })
 
   const activeCluster = useMemo(()=>clusters.find(c=>c.is_active),[clusters])
   const readinessStatus = String(readiness?.status || '').toUpperCase()
@@ -54,6 +56,24 @@ export default function ProxmoxSetupPage(){
     if (!selectedIsoId && isos.length) setSelectedIsoId(isos[0].content_id || isos[0].name || '')
     setDefaultsForm({ ...defaultsInit, ...(cfg.data?.defaults || {}) })
     setMsg('Discovery refreshed.')
+    const hs = await api.get(`/admin/proxmox/host-access/status?cluster_id=${id}`)
+    setHostAccess(hs.data)
+  })
+  const bootstrapHostAccess = ()=>run(async ()=>{
+    if (!selectedId) return
+    const payload = { cluster_id: selectedId, ...hostAccessForm }
+    await api.post('/admin/proxmox/host-access/bootstrap', payload)
+    setHostAccessForm({ ...hostAccessForm, root_password: '' })
+    const hs = await api.get(`/admin/proxmox/host-access/status?cluster_id=${selectedId}`)
+    setHostAccess(hs.data)
+    setMsg('Host access bootstrap completed.')
+  })
+  const validateHostAccess = ()=>run(async ()=>{
+    if (!selectedId) return
+    await api.post('/admin/proxmox/host-access/validate', { cluster_id: selectedId })
+    const hs = await api.get(`/admin/proxmox/host-access/status?cluster_id=${selectedId}`)
+    setHostAccess(hs.data)
+    setMsg('Host access validate completed.')
   })
 
   const doBootstrap = ()=>run(async ()=>{
@@ -118,6 +138,18 @@ export default function ProxmoxSetupPage(){
         <label><input type='checkbox' checked={bootstrap.verify_ssl} onChange={e=>setBootstrap({...bootstrap,verify_ssl:e.target.checked})}/> Verify SSL</label>
         <button disabled={loading} onClick={doBootstrap}>Bootstrap</button>
       </div>
+      <h3>Host Access</h3>
+      <p className='muted'>Current mode: {hostAccess?.mode || 'api_only'}. Root password is used only during this request and is not persisted.</p>
+      <div className='group'>
+        <input className='input' placeholder='Root username' value={hostAccessForm.root_username} onChange={e=>setHostAccessForm({...hostAccessForm, root_username:e.target.value})}/>
+        <input className='input' type='password' placeholder='Root password (one-time)' value={hostAccessForm.root_password} onChange={e=>setHostAccessForm({...hostAccessForm, root_password:e.target.value})}/>
+        <select className='input' multiple value={hostAccessForm.node_names} onChange={e=>setHostAccessForm({...hostAccessForm, node_names:[...e.target.selectedOptions].map(o=>o.value)})}>
+          {nodes.map(n => <option key={n.node_name} value={n.node_name}>{n.node_name}</option>)}
+        </select>
+        <button disabled={loading || !hostAccessForm.root_password || hostAccessForm.node_names.length===0} onClick={bootstrapHostAccess}>Configure Host Runner</button>
+        <button disabled={loading || !selectedId} onClick={validateHostAccess}>Validate Host Access</button>
+      </div>
+      {(hostAccess?.nodes || []).length ? <ul>{hostAccess.nodes.map(n => <li key={n.node_name} className='muted'>{n.node_name}: {n.status} ({n.runner_user})</li>)}</ul> : null}
 
       <h3>Manual Token Fallback</h3>
       <div className='group'>
