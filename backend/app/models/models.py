@@ -235,3 +235,69 @@ class GroupTemplatePermission(Base):
     group_id = Column(Integer, ForeignKey('groups.id'), nullable=False, index=True)
     template_id = Column(Integer, ForeignKey('vm_templates.id'), nullable=False, index=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class AssetCatalog(Base):
+    __tablename__ = 'asset_catalog'
+    id = Column(Integer, primary_key=True)
+    asset_type = Column(String(32), nullable=False, index=True)  # iso|ct_template|vm_template
+    name = Column(String(255), nullable=False)
+    filename = Column(String(255), nullable=True)
+    storage_id = Column(String(120), nullable=True)
+    content_type = Column(String(32), nullable=True)  # iso|vztmpl
+    source_node = Column(String(120), nullable=True)
+    source_vmid = Column(Integer, nullable=True)
+    source_url = Column(String(1024), nullable=True)
+    size_bytes = Column(Integer, nullable=True)
+    sha256 = Column(String(128), nullable=True)
+    is_required = Column(Boolean, nullable=False, default=True)
+    sync_method = Column(String(64), nullable=False, default='download-url')
+    metadata_json = Column(String, nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class AssetNodeState(Base):
+    __tablename__ = 'asset_node_state'
+    id = Column(Integer, primary_key=True)
+    asset_id = Column(Integer, ForeignKey('asset_catalog.id'), nullable=False, index=True)
+    node_name = Column(String(120), nullable=False, index=True)
+    state = Column(String(32), nullable=False, default='missing', index=True)
+    target_vmid = Column(Integer, nullable=True)
+    target_volid = Column(String(255), nullable=True)
+    size_bytes = Column(Integer, nullable=True)
+    sha256 = Column(String(128), nullable=True)
+    last_checked_at = Column(DateTime, nullable=True)
+    last_synced_at = Column(DateTime, nullable=True)
+    last_error = Column(String(1024), nullable=True)
+    metadata_json = Column(String, nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class AssetSyncJob(Base):
+    __tablename__ = 'asset_sync_jobs'
+    id = Column(Integer, primary_key=True)
+    asset_id = Column(Integer, ForeignKey('asset_catalog.id'), nullable=True, index=True)
+    target_node = Column(String(120), nullable=False, index=True)
+    state = Column(String(32), nullable=False, default='queued', index=True)
+    method = Column(String(64), nullable=False)
+    source_node = Column(String(120), nullable=True)
+    source_vmid = Column(Integer, nullable=True)
+    target_vmid = Column(Integer, nullable=True)
+    proxmox_upid = Column(String(255), nullable=True)
+    started_at = Column(DateTime, nullable=True)
+    finished_at = Column(DateTime, nullable=True)
+    error = Column(String(2048), nullable=True)
+    metadata_json = Column(String, nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class AssetSyncJobEvent(Base):
+    __tablename__ = 'asset_sync_job_events'
+    id = Column(Integer, primary_key=True)
+    job_id = Column(Integer, ForeignKey('asset_sync_jobs.id'), nullable=False, index=True)
+    level = Column(String(16), nullable=False, default='info')
+    message = Column(String(2048), nullable=False)
+    metadata_json = Column(String, nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
