@@ -639,18 +639,108 @@ async def assets_readiness(_user=Depends(require_role('Admin')), db: Session = D
 
 @router.post('/admin/proxmox/assets/sync-plan')
 async def assets_sync_plan(payload: dict, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
-    return {'ok': True, 'status': 'dry_run', 'supported': False, 'message': 'Sync plan is dry-run only. Use Proxmox native replication/shared storage for real sync.', 'request': payload or {}}
+    active = db.query(ProxmoxCluster).filter(ProxmoxCluster.is_active.is_(True)).first()
+    if not active:
+        raise HTTPException(status_code=404, detail='No active Proxmox cluster configured')
+    payload = payload or {}
+    svc = ProxmoxBootstrapService(db)
+    storage = await svc.discover_storage(active)
+    templates = await svc.discover_templates(active)
+    isos = await svc.discover_isos(active)
+    nodes = [n.node_name for n in db.query(ProxmoxNode).filter(ProxmoxNode.cluster_id == active.id).all()]
+
+    if payload.get('type') == 'template':
+        vmid = int(payload.get('template_vmid', 0) or 0)
+        source_node = payload.get('source_node')
+        target_nodes = payload.get('target_nodes') or []
+        target_storage = payload.get('target_storage')
+        found = [t for t in templates if int(t.get('vmid', -1)) == vmid]
+        template_nodes = sorted({str(t.get('node')) for t in found if t.get('node')})
+        storage_ok = {
+            n: bool(target_storage and any(s.get('node') == n and s.get('storage') == target_storage for s in storage))
+            for n in target_nodes
+        }
+        vmid_conflicts = {
+            n: bool(any(int(x.get('vmid', -1)) == vmid and str(x.get('node')) == n for x in templates))
+            for n in target_nodes
+        }
+        warnings = []
+        if not found:
+            warnings.append(f'Template VMID {vmid} was not discovered in the active cluster.')
+        if source_node and source_node not in template_nodes:
+            warnings.append(f'Source node {source_node} does not currently host template VMID {vmid}.')
+        missing_targets = [n for n in target_nodes if n not in nodes]
+        if missing_targets:
+            warnings.append(f'Unknown target nodes: {", ".join(missing_targets)}')
+        return {
+            'ok': True,
+            'status': 'dry_run',
+            'supported': False,
+            'kind': 'template',
+            'template_vmid': vmid,
+            'source_node': source_node,
+            'target_nodes': target_nodes,
+            'target_storage': target_storage,
+            'template_nodes': template_nodes,
+            'target_storage_available': storage_ok,
+            'vmid_conflicts': vmid_conflicts,
+            'cluster_constraints': 'Proxmox VMIDs are cluster-wide. Cross-node template replication requires explicit Proxmox-native workflow or shared storage.',
+            'recommended_action': 'Use manual/shared-storage preparation. Then refresh discovery and validate readiness.',
+            'warnings': warnings,
+        }
+
+    if payload.get('type') == 'iso':
+        source_node = payload.get('source_node')
+        source_storage = payload.get('source_storage')
+        volume = payload.get('volume')
+        target_nodes = payload.get('target_nodes') or []
+        target_storage = payload.get('target_storage')
+        iso_items = isos.get('items', [])
+        source_exists = any(i.get('node') == source_node and i.get('storage') == source_storage and i.get('content_id') == volume for i in iso_items)
+        target_storage_available = {
+            n: bool(target_storage and any(s.get('node') == n and s.get('storage') == target_storage for s in storage))
+            for n in target_nodes
+        }
+        warnings = list(isos.get('warnings', []))
+        if not source_exists:
+            warnings.append('Requested source ISO/media was not found in discovery output.')
+        return {
+            'ok': True,
+            'status': 'dry_run',
+            'supported': False,
+            'kind': 'iso',
+            'source_node': source_node,
+            'source_storage': source_storage,
+            'volume': volume,
+            'target_nodes': target_nodes,
+            'target_storage': target_storage,
+            'source_exists': source_exists,
+            'target_storage_available': target_storage_available,
+            'cluster_constraints': 'Automated ISO copy/transfer is not enabled in cloud-safe mode.',
+            'recommended_action': 'Use shared ISO storage or manual Proxmox copy, then refresh readiness.',
+            'warnings': warnings,
+        }
+
+    return {
+        'ok': True,
+        'status': 'dry_run',
+        'supported': False,
+        'message': 'Specify payload.type as template or iso for detailed dry-run planning.',
+        'request': payload,
+    }
 
 
 @router.post('/admin/proxmox/assets/sync-template')
 async def assets_sync_template(payload: dict, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
     if not payload.get('confirm'):
         raise HTTPException(status_code=400, detail={'error': 'confirm=true required for explicit admin sync action'})
-    return {'ok': False, 'status': 'unsupported', 'supported': False, 'message': 'Automated template sync is not enabled in cloud-safe mode. Use shared storage or manual Proxmox replication.'}
+    plan = await assets_sync_plan({'type': 'template', **(payload or {})}, _user=_user, db=db)
+    return {'ok': False, 'status': 'unsupported', 'supported': False, 'message': 'Automated template sync is not enabled in cloud-safe mode. Use shared storage or manual Proxmox replication.', 'plan': plan}
 
 
 @router.post('/admin/proxmox/assets/sync-iso')
 async def assets_sync_iso(payload: dict, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
     if not payload.get('confirm'):
         raise HTTPException(status_code=400, detail={'error': 'confirm=true required for explicit admin sync action'})
-    return {'ok': False, 'status': 'unsupported', 'supported': False, 'message': 'Automated ISO/media sync is not enabled in cloud-safe mode. Use shared storage or manual Proxmox copy.'}
+    plan = await assets_sync_plan({'type': 'iso', **(payload or {})}, _user=_user, db=db)
+    return {'ok': False, 'status': 'unsupported', 'supported': False, 'message': 'Automated ISO/media sync is not enabled in cloud-safe mode. Use shared storage or manual Proxmox copy.', 'plan': plan}

@@ -59,6 +59,7 @@ async def create_vm(payload: CreateVMRequest, user: User = Depends(get_current_u
         )
         default_node = getattr(defaults, 'default_node', None)
         default_storage = getattr(defaults, 'default_storage', None)
+        default_bridge = getattr(defaults, 'default_bridge', None)
 
         nodes = db.query(ProxmoxNode).filter(ProxmoxNode.cluster_id == active_cluster.id).all()
         node_dicts = [{'node_name': n.node_name, 'status': n.status, 'memory_total': n.memory_total, 'memory_used': n.memory_used, 'cpu_total': n.cpu_total, 'cpu_used': n.cpu_used} for n in nodes]
@@ -78,6 +79,12 @@ async def create_vm(payload: CreateVMRequest, user: User = Depends(get_current_u
                 raise HTTPException(status_code=409, detail={'error': 'No online Proxmox node has the requested storage/template combination.'})
         else:
             allowed_nodes = template_nodes
+        if default_bridge:
+            network_rows = await svc.discover_networks(active_cluster)
+            bridge_nodes = {str(n.get('node')) for n in network_rows if n.get('bridge') == default_bridge}
+            allowed_nodes = allowed_nodes & bridge_nodes
+            if not allowed_nodes:
+                raise HTTPException(status_code=409, detail={'error': f'No eligible node has required bridge {default_bridge} for template placement.'})
 
         try:
             decision = choose_cluster_node(node_dicts, running_counts, placement_policy, default_node, allowed_nodes=allowed_nodes)
@@ -97,7 +104,8 @@ async def create_vm(payload: CreateVMRequest, user: User = Depends(get_current_u
     proxmox = ProxmoxClient()
     message = f'VM created. Placement: {placement_reason} ({selected_node})'
     try:
-        resp = await proxmox.clone_vm(template.proxmox_node, template.source_vmid, vmid, vm_name)
+        # source template can be on one node while target placement can be another eligible node
+        resp = await proxmox.clone_vm(selected_node, template.source_vmid, vmid, vm_name)
         upid = resp.get('data')
         if upid:
             task = await proxmox.wait_for_task(template.proxmox_node, upid)
