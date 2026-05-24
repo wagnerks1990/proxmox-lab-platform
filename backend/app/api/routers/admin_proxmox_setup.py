@@ -392,8 +392,11 @@ async def template_availability(_user=Depends(require_role('Admin')), db: Sessio
     by_vmid = {}
     for t in discovered:
         by_vmid.setdefault(int(t.get('vmid')), []).append(t)
+
+    imported_by_vmid = {}
     for row in db.query(VMTemplate).all():
         vmid = int(row.source_vmid)
+        imported_by_vmid[vmid] = row
         found = by_vmid.get(vmid, [])
         available_nodes = sorted({str(x.get('node')) for x in found if x.get('node')})
         missing_nodes = sorted([n for n in nodes if n not in available_nodes])
@@ -415,6 +418,30 @@ async def template_availability(_user=Depends(require_role('Admin')), db: Sessio
             'storage_compatibility': None,
             'warnings': warnings,
             'recommended_action': recommended_action,
+        })
+
+    # Include discovered templates not yet imported into app vm_templates so readiness is complete.
+    for vmid, found in sorted(by_vmid.items(), key=lambda kv: kv[0]):
+        if vmid in imported_by_vmid:
+            continue
+        available_nodes = sorted({str(x.get('node')) for x in found if x.get('node')})
+        missing_nodes = sorted([n for n in nodes if n not in available_nodes])
+        sample = found[0] if found else {}
+        warnings = ['Template discovered but not imported into app templates.']
+        if missing_nodes:
+            warnings.append(f'Only available on {", ".join(available_nodes) or "no nodes"}.')
+        out.append({
+            'template_id': None,
+            'template_vmid': vmid,
+            'name': sample.get('name') or f'vm-{vmid}',
+            'source_node': sample.get('node'),
+            'available_nodes': available_nodes,
+            'missing_nodes': missing_nodes,
+            'can_balance_across_all_nodes': len(missing_nodes) == 0,
+            'clone_target_supported': None,
+            'storage_compatibility': None,
+            'warnings': warnings,
+            'recommended_action': 'Import this template first, then validate cross-node availability for balanced placement.',
         })
     return out
 
