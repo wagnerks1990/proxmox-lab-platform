@@ -735,8 +735,8 @@ async def cluster_readiness(id: int, _user=Depends(require_role('Admin')), db: S
     }
 
 
-@router.get('/admin/proxmox/assets/readiness')
-async def assets_readiness(_user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+@router.get('/admin/proxmox/assets/readiness-legacy')
+async def assets_readiness_legacy(_user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
     active = db.query(ProxmoxCluster).filter(ProxmoxCluster.is_active.is_(True)).first()
     if not active:
         raise HTTPException(status_code=404, detail='No active Proxmox cluster configured')
