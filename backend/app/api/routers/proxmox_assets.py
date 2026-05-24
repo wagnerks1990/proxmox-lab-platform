@@ -8,8 +8,17 @@ from app.models.models import ProxmoxCluster, AssetSyncJob, AssetSyncJobEvent, A
 from app.schemas.assets import SyncIsoRequest, SyncCtTemplateRequest, SyncVmTemplateRequest
 from app.services.asset_sync import AssetSyncService
 from app.services.proxmox_assets import ProxmoxAssetsService
+from app.core.config import settings
 
 router = APIRouter()
+
+
+@router.get('/admin/proxmox/assets/source-url')
+async def asset_source_url(kind: str, filename: str, _user=Depends(require_role('Teacher', 'Admin'))):
+    base = settings.asset_source_iso_base_url if kind == 'iso' else settings.asset_source_ct_base_url if kind in {'ct', 'ct-template', 'vztmpl'} else None
+    if not base:
+        return {'ok': False, 'kind': kind, 'filename': filename, 'message': 'Asset source base URL is not configured.'}
+    return {'ok': True, 'kind': kind, 'filename': filename, 'source_url': f"{base.rstrip('/')}/{filename}"}
 
 
 @router.get('/admin/proxmox/assets/inventory')

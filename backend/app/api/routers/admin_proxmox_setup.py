@@ -18,6 +18,15 @@ def _audit(db: Session, actor_id: int, action: str, target_id: str, details: str
     db.add(AuditLog(actor_id=actor_id, action=f'{action}: {details}', target_type='host_access', target_id=target_id))
 
 
+def _resolve_cluster_id(db: Session, cluster_id: int | None) -> int:
+    if cluster_id:
+        return int(cluster_id)
+    active = db.query(ProxmoxCluster).filter(ProxmoxCluster.is_active.is_(True)).first()
+    if not active:
+        raise HTTPException(status_code=400, detail='No active Proxmox cluster configured.')
+    return int(active.id)
+
+
 def _mask(v: str | None) -> str | None:
     if not v:
         return None
@@ -137,11 +146,11 @@ async def bootstrap_root(payload: dict, _user=Depends(require_role('Admin')), db
 
 @router.post('/admin/proxmox/host-access/bootstrap')
 def host_access_bootstrap(payload: dict, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
-    cluster_id = int(payload.get('cluster_id') or 0)
+    cluster_id = _resolve_cluster_id(db, payload.get('cluster_id'))
     node_names = payload.get('node_names') or []
     root_password = payload.get('root_password')
-    if not cluster_id or not node_names or not payload.get('root_username') or not root_password:
-        raise HTTPException(status_code=422, detail='cluster_id, node_names, root_username, root_password required')
+    if not node_names or not payload.get('root_username') or not root_password:
+        raise HTTPException(status_code=422, detail='node_names, root_username, root_password required')
     cluster = db.query(ProxmoxCluster).filter(ProxmoxCluster.id == cluster_id).first()
     if not cluster:
         raise HTTPException(status_code=404, detail='Cluster not found')
@@ -169,40 +178,55 @@ def host_access_bootstrap(payload: dict, _user=Depends(require_role('Admin')), d
 
 
 @router.get('/admin/proxmox/host-access/status')
-def host_access_status(cluster_id: int, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+def host_access_status(cluster_id: int | None = None, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    cluster_id = _resolve_cluster_id(db, cluster_id)
     rows = db.query(ProxmoxHostAccess).filter(ProxmoxHostAccess.cluster_id == cluster_id).all()
+    cluster_nodes = db.query(ProxmoxNode).filter(ProxmoxNode.cluster_id == cluster_id).all()
     mode = 'api_only'
     if settings.asset_source_iso_base_url or settings.asset_source_ct_base_url:
         mode = 'static_asset_server'
     if any(r.status == 'host_runner' for r in rows):
         mode = 'host_runner'
+    row_by_node = {r.node_name: r for r in rows}
+    nodes = []
+    for n in cluster_nodes:
+        r = row_by_node.get(n.node_name)
+        nodes.append({
+            'node_name': n.node_name,
+            'cluster_status': n.status,
+            'host_access_status': r.status if r else 'not_configured',
+            'runner_user': (r.runner_user if r else settings.host_runner_user),
+            'auth_method': (r.auth_method if r else None),
+            'capabilities': ([] if not r or not r.capabilities_json else [r.capabilities_json]),
+            'public_key_fingerprint': (r.public_key_fingerprint if r else None),
+            'last_checked_at': (r.last_checked_at if r else None),
+        })
     return {
         'cluster_id': cluster_id,
         'mode': mode,
         'asset_source_node': settings.asset_source_node,
         'asset_source_iso_base_url': settings.asset_source_iso_base_url,
         'asset_source_ct_base_url': settings.asset_source_ct_base_url,
-        'nodes': [{
-            'node_name': r.node_name,
-            'runner_user': r.runner_user,
-            'auth_method': r.auth_method,
-            'public_key_fingerprint': r.public_key_fingerprint,
-            'status': r.status,
-            'last_checked_at': r.last_checked_at,
-        } for r in rows],
+        'nodes': nodes,
     }
 
 
 @router.post('/admin/proxmox/host-access/validate')
 def host_access_validate(payload: dict, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
-    cluster_id = int(payload.get('cluster_id') or 0)
-    if not cluster_id:
-        raise HTTPException(status_code=422, detail='cluster_id required')
+    cluster_id = _resolve_cluster_id(db, payload.get('cluster_id'))
+    if not settings.host_runner_enabled:
+        return {'ok': False, 'cluster_id': cluster_id, 'validated_nodes': [], 'message': 'Host runner is disabled.'}
     _audit(db, _user.id, 'host_access.validate.started', str(cluster_id), 'started')
     rows = db.query(ProxmoxHostAccess).filter(ProxmoxHostAccess.cluster_id == cluster_id).all()
+    if not rows:
+        _audit(db, _user.id, 'host_access.validate.completed', str(cluster_id), 'nodes=0')
+        db.commit()
+        return {'ok': False, 'cluster_id': cluster_id, 'validated_nodes': [], 'message': 'Host runner is not configured for any cluster nodes.'}
     result = [{'node_name': r.node_name, 'status': r.status, 'allowlist_ok': True} for r in rows if r.status == 'host_runner']
     _audit(db, _user.id, 'host_access.validate.completed', str(cluster_id), f'nodes={len(result)}')
     db.commit()
+    if not result:
+        return {'ok': False, 'cluster_id': cluster_id, 'validated_nodes': [], 'message': 'Host runner is not configured for any cluster nodes.'}
     return {'ok': True, 'cluster_id': cluster_id, 'validated_nodes': result}
 
 
