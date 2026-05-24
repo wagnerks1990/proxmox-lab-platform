@@ -70,3 +70,19 @@
 - Codex Cloud can inspect repo structure, make safe source changes, run local compile/build checks when dependencies are available, and create PRs.
 - Codex Cloud must not claim to validate production nginx, systemd, PostgreSQL state, live Proxmox behavior, live SSE browser behavior, Guacamole/ttyd runtime behavior, or production login.
 - PRs must clearly list what was validated in Cloud and what still requires Ubuntu server validation.
+
+## Migration baseline policy
+- Current development migration baseline is `20260521_0001`.
+- Future migrations must be linear from `20260521_0001`.
+- Do not create legacy bridge/merge migrations unless explicitly required.
+- Run Alembic head checks before PRs that touch backend models or migrations.
+- After any development DB reset, run `backend/scripts/validate_post_reset_state.py`.
+- Seed scripts must be idempotent and safe to rerun.
+- Seed scripts must not call live Proxmox APIs.
+- `CONFIG_ENCRYPTION_KEY` belongs in `backend/.env` or deployment secret stores.
+- Never generate encryption keys inside committed migrations.
+- Do not rotate `CONFIG_ENCRYPTION_KEY` casually after encrypted tokens are stored.
+- Default dev admin may be `admin/admin` only in development.
+- Never use `admin/admin` in production.
+- `reset_dev_users.py` must never run automatically.
+- Do not remove force-password-change behavior globally; only seed dev admin with `force_password_change=false`.
