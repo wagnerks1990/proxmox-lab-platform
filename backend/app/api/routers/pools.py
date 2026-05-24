@@ -10,6 +10,7 @@ from app.services.pool_service import PoolService
 from app.services.pool_planning_service import PoolPlanningService
 from app.schemas.pool_plan import PoolPlanResponse
 from app.services.proxmox_bootstrap import ProxmoxBootstrapService
+from app.services.rbac import get_role_name
 
 router = APIRouter()
 
@@ -87,7 +88,10 @@ async def _attach_pool_readiness_hints(db: Session, row: DesktopPool) -> Desktop
 
 
 @router.get('/pools', response_model=ApiEnvelope[list[PoolOut]])
+@router.get('/admin/pools', response_model=ApiEnvelope[list[PoolOut]])
 async def list_pools(_user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+    if get_role_name(_user) not in {'Teacher', 'Admin'}:
+        raise HTTPException(status_code=403, detail='Forbidden')
     rows = db.query(DesktopPool).order_by(DesktopPool.id.desc()).all()
     out = []
     for r in rows:
@@ -96,7 +100,10 @@ async def list_pools(_user=Depends(require_role('Teacher', 'Admin')), db: Sessio
 
 
 @router.post('/pools', response_model=ApiEnvelope[PoolOut])
+@router.post('/admin/pools', response_model=ApiEnvelope[PoolOut])
 async def create_pool(payload: PoolCreate, _user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+    if get_role_name(_user) not in {'Teacher', 'Admin'}:
+        raise HTTPException(status_code=403, detail='Forbidden')
     svc = PoolService(db)
     data = payload.model_dump()
     if not data.get('name'):
@@ -121,7 +128,10 @@ async def create_pool(payload: PoolCreate, _user=Depends(require_role('Teacher',
 
 
 @router.get('/pools/{id}', response_model=ApiEnvelope[PoolOut])
+@router.get('/admin/pools/{id}', response_model=ApiEnvelope[PoolOut])
 async def get_pool(id: int, _user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+    if get_role_name(_user) not in {'Teacher', 'Admin'}:
+        raise HTTPException(status_code=403, detail='Forbidden')
     row = db.query(DesktopPool).filter(DesktopPool.id == id).first()
     if not row:
         raise HTTPException(status_code=404, detail='Pool not found')
@@ -129,7 +139,10 @@ async def get_pool(id: int, _user=Depends(require_role('Teacher', 'Admin')), db:
 
 
 @router.patch('/pools/{id}', response_model=ApiEnvelope[PoolOut])
+@router.patch('/admin/pools/{id}', response_model=ApiEnvelope[PoolOut])
 async def patch_pool(id: int, payload: PoolPatch, _user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+    if get_role_name(_user) not in {'Teacher', 'Admin'}:
+        raise HTTPException(status_code=403, detail='Forbidden')
     row = db.query(DesktopPool).filter(DesktopPool.id == id).first()
     if not row:
         raise HTTPException(status_code=404, detail='Pool not found')
@@ -145,7 +158,10 @@ async def patch_pool(id: int, payload: PoolPatch, _user=Depends(require_role('Te
 
 
 @router.delete('/pools/{id}', response_model=ApiEnvelope[dict])
+@router.delete('/admin/pools/{id}', response_model=ApiEnvelope[dict])
 def delete_pool(id: int, force: bool = False, _user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+    if get_role_name(_user) not in {'Teacher', 'Admin'}:
+        raise HTTPException(status_code=403, detail='Forbidden')
     row = db.query(DesktopPool).filter(DesktopPool.id == id).first()
     if not row:
         raise HTTPException(status_code=404, detail='Pool not found')
