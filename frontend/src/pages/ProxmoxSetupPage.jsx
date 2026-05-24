@@ -24,6 +24,9 @@ export default function ProxmoxSetupPage(){
   const [selectedIsoId, setSelectedIsoId] = useState('')
 
   const activeCluster = useMemo(()=>clusters.find(c=>c.is_active),[clusters])
+  const readinessStatus = String(readiness?.status || '').toUpperCase()
+  const readinessTone = readinessStatus === 'PASS' ? '#065f46' : readinessStatus === 'WARN' ? '#92400e' : '#991b1b'
+  const readinessBg = readinessStatus === 'PASS' ? '#ecfdf5' : readinessStatus === 'WARN' ? '#fffbeb' : '#fef2f2'
 
   const run = async (fn)=>{ setLoading(true); setMsg(''); try{ await fn() } catch(e){ setMsg(JSON.stringify(e?.response?.data?.detail || e?.response?.data || e.message)) } finally { setLoading(false) } }
   const loadClusters = async ()=>{ const {data} = await api.get('/admin/proxmox/clusters'); setClusters(Array.isArray(data)?data:[]) }
@@ -135,13 +138,54 @@ export default function ProxmoxSetupPage(){
 
     {selectedId ? <div className='panel'>
       {readiness ? <div className='panel'>
-        <h3>Cluster Readiness: {readiness.status}</h3>
-        <p className='muted'>Eligible nodes: {(readiness.eligible_nodes || []).join(', ') || 'none'}</p>
+        <h3>Cluster Readiness: <span style={{padding:'2px 8px', borderRadius:8, background:readinessBg, color:readinessTone}}>{readinessStatus || 'UNKNOWN'}</span></h3>
+        {readinessStatus === 'WARN' ? <p style={{color:'#92400e', fontWeight:600}}>Balanced placement is constrained. Required assets are not available on every eligible node.</p> : null}
+        {readinessStatus === 'FAIL' ? <p style={{color:'#991b1b', fontWeight:600}}>Cluster readiness has blocking failures.</p> : null}
+        <div className='group' style={{alignItems:'flex-start'}}>
+          <div><strong>Placement policy:</strong> {readiness?.defaults?.placement_policy || 'not set'}</div>
+          <div><strong>Eligible nodes:</strong> {(readiness.eligible_nodes || []).join(', ') || 'none'}</div>
+          <div><strong>Asset-ready nodes:</strong> {(readiness.asset_ready_nodes || []).join(', ') || 'none'}</div>
+          <div><strong>Constrained nodes:</strong> {(readiness.constrained_nodes || []).join(', ') || 'none'}</div>
+        </div>
+        {(readiness.asset_ready_nodes || []).length === 1 && (readiness.constrained_nodes || []).length > 0 ? (
+          <p className='muted'>
+            Current cluster style indicates <strong>{readiness.asset_ready_nodes[0]}</strong> is asset-ready while constrained nodes should not be targeted for balanced provisioning until assets are shared, replicated, prepared, or placement is explicitly constrained.
+          </p>
+        ) : null}
         {(readiness.excluded_nodes || []).length ? <p className='muted'>Excluded nodes: {readiness.excluded_nodes.join(', ')}</p> : null}
         {readiness.excluded_node_reasons ? <ul>{Object.entries(readiness.excluded_node_reasons).map(([n,rs])=><li key={n} className='muted'>{n}: {(rs || []).join(', ')}</li>)}</ul> : null}
+        {readiness.missing_templates_by_node ? <div>
+          <h4>Missing Templates by Node</h4>
+          {Object.keys(readiness.missing_templates_by_node).length === 0 ? <p className='muted'>No template gaps reported.</p> : (
+            <table className='vm-table'>
+              <thead><tr><th>Node</th><th>Missing template VMIDs</th></tr></thead>
+              <tbody>
+                {Object.entries(readiness.missing_templates_by_node).map(([node, missing])=>(
+                  <tr key={node}><td>{node}</td><td>{(missing || []).join(', ') || '-'}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div> : null}
+        {readiness.missing_isos_by_node ? <div>
+          <h4>Missing ISO/Media by Node</h4>
+          {Object.keys(readiness.missing_isos_by_node).length === 0 ? <p className='muted'>No ISO/media gaps reported.</p> : (
+            <table className='vm-table'>
+              <thead><tr><th>Node</th><th>Missing ISO/media items</th></tr></thead>
+              <tbody>
+                {Object.entries(readiness.missing_isos_by_node).map(([node, missing])=>(
+                  <tr key={node}><td>{node}</td><td>{(missing || []).join(', ') || '-'}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div> : null}
         {(readiness.warnings || []).length ? <ul>{readiness.warnings.map((w,i)=><li key={i} className='muted'>{w}</li>)}</ul> : null}
         {(readiness.failures || []).length ? <ul>{readiness.failures.map((w,i)=><li key={i} className='muted'>{w}</li>)}</ul> : null}
-        {(readiness.recommended_next_steps || []).length ? <ul>{readiness.recommended_next_steps.map((w,i)=><li key={i} className='muted'>{w}</li>)}</ul> : null}
+        {(readiness.recommended_next_steps || []).length ? <div>
+          <h4>Recommended Actions</h4>
+          <ul>{readiness.recommended_next_steps.map((w,i)=><li key={i} className='muted'>{w}</li>)}</ul>
+        </div> : null}
         <p className='muted'>Template/media sync automation may be unsupported. Use shared storage or manual Proxmox replication when guided below.</p>
         <button disabled={loading} onClick={()=>refreshDiscovery(selectedId)}>Refresh Readiness</button>
         <select className='input' value={selectedTemplateVmid} onChange={e=>setSelectedTemplateVmid(e.target.value)}>
