@@ -406,19 +406,66 @@ async def reconcile_vms(_user=Depends(require_role('Admin')), db: Session = Depe
     inv = await proxmox_inventory_vms(_user=_user, db=db)
     inv_map = {(x.get('node'), int(x.get('vmid'))): x for x in inv}
     report = []
-    for vm in db.query(StudentVM).all():
+    matched = 0
+    missing = 0
+    status_updated = 0
+    app_rows = db.query(StudentVM).all()
+    for vm in app_rows:
         key = (vm.proxmox_node, int(vm.vmid))
         found = inv_map.get(key)
+        previous_status = vm.status
         if not found:
-            vm.status = 'missing'
-            report.append({'app_vm_id': vm.id, 'vmid': vm.vmid, 'node': vm.proxmox_node, 'state': 'app_only_missing_in_proxmox'})
+            new_status = vm.status if vm.status in {'missing', 'error'} else 'missing'
+            vm.status = new_status
+            if previous_status != new_status:
+                status_updated += 1
+            missing += 1
+            report.append({
+                'app_vm_id': vm.id,
+                'vmid': vm.vmid,
+                'node': vm.proxmox_node,
+                'state': 'app_only_missing_in_proxmox',
+                'previous_status': previous_status,
+                'new_status': vm.status,
+                'message': f'App VM record exists but VMID {vm.vmid} was not found on {vm.proxmox_node}.',
+            })
         else:
-            pstatus = found.get('status')
-            state = 'matched' if pstatus == vm.status else 'status_mismatch'
-            report.append({'app_vm_id': vm.id, 'vmid': vm.vmid, 'node': vm.proxmox_node, 'state': state, 'app_status': vm.status, 'proxmox_status': pstatus})
+            proxmox_status = (found.get('status') or vm.status or '').lower() or vm.status
+            if proxmox_status and vm.status != proxmox_status:
+                vm.status = proxmox_status
+                status_updated += 1
+            state = 'matched' if vm.status == proxmox_status else 'status_mismatch'
+            if state == 'matched':
+                matched += 1
+            report.append({
+                'app_vm_id': vm.id,
+                'vmid': vm.vmid,
+                'node': vm.proxmox_node,
+                'state': state,
+                'previous_status': previous_status,
+                'new_status': vm.status,
+                'proxmox_status': proxmox_status,
+                'message': f'VMID {vm.vmid} exists in Proxmox on {vm.proxmox_node}.',
+            })
     db.commit()
     proxmox_only = [x for x in inv if not x.get('app_vm_id')]
-    return {'report': report, 'proxmox_only_count': len(proxmox_only), 'proxmox_only': proxmox_only}
+    return {
+        'summary': {
+            'app_vms': len(app_rows),
+            'matched': matched,
+            'missing': missing,
+            'status_updated': status_updated,
+            'proxmox_only': len(proxmox_only),
+        },
+        'report': report,
+        'proxmox_only_count': len(proxmox_only),
+        'proxmox_only': proxmox_only,
+    }
+
+
+@router.post('/admin/proxmox/reconciliation/vms')
+async def reconcile_vms_post(_user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    return await reconcile_vms(_user=_user, db=db)
 
 
 @router.post('/admin/proxmox/templates/{vmid}/sync')

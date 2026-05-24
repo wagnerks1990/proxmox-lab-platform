@@ -142,3 +142,60 @@ async def start_vm(id: int, user: User = Depends(get_current_user), db: Session 
     db.commit(); db.refresh(vm)
     bus.publish(DomainEvent(name=VM_STARTED, payload={'vm_id': vm.id, 'actor_id': user.id}))
     return vm
+
+
+@router.post('/vms/{id}/stop', response_model=VMResponse)
+async def stop_vm(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    vm = _get_vm_for_user(db, user, id)
+    await ProxmoxClient().stop_vm(vm.proxmox_node, vm.vmid)
+    vm.status = (await ProxmoxClient().get_vm_status(vm.proxmox_node, vm.vmid)).get('status', vm.status)
+    db.commit(); db.refresh(vm)
+    return vm
+
+
+@router.post('/vms/{id}/reboot', response_model=VMResponse)
+async def reboot_vm(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    vm = _get_vm_for_user(db, user, id)
+    await ProxmoxClient().reboot_vm(vm.proxmox_node, vm.vmid)
+    vm.status = (await ProxmoxClient().get_vm_status(vm.proxmox_node, vm.vmid)).get('status', vm.status)
+    db.commit(); db.refresh(vm)
+    return vm
+
+
+@router.get('/vms/{id}/status', response_model=VMResponse)
+async def refresh_vm_status(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    vm = _get_vm_for_user(db, user, id)
+    try:
+        vm.status = (await ProxmoxClient().get_vm_status(vm.proxmox_node, vm.vmid)).get('status', vm.status)
+    except Exception:
+        vm.status = 'missing' if vm.status not in {'error', 'missing'} else vm.status
+    db.commit(); db.refresh(vm)
+    return vm
+
+
+@router.delete('/vms/{id}', response_model=dict)
+async def delete_vm_record(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    vm = _get_vm_for_user(db, user, id)
+    db.delete(vm)
+    db.commit()
+    return {'ok': True, 'message': 'App VM record removed.'}
+
+
+@router.delete('/admin/lab-vms/{id}/app-record', response_model=dict)
+async def delete_app_record_admin(id: int, force: bool = False, _user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if get_role_name(_user) != 'Admin':
+        raise HTTPException(status_code=403, detail='Admin access required')
+    vm = db.query(StudentVM).filter(StudentVM.id == id).first()
+    if not vm:
+        raise HTTPException(status_code=404, detail='VM not found')
+    exists_in_proxmox = False
+    try:
+        await ProxmoxClient().get_vm_status(vm.proxmox_node, vm.vmid)
+        exists_in_proxmox = True
+    except Exception:
+        exists_in_proxmox = False
+    if exists_in_proxmox and not force:
+        raise HTTPException(status_code=409, detail='VM exists in Proxmox; refuse app-record delete without force=true')
+    db.delete(vm)
+    db.commit()
+    return {'ok': True, 'deleted_app_vm_id': id, 'deleted_record_only': True, 'proxmox_vm_deleted': False}
