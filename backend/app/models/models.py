@@ -208,3 +208,30 @@ class ProxmoxClusterDefault(Base):
     clone_mode = Column(String(50), nullable=True)
     placement_policy = Column(String(50), nullable=True)
     notes = Column(String(500), nullable=True)
+
+
+class Group(Base):
+    __tablename__ = 'groups'
+    id = Column(Integer, primary_key=True)
+    name = Column(String(120), nullable=False, unique=True)
+    description = Column(String(255), nullable=True)
+    enabled = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class GroupMembership(Base):
+    __tablename__ = 'group_memberships'
+    id = Column(Integer, primary_key=True)
+    group_id = Column(Integer, ForeignKey('groups.id'), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    role_in_group = Column(String(50), nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class GroupTemplatePermission(Base):
+    __tablename__ = 'group_template_permissions'
+    id = Column(Integer, primary_key=True)
+    group_id = Column(Integer, ForeignKey('groups.id'), nullable=False, index=True)
+    template_id = Column(Integer, ForeignKey('vm_templates.id'), nullable=False, index=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
