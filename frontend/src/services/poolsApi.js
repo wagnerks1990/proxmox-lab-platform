@@ -1,4 +1,11 @@
 import api from './api'
 export const listPools = () => api.get('/pools').then(r => r.data.data)
 export const getPool = (id) => api.get(`/pools/${id}`).then(r => r.data.data)
-export const planPool = (id) => api.post(`/pools/${id}/plan`).then(r => r.data.data)
+export const createPool = (payload) => api.post('/pools', payload).then(r => r.data.data)
+export const updatePool = (id, payload) => api.patch(`/pools/${id}`, payload).then(r => r.data.data)
+export const deletePool = (id, force=false) => api.delete(`/pools/${id}`, { params: { force } }).then(r => r.data.data)
+export const togglePoolEnabled = (id, enabled) => api.patch(`/pools/${id}/enabled`, { enabled }).then(r => r.data.data)
+export const togglePoolMaintenance = (id, maintenance_mode) => api.patch(`/pools/${id}/maintenance`, { maintenance_mode }).then(r => r.data.data)
+export const readinessPool = (id) => api.get(`/pools/${id}/readiness`).then(r => r.data.data)
+export const membersPool = (id) => api.get(`/pools/${id}/members`).then(r => r.data.data)
+export const planPool = (id) => api.get(`/pools/${id}/plan`).then(r => r.data.data)
