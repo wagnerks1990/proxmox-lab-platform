@@ -28,6 +28,7 @@ async def test_readiness_empty_catalog_warn(monkeypatch):
     out = await proxmox_assets.assets_readiness(_user=Obj(), db=DB(required=False))
     assert out['status'] == 'WARN'
     assert 'vm_template_vmid_by_node' in out
+    assert 'generated_at' in out
 
 @pytest.mark.asyncio
 async def test_readiness_missing_vm_detected(monkeypatch):
@@ -42,3 +43,17 @@ async def test_readiness_missing_vm_detected(monkeypatch):
     out = await proxmox_assets.assets_readiness(_user=Obj(), db=DB(required=True))
     assert out['status'] == 'WARN'
     assert 'pve-lab-02' in out['missing_vm_templates_by_node']
+    required_keys = {
+        'ok',
+        'status',
+        'asset_ready_nodes',
+        'constrained_nodes',
+        'missing_isos_by_node',
+        'missing_ct_templates_by_node',
+        'missing_vm_templates_by_node',
+        'vm_template_vmid_by_node',
+        'recommended_next_steps',
+        'errors_by_node',
+        'generated_at',
+    }
+    assert required_keys.issubset(set(out.keys()))

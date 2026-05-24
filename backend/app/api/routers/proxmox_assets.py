@@ -90,6 +90,7 @@ async def assets_readiness(_user=Depends(require_role('Teacher', 'Admin')), db: 
             for g in inv.get('vm_templates_by_node', []) for t in g.get('templates', [])
         },
         'errors_by_node': inv.get('errors_by_node', {}),
+        'generated_at': datetime.now(timezone.utc).isoformat(),
         'recommended_next_steps': [
             'Sync missing assets to constrained nodes.',
             'Use local-only placement constraints until assets are verified on each target node.',
