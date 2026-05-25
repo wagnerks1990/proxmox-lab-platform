@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     host_runner_enabled: bool = False
     host_runner_user: str = 'proxmox-lab-runner'
     host_runner_private_key_path: str | None = None
+    asset_sync_poll_interval_seconds: int = 3
+    asset_sync_download_timeout_seconds: int = 7200
 
 
 settings = Settings()
