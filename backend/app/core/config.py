@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     asset_source_ct_base_url: str | None = None
     host_runner_enabled: bool = False
     host_runner_user: str = 'proxmox-lab-runner'
+    host_runner_private_key_path: str | None = None
 
 
 settings = Settings()

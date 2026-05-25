@@ -11,6 +11,7 @@ import hashlib
 from app.services.proxmox_bootstrap import ProxmoxBootstrapService
 from app.services.proxmox_resource_stats import ProxmoxResourceStatsService
 from app.services.asset_server_control import AssetServerControl, HostRunnerNotConfiguredError
+from app.services.host_runner import HostRunnerService
 
 router = APIRouter()
 
@@ -215,20 +216,40 @@ def host_access_status(cluster_id: int | None = None, _user=Depends(require_role
 @router.post('/admin/proxmox/host-access/validate')
 def host_access_validate(payload: dict, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
     cluster_id = _resolve_cluster_id(db, payload.get('cluster_id'))
-    if not settings.host_runner_enabled:
-        return {'ok': False, 'cluster_id': cluster_id, 'validated_nodes': [], 'message': 'Host runner is disabled.'}
     _audit(db, _user.id, 'host_access.validate.started', str(cluster_id), 'started')
-    rows = db.query(ProxmoxHostAccess).filter(ProxmoxHostAccess.cluster_id == cluster_id).all()
-    if not rows:
-        _audit(db, _user.id, 'host_access.validate.completed', str(cluster_id), 'nodes=0')
+    try:
+        runner = HostRunnerService()
+        runner.ensure_ready()
+    except ValueError as e:
         db.commit()
-        return {'ok': False, 'cluster_id': cluster_id, 'validated_nodes': [], 'message': 'Host runner is not configured for any cluster nodes.'}
-    result = [{'node_name': r.node_name, 'status': r.status, 'allowlist_ok': True} for r in rows if r.status == 'host_runner']
-    _audit(db, _user.id, 'host_access.validate.completed', str(cluster_id), f'nodes={len(result)}')
+        return {'ok': False, 'cluster_id': cluster_id, 'validated_nodes': [], 'message': str(e)}
+
+    nodes = db.query(ProxmoxNode).filter(ProxmoxNode.cluster_id == cluster_id).all()
+    validated, failed = [], []
+    for n in nodes:
+        iso = runner.run_helper(n.node_name, 'iso', 'status')
+        ct = runner.run_helper(n.node_name, 'ct_template', 'status')
+        helper_executed = iso.returncode == 0 or ct.returncode == 0
+        if helper_executed:
+            rec = db.query(ProxmoxHostAccess).filter(ProxmoxHostAccess.cluster_id == cluster_id, ProxmoxHostAccess.node_name == n.node_name).first()
+            if not rec:
+                rec = ProxmoxHostAccess(cluster_id=cluster_id, node_name=n.node_name)
+                db.add(rec)
+            rec.status = 'host_runner'
+            rec.runner_user = settings.host_runner_user
+            rec.auth_method = 'ssh_key'
+            rec.key_ref = settings.host_runner_private_key_path
+            rec.capabilities_json = str({'asset_server': ['status', 'install', 'start', 'stop']})
+            rec.last_checked_at = datetime.utcnow()
+            rec.updated_at = datetime.utcnow()
+            validated.append({'node_name': n.node_name, 'status': 'host_runner', 'allowlist_ok': True})
+        else:
+            failed.append({'node_name': n.node_name, 'error': (iso.stderr or ct.stderr or 'helper execution failed').strip()[:300]})
+    _audit(db, _user.id, 'host_access.validate.completed', str(cluster_id), f'nodes={len(validated)}')
     db.commit()
-    if not result:
-        return {'ok': False, 'cluster_id': cluster_id, 'validated_nodes': [], 'message': 'Host runner is not configured for any cluster nodes.'}
-    return {'ok': True, 'cluster_id': cluster_id, 'validated_nodes': result}
+    if not validated:
+        return {'ok': False, 'cluster_id': cluster_id, 'validated_nodes': [], 'failed_nodes': failed, 'message': 'Host runner is not configured for any cluster nodes.'}
+    return {'ok': len(failed) == 0, 'cluster_id': cluster_id, 'validated_nodes': validated, 'failed_nodes': failed, 'message': ('Validated with partial failures.' if failed else 'Validated.')}
 
 
 @router.get('/admin/proxmox/asset-server/status')

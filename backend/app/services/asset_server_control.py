@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.models import ProxmoxCluster, ProxmoxHostAccess, ProxmoxNode
+from app.services.host_runner import HostRunnerService
 
 Kind = Literal['iso', 'ct_template']
 
@@ -83,9 +84,20 @@ class AssetServerControl:
             'message': message,
         }
 
-    def _execute_host_runner(self, *_args, **_kwargs):
-        # Command runner integration intentionally guarded for this environment.
-        return {'status': 'error', 'message': 'Host runner execution integration is not enabled in this environment.'}
+    def _execute_host_runner(self, node_name: str, action: str, kind: str):
+        res = HostRunnerService().run_helper(node_name, kind, action)
+        out = f"{res.stdout}\n{res.stderr}".lower()
+        if action == 'status':
+            if res.ok and ('active' in out or 'running' in out):
+                return {'status': 'running', 'message': 'service running'}
+            if res.ok and ('inactive' in out or 'stopped' in out):
+                return {'status': 'stopped', 'message': 'service stopped'}
+            if 'could not be found' in out or 'not-found' in out or 'not found' in out:
+                return {'status': 'not_installed', 'message': 'service not installed on node'}
+            return {'status': ('error' if not res.ok else 'unknown'), 'message': (res.stderr or res.stdout or 'unknown status').strip()[:300]}
+        if res.ok:
+            return {'status': 'running' if action in {'install', 'start'} else 'stopped', 'message': f'{action} completed'}
+        return {'status': 'error', 'message': (res.stderr or res.stdout or f'{action} failed').strip()[:300]}
 
     def status(self, kind: str, cluster_id: int | None = None, source_node: str | None = None):
         spec = self._validate_kind(kind)
