@@ -9,9 +9,11 @@ from sqlalchemy.orm import Session
 from app.models.models import AssetCatalog, AssetNodeState, AssetSyncJob, AssetSyncJobEvent
 from app.services.proxmox_assets import ProxmoxAssetsService
 from app.db.session import SessionLocal
-from app.core.config import settings
 
 ALLOWED_HOSTS = {'10.0.16.126', '127.0.0.1', 'localhost'}
+
+POLL_INTERVAL_SECONDS = 2
+MAX_TASK_POLLS = 60
 
 class AssetSyncService:
     def __init__(self, db: Session):
@@ -57,44 +59,21 @@ class AssetSyncService:
         await asyncio.sleep(seconds)
 
     async def _poll_task_until_done(self, job: AssetSyncJob, node: str, upid: str):
-        poll_interval = max(1, int(settings.asset_sync_poll_interval_seconds or 3))
-        timeout_seconds = max(poll_interval, int(settings.asset_sync_download_timeout_seconds or 7200))
-        deadline = datetime.utcnow().timestamp() + timeout_seconds
-        attempt = 0
-        latest_task_status = 'unknown'
-        latest_exitstatus = None
-
-        while datetime.utcnow().timestamp() < deadline:
-            attempt += 1
+        for attempt in range(1, MAX_TASK_POLLS + 1):
             status = await self.assets.task_status(node, upid)
             task_status = str((status or {}).get('status') or '').lower()
             exitstatus = (status or {}).get('exitstatus')
-            latest_task_status = task_status or latest_task_status
-            latest_exitstatus = exitstatus
-            elapsed = int(timeout_seconds - max(0, deadline - datetime.utcnow().timestamp()))
-            self._log(job.id, 'info', 'Polling task status', {
-                'attempt': attempt,
-                'status': task_status,
-                'exitstatus': exitstatus,
-                'elapsed_seconds': elapsed,
-                'timeout_seconds': timeout_seconds,
-            })
+            self._log(job.id, 'info', 'Polling task status', {'attempt': attempt, 'status': task_status, 'exitstatus': exitstatus})
             if task_status == 'stopped':
                 if str(exitstatus).upper() == 'OK':
-                    self._log(job.id, 'info', 'Task completed OK', {'exitstatus': exitstatus, 'elapsed_seconds': elapsed, 'timeout_seconds': timeout_seconds})
+                    self._log(job.id, 'info', 'Task completed OK', {'exitstatus': exitstatus})
                     return True, None
-                self._log(job.id, 'error', 'Task failed', {'exitstatus': exitstatus, 'elapsed_seconds': elapsed, 'timeout_seconds': timeout_seconds})
+                self._log(job.id, 'error', 'Task failed', {'exitstatus': exitstatus})
                 return False, f'Proxmox task failed: {exitstatus or "unknown"}'
-            await self._sleep(poll_interval)
-
-        elapsed_total = timeout_seconds
-        self._log(job.id, 'error', 'Task polling timeout', {
-            'elapsed_seconds': elapsed_total,
-            'timeout_seconds': timeout_seconds,
-            'latest_task_status': latest_task_status,
-            'latest_exitstatus': latest_exitstatus,
-        })
-        return False, f'Timed out waiting for Proxmox download task to complete (elapsed={elapsed_total}s timeout={timeout_seconds}s latest_status={latest_task_status}).'
+            if attempt < MAX_TASK_POLLS:
+                await self._sleep(POLL_INTERVAL_SECONDS)
+        self._log(job.id, 'error', 'Task polling timeout')
+        return False, 'Timed out waiting for Proxmox download task to complete.'
 
     async def _verify_on_node(self, kind: str, filename: str, node: str, storage_id: str):
         if kind == 'iso':
