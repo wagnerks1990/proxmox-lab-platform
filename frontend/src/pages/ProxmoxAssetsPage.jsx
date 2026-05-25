@@ -24,6 +24,7 @@ export default function ProxmoxAssetsPage() {
       ])
       setInventory(inv.data)
       setReadiness(ready.data)
+      await loadJobs()
       try {
         const clusters = await api.get('/admin/proxmox/clusters')
         const active = (clusters.data || []).find(c => c.is_active)
@@ -75,13 +76,17 @@ export default function ProxmoxAssetsPage() {
     return onlineNodes.filter((n) => (missing[n] || []).some((v) => String(v).split('/').pop() === ctForm.filename))
   }, [onlineNodes, readiness, ctForm.filename])
 
-  const pushJobs = (newJobs=[]) => setJobs(prev => [...newJobs, ...prev])
+  const loadJobs = async () => {
+    const { data } = await api.get('/admin/proxmox/assets/sync-jobs?limit=20')
+    setJobs(data?.items || [])
+    return data?.items || []
+  }
 
   const runIsoSync = async () => {
     setBusy(true); setMsg('')
     try {
       const { data } = await api.post('/admin/proxmox/assets/sync/iso', { ...isoForm, source_url: effectiveIsoSourceUrl, storage_id: 'local' })
-      pushJobs(data?.jobs || [])
+      await loadJobs()
       await load()
     } catch (e) { setMsg(JSON.stringify(e?.response?.data?.detail || e.message)) } finally { setBusy(false) }
   }
@@ -90,7 +95,7 @@ export default function ProxmoxAssetsPage() {
     setBusy(true); setMsg('')
     try {
       const { data } = await api.post('/admin/proxmox/assets/sync/ct-template', { ...ctForm, source_url: effectiveCtSourceUrl, storage_id: 'local' })
-      pushJobs(data?.jobs || [])
+      await loadJobs()
       await load()
     } catch (e) { setMsg(JSON.stringify(e?.response?.data?.detail || e.message)) } finally { setBusy(false) }
   }
@@ -100,7 +105,7 @@ export default function ProxmoxAssetsPage() {
     try {
       const payload = { ...vmForm, source_vmid: Number(vmForm.source_vmid) }
       const { data } = await api.post('/admin/proxmox/assets/sync/vm-template', payload)
-      pushJobs(data?.jobs || [])
+      await loadJobs()
     } catch (e) { setMsg(JSON.stringify(e?.response?.data?.detail || e.message)) } finally { setBusy(false) }
   }
 
@@ -115,6 +120,23 @@ export default function ProxmoxAssetsPage() {
 
   const vmSyncSupported = hostAccess?.mode === 'host_runner'
   const assetServerManageSupported = hostAccess?.mode === 'host_runner'
+
+
+  useEffect(() => {
+    if (!jobs.length) return
+    const active = jobs.some(j => ['queued', 'syncing'].includes(String(j.state || '').toLowerCase()))
+    if (!active) return
+    const t = setInterval(async () => {
+      try {
+        const latest = await loadJobs()
+        const hadActive = latest.some(j => ['queued', 'syncing'].includes(String(j.state || '').toLowerCase()))
+        if (!hadActive) {
+          await load()
+        }
+      } catch (_) {}
+    }, 3000)
+    return () => clearInterval(t)
+  }, [jobs])
 
   const assetServerAction = async (kind, action) => {
     setBusy(true); setMsg('')
@@ -210,8 +232,9 @@ export default function ProxmoxAssetsPage() {
 
     <div className='panel'>
       <h4>Sync Jobs</h4>
+      <button disabled={busy} onClick={loadJobs}>Refresh Jobs</button>
       <table className='vm-table'><thead><tr><th>job_id</th><th>state</th><th>method</th><th>target_node</th><th>proxmox_upid</th><th>error</th><th>details</th></tr></thead><tbody>
-        {jobs.map(j => <tr key={j.job_id}><td>{j.job_id}</td><td>{j.state}</td><td>{j.method}</td><td>{j.target_node}</td><td>{j.proxmox_upid || '-'}</td><td>{j.error || '-'}</td><td><button onClick={()=>fetchJob(j.job_id)}>Load logs</button></td></tr>)}
+        {jobs.map(j => <tr key={j.id}><td>{j.id}</td><td>{j.state}</td><td>{j.method}</td><td>{j.target_node}</td><td>{j.proxmox_upid || '-'}</td><td>{j.error || '-'}</td><td><button onClick={()=>fetchJob(j.id)}>Load logs</button></td></tr>)}
       </tbody></table>
       {Object.entries(jobDetails).map(([id, d]) => <pre key={id} className='muted' style={{whiteSpace:'pre-wrap'}}>Job {id}: {JSON.stringify(d, null, 2)}</pre>)}
     </div>

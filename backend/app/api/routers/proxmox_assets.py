@@ -133,6 +133,40 @@ async def sync_vm_template(payload: SyncVmTemplateRequest, _user=Depends(require
     return {'jobs': [{'job_id': j.id, 'state': j.state, 'method': j.method, 'target_node': j.target_node, 'error': j.error} for j in jobs]}
 
 
+
+@router.get('/admin/proxmox/assets/sync-jobs')
+async def sync_jobs(limit: int = 20, offset: int = 0, state: str | None = None, method: str | None = None, target_node: str | None = None, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    limit = max(1, min(limit, 200))
+    offset = max(0, offset)
+    q = db.query(AssetSyncJob)
+    if state:
+        q = q.filter(AssetSyncJob.state == state)
+    if method:
+        q = q.filter(AssetSyncJob.method == method)
+    if target_node:
+        q = q.filter(AssetSyncJob.target_node == target_node)
+    total = q.count()
+    rows = q.order_by(AssetSyncJob.id.desc()).offset(offset).limit(limit).all()
+    return {
+        'items': [
+            {
+                'id': j.id,
+                'state': j.state,
+                'method': j.method,
+                'target_node': j.target_node,
+                'proxmox_upid': j.proxmox_upid,
+                'started_at': j.started_at,
+                'finished_at': j.finished_at,
+                'error': j.error,
+            }
+            for j in rows
+        ],
+        'limit': limit,
+        'offset': offset,
+        'total': total,
+    }
+
+
 @router.get('/admin/proxmox/assets/sync-jobs/{job_id}')
 async def sync_job(job_id: int, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
     job = db.query(AssetSyncJob).filter(AssetSyncJob.id == job_id).first()
