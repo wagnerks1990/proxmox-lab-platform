@@ -57,7 +57,6 @@ npm run dev
 
 ## Seed users
 All seeded users use password: `Password123!`
-- `alice` (Student)
 - `teacher1` (Teacher)
 - `admin1` (Admin)
 
