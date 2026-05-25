@@ -9,16 +9,19 @@ from app.schemas.assets import SyncIsoRequest, SyncCtTemplateRequest, SyncVmTemp
 from app.services.asset_sync import AssetSyncService
 from app.services.proxmox_assets import ProxmoxAssetsService
 from app.core.config import settings
+from urllib.parse import quote
 
 router = APIRouter()
 
 
 @router.get('/admin/proxmox/assets/source-url')
 async def asset_source_url(kind: str, filename: str, _user=Depends(require_role('Teacher', 'Admin'))):
+    if any(x in filename for x in ('..', '/', '\\')) or filename.startswith('http://') or filename.startswith('https://'):
+        raise HTTPException(status_code=400, detail='invalid filename')
     base = settings.asset_source_iso_base_url if kind == 'iso' else settings.asset_source_ct_base_url if kind in {'ct', 'ct-template', 'vztmpl'} else None
     if not base:
         return {'ok': False, 'kind': kind, 'filename': filename, 'message': 'Asset source base URL is not configured.'}
-    return {'ok': True, 'kind': kind, 'filename': filename, 'source_url': f"{base.rstrip('/')}/{filename}"}
+    return {'ok': True, 'kind': kind, 'filename': filename, 'source_url': f"{base.rstrip('/')}/{quote(filename)}"}
 
 
 @router.get('/admin/proxmox/assets/inventory')
