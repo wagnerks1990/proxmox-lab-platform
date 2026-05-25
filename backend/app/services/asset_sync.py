@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models.models import AssetCatalog, AssetNodeState, AssetSyncJob, AssetSyncJobEvent
 from app.services.proxmox_assets import ProxmoxAssetsService
+from app.db.session import SessionLocal
 
 ALLOWED_HOSTS = {'10.0.16.126', '127.0.0.1', 'localhost'}
 
@@ -81,73 +82,85 @@ class AssetSyncService:
             current = await self.assets.discover_ct_templates_by_node([node], storage_id)
         return any((x.get('filename') == filename) for x in (current[0].get('items') if current else []))
 
-    async def sync_iso(self, filename: str, storage_id: str, source_url: str, target_nodes: list[str]):
+    async def enqueue_iso(self, filename: str, storage_id: str, source_url: str, target_nodes: list[str]):
         self._validate_url(source_url)
         await self._validate_targets(target_nodes, storage_id)
         jobs = []
         for node in target_nodes:
-            job = self._new_job('download-url-iso', node)
-            current = await self.assets.discover_isos_by_node([node], storage_id)
-            have = any((x.get('filename') == filename) for x in (current[0].get('items') if current else []))
-            if have:
-                self._finish(job, 'verified')
-                self._log(job.id, 'info', f'ISO already present on {node}; verified idempotently.')
-                jobs.append(job)
-                continue
-            self._log(job.id, 'info', f'Starting ISO sync for {filename} to {node}')
-            upid = await self.assets.download_url(node, storage_id, 'iso', filename, source_url)
-            job.proxmox_upid = str(upid)
-            job.state = 'syncing'
-            self._log(job.id, 'info', 'Download URL submitted', {'upid': job.proxmox_upid})
-            ok, err = await self._poll_task_until_done(job, node, job.proxmox_upid)
-            if not ok:
-                self._finish(job, 'failed', err)
-                jobs.append(job)
-                continue
-            have_after = await self._verify_on_node('iso', filename, node, storage_id)
-            if have_after:
-                self._finish(job, 'verified')
-                self._log(job.id, 'info', 'Verification passed')
-            else:
-                self._finish(job, 'failed', 'Post-download verification failed: ISO not found in target storage content list.')
-                self._log(job.id, 'error', 'Verification failed')
+            job = self._new_job('download-url-iso', node, filename=filename, storage_id=storage_id, source_url=source_url)
+            self._log(job.id, 'info', 'Job queued', {'filename': filename, 'storage_id': storage_id})
             jobs.append(job)
         self.db.commit()
         return jobs
 
-    async def sync_ct_template(self, filename: str, storage_id: str, source_url: str, target_nodes: list[str]):
+    async def enqueue_ct_template(self, filename: str, storage_id: str, source_url: str, target_nodes: list[str]):
         self._validate_url(source_url)
         await self._validate_targets(target_nodes, storage_id)
         jobs = []
         for node in target_nodes:
-            job = self._new_job('download-url-vztmpl', node)
-            current = await self.assets.discover_ct_templates_by_node([node], storage_id)
-            have = any((x.get('filename') == filename) for x in (current[0].get('items') if current else []))
-            if have:
-                self._finish(job, 'verified')
-                self._log(job.id, 'info', f'CT template already present on {node}; verified idempotently.')
-                jobs.append(job)
-                continue
-            self._log(job.id, 'info', f'Starting CT template sync for {filename} to {node}')
-            upid = await self.assets.download_url(node, storage_id, 'vztmpl', filename, source_url)
-            job.proxmox_upid = str(upid)
-            job.state = 'syncing'
-            self._log(job.id, 'info', 'Download URL submitted', {'upid': job.proxmox_upid})
-            ok, err = await self._poll_task_until_done(job, node, job.proxmox_upid)
-            if not ok:
-                self._finish(job, 'failed', err)
-                jobs.append(job)
-                continue
-            have_after = await self._verify_on_node('ct_template', filename, node, storage_id)
-            if have_after:
-                self._finish(job, 'verified')
-                self._log(job.id, 'info', 'Verification passed')
-            else:
-                self._finish(job, 'failed', 'Post-download verification failed: CT template not found in target storage content list.')
-                self._log(job.id, 'error', 'Verification failed')
+            job = self._new_job('download-url-vztmpl', node, filename=filename, storage_id=storage_id, source_url=source_url)
+            self._log(job.id, 'info', 'Job queued', {'filename': filename, 'storage_id': storage_id})
             jobs.append(job)
         self.db.commit()
         return jobs
+
+    @staticmethod
+    async def process_job(job_id: int):
+        db = SessionLocal()
+        try:
+            svc = AssetSyncService(db)
+            job = db.query(AssetSyncJob).filter(AssetSyncJob.id == job_id).first()
+            if not job:
+                return
+            meta = eval(job.metadata_json) if job.metadata_json else {}
+            filename = meta.get('filename')
+            storage_id = meta.get('storage_id', 'local')
+            source_url = meta.get('source_url')
+            node = job.target_node
+
+            if job.method == 'download-url-iso':
+                current = await svc.assets.discover_isos_by_node([node], storage_id)
+                have = any((x.get('filename') == filename) for x in (current[0].get('items') if current else []))
+                if have:
+                    svc._finish(job, 'verified')
+                    svc._log(job.id, 'info', f'ISO already present on {node}; verified idempotently.')
+                    db.commit(); return
+                upid = await svc.assets.download_url(node, storage_id, 'iso', filename, source_url)
+            else:
+                current = await svc.assets.discover_ct_templates_by_node([node], storage_id)
+                have = any((x.get('filename') == filename) for x in (current[0].get('items') if current else []))
+                if have:
+                    svc._finish(job, 'verified')
+                    svc._log(job.id, 'info', f'CT template already present on {node}; verified idempotently.')
+                    db.commit(); return
+                upid = await svc.assets.download_url(node, storage_id, 'vztmpl', filename, source_url)
+
+            job.proxmox_upid = str(upid)
+            job.state = 'syncing'
+            svc._log(job.id, 'info', 'download-url submitted', {'upid': job.proxmox_upid})
+            db.commit()
+
+            ok, err = await svc._poll_task_until_done(job, node, job.proxmox_upid)
+            if not ok:
+                svc._finish(job, 'failed', err)
+                db.commit(); return
+            have_after = await svc._verify_on_node('iso' if job.method == 'download-url-iso' else 'ct_template', filename, node, storage_id)
+            if have_after:
+                svc._finish(job, 'verified')
+                svc._log(job.id, 'info', 'verification passed')
+            else:
+                svc._finish(job, 'failed', 'Post-download verification failed.')
+                svc._log(job.id, 'error', 'verification failed')
+            db.commit()
+        except Exception as e:
+            job = db.query(AssetSyncJob).filter(AssetSyncJob.id == job_id).first()
+            if job:
+                svc = AssetSyncService(db)
+                svc._finish(job, 'failed', str(e)[:300])
+                svc._log(job.id, 'error', 'task failed', {'error': str(e)[:300]})
+                db.commit()
+        finally:
+            db.close()
 
     async def sync_vm_template(self, source_node: str, source_vmid: int, template_name: str, storage_id: str, target_nodes: list[str]):
         # Guarded unsupported until command-runner is configured.
