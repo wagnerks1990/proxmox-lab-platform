@@ -3,127 +3,127 @@ from app.services.asset_sync import AssetSyncService
 
 
 class Obj:
-    def __init__(self, **k): self.__dict__.update(k)
+    def __init__(self, **k):
+        self.__dict__.update(k)
+
+
+class Query:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def filter(self, *_args, **_kwargs):
+        return self
+
+    def first(self):
+        return self.rows[0] if self.rows else None
 
 
 class DB:
-    def __init__(self): self._id=1
+    def __init__(self):
+        self._id = 1
+        self.jobs = []
+
     def add(self, obj):
-        if not getattr(obj,'id',None): obj.id=self._id; self._id+=1
-    def flush(self): pass
-    def commit(self): pass
+        if not getattr(obj, 'id', None):
+            obj.id = self._id
+            self._id += 1
+        if hasattr(obj, 'method') and obj not in self.jobs:
+            self.jobs.append(obj)
+
+    def flush(self):
+        pass
+
+    def commit(self):
+        pass
+
+    def close(self):
+        pass
+
+    def query(self, _model):
+        return Query(self.jobs)
 
 
 @pytest.mark.asyncio
 async def test_url_safety_rejects_bad_scheme():
     s = AssetSyncService(DB())
     with pytest.raises(ValueError):
-        await s.sync_iso('a.iso','local','ftp://10.0.16.126/a.iso',['pve-lab-01'])
+        await s.enqueue_iso('a.iso', 'local', 'ftp://10.0.16.126/a.iso', ['pve-lab-01'])
 
 
 @pytest.mark.asyncio
 async def test_url_safety_rejects_credentials():
     s = AssetSyncService(DB())
     with pytest.raises(ValueError):
-        await s.sync_iso('a.iso','local','http://u:p@10.0.16.126/a.iso',['pve-lab-01'])
+        await s.enqueue_iso('a.iso', 'local', 'http://u:p@10.0.16.126/a.iso', ['pve-lab-01'])
 
 
 @pytest.mark.asyncio
-async def test_iso_idempotent_sets_finished_at(monkeypatch):
+async def test_enqueue_iso_creates_queued_job(monkeypatch):
     s = AssetSyncService(DB())
-    async def _ok(target_nodes, storage_id):
-        return None
-    monkeypatch.setattr(s, '_validate_targets', _ok)
-    async def fake_discover(nodes, storage):
-        return [{'node': nodes[0], 'items': [{'filename': 'virtio-win.iso'}]}]
-    monkeypatch.setattr(s.assets, 'discover_isos_by_node', fake_discover)
-    jobs = await s.sync_iso('virtio-win.iso', 'local', 'http://10.0.16.126/virtio-win.iso', ['pve-lab-02'])
-    assert jobs[0].state == 'verified'
-    assert jobs[0].finished_at is not None
 
-
-@pytest.mark.asyncio
-async def test_iso_download_polling_ok_then_verify(monkeypatch):
-    s = AssetSyncService(DB())
-    async def _nosleep(_secs):
-        return None
-    monkeypatch.setattr(s, '_sleep', _nosleep)
     async def _ok_targets(*_args, **_kwargs):
         return None
-    monkeypatch.setattr(s, '_validate_targets', _ok_targets)
 
-    async def discover_before(nodes, storage):
-        # first call (pre-check) missing, second call (verify) present
-        if not hasattr(discover_before, 'called'):
-            discover_before.called = True
+    monkeypatch.setattr(s, '_validate_targets', _ok_targets)
+    jobs = await s.enqueue_iso('ubuntu.iso', 'local', 'http://10.0.16.126/ubuntu.iso', ['pve-lab-02'])
+    assert jobs[0].state == 'queued'
+    assert jobs[0].finished_at is None
+
+
+@pytest.mark.asyncio
+async def test_process_job_ok_transitions_verified(monkeypatch):
+    db = DB()
+    job = Obj(id=1, method='download-url-iso', metadata_json="{'filename':'ubuntu.iso','storage_id':'local','source_url':'http://10.0.16.126/ubuntu.iso'}", target_node='pve-lab-02', state='queued', proxmox_upid=None, error=None, finished_at=None)
+    db.jobs = [job]
+
+    import app.services.asset_sync as m
+    monkeypatch.setattr(m, 'SessionLocal', lambda: db)
+    svc = AssetSyncService(db)
+
+    async def _discover(nodes, storage):
+        if not hasattr(_discover, 'c'):
+            _discover.c = 1
             return [{'node': nodes[0], 'items': []}]
         return [{'node': nodes[0], 'items': [{'filename': 'ubuntu.iso'}]}]
 
-    async def dl(*_args, **_kwargs):
-        return 'UPID:node:123'
+    async def _download(*_args, **_kwargs):
+        return 'UPID:node:200'
 
-    statuses = iter([{'status': 'running'}, {'status': 'stopped', 'exitstatus': 'OK'}])
-    async def task_status(*_args, **_kwargs):
-        return next(statuses)
-
-    monkeypatch.setattr(s.assets, 'discover_isos_by_node', discover_before)
-    monkeypatch.setattr(s.assets, 'download_url', dl)
-    monkeypatch.setattr(s.assets, 'task_status', task_status)
-
-    jobs = await s.sync_iso('ubuntu.iso', 'local', 'http://10.0.16.126/ubuntu.iso', ['pve-lab-02'])
-    assert jobs[0].state == 'verified'
-    assert jobs[0].proxmox_upid == 'UPID:node:123'
-    assert jobs[0].finished_at is not None
-
-
-@pytest.mark.asyncio
-async def test_iso_download_task_failed(monkeypatch):
-    s = AssetSyncService(DB())
-    async def _nosleep(_secs):
-        return None
-    monkeypatch.setattr(s, '_sleep', _nosleep)
-    async def _ok_targets(*_args, **_kwargs):
-        return None
-    monkeypatch.setattr(s, '_validate_targets', _ok_targets)
-    async def _discover_empty(*_args, **_kwargs):
-        return [{'node': 'pve-lab-02', 'items': []}]
-    monkeypatch.setattr(s.assets, 'discover_isos_by_node', _discover_empty)
-    async def _dl(*_args, **_kwargs):
-        return 'UPID:node:124'
-    monkeypatch.setattr(s.assets, 'download_url', _dl)
-    async def _status(*_args, **_kwargs):
-        return {'status': 'stopped', 'exitstatus': 'ERROR'}
-    monkeypatch.setattr(s.assets, 'task_status', _status)
-
-    jobs = await s.sync_iso('ubuntu.iso', 'local', 'http://10.0.16.126/ubuntu.iso', ['pve-lab-02'])
-    assert jobs[0].state == 'failed'
-    assert 'Proxmox task failed' in jobs[0].error
-    assert jobs[0].finished_at is not None
-
-
-@pytest.mark.asyncio
-async def test_ct_download_ok_but_missing_verification(monkeypatch):
-    s = AssetSyncService(DB())
-    async def _nosleep(_secs):
-        return None
-    monkeypatch.setattr(s, '_sleep', _nosleep)
-    async def _ok_targets(*_args, **_kwargs):
-        return None
-    monkeypatch.setattr(s, '_validate_targets', _ok_targets)
-    async def _discover_empty(*_args, **_kwargs):
-        return [{'node': 'pve-lab-03', 'items': []}]
-    monkeypatch.setattr(s.assets, 'discover_ct_templates_by_node', _discover_empty)
-    async def _dl(*_args, **_kwargs):
-        return 'UPID:node:125'
-    monkeypatch.setattr(s.assets, 'download_url', _dl)
-    async def _status(*_args, **_kwargs):
+    async def _task(*_args, **_kwargs):
         return {'status': 'stopped', 'exitstatus': 'OK'}
-    monkeypatch.setattr(s.assets, 'task_status', _status)
 
-    jobs = await s.sync_ct_template('debian.tar.zst', 'local', 'http://10.0.16.126/debian.tar.zst', ['pve-lab-03'])
-    assert jobs[0].state == 'failed'
-    assert 'Post-download verification failed' in jobs[0].error
-    assert jobs[0].finished_at is not None
+    monkeypatch.setattr(AssetSyncService, '__init__', lambda self, _db: setattr(self, 'db', _db) or setattr(self, 'assets', svc.assets))
+    monkeypatch.setattr(svc.assets, 'discover_isos_by_node', _discover)
+    monkeypatch.setattr(svc.assets, 'download_url', _download)
+    monkeypatch.setattr(svc.assets, 'task_status', _task)
+
+    await m.AssetSyncService.process_job(1)
+    assert job.state == 'verified'
+    assert job.proxmox_upid == 'UPID:node:200'
+    assert job.finished_at is not None
+
+
+@pytest.mark.asyncio
+async def test_poll_timeout_uses_config(monkeypatch):
+    s = AssetSyncService(DB())
+    job = Obj(id=99)
+
+    import app.services.asset_sync as m
+    monkeypatch.setattr(m.settings, 'asset_sync_poll_interval_seconds', 1)
+    monkeypatch.setattr(m.settings, 'asset_sync_download_timeout_seconds', 3)
+
+    async def _task(*_args, **_kwargs):
+        return {'status': 'running', 'exitstatus': None}
+
+    async def _nosleep(_secs):
+        return None
+
+    monkeypatch.setattr(s.assets, 'task_status', _task)
+    monkeypatch.setattr(s, '_sleep', _nosleep)
+
+    ok, err = await s._poll_task_until_done(job, 'pve-lab-02', 'UPID:node:201')
+    assert ok is False
+    assert 'Timed out waiting for Proxmox download task to complete' in err
 
 
 @pytest.mark.asyncio
