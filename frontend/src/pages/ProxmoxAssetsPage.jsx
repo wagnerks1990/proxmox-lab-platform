@@ -10,6 +10,8 @@ export default function ProxmoxAssetsPage() {
   const [jobDetails, setJobDetails] = useState({})
   const [hostAccess, setHostAccess] = useState(null)
   const [assetServer, setAssetServer] = useState({ iso: null, ct_template: null })
+  const [jobFilter, setJobFilter] = useState('all')
+  const [hideOldFailed, setHideOldFailed] = useState(true)
 
   const [isoForm, setIsoForm] = useState({ filename: '', source_url: '', target_nodes: [] })
   const [ctForm, setCtForm] = useState({ filename: '', source_url: '', target_nodes: [] })
@@ -117,6 +119,32 @@ export default function ProxmoxAssetsPage() {
   const status = String(readiness?.status || '').toUpperCase()
   const tone = status === 'PASS' ? '#065f46' : status === 'WARN' ? '#92400e' : '#991b1b'
   const bg = status === 'PASS' ? '#ecfdf5' : status === 'WARN' ? '#fffbeb' : '#fef2f2'
+
+
+  const visibleJobs = useMemo(() => {
+    const base = [...jobs]
+    const now = Date.now()
+    const filteredByAge = hideOldFailed
+      ? base.filter((j) => {
+          if (String(j.state || '').toLowerCase() !== 'failed') return true
+          const ts = j.finished_at || j.started_at
+          if (!ts) return true
+          const ageMs = now - new Date(ts).getTime()
+          return ageMs < 1000 * 60 * 60 * 24
+        })
+      : base
+
+    if (jobFilter === 'active') {
+      return filteredByAge.filter((j) => ['queued', 'syncing'].includes(String(j.state || '').toLowerCase()))
+    }
+    if (jobFilter === 'verified') {
+      return filteredByAge.filter((j) => String(j.state || '').toLowerCase() === 'verified')
+    }
+    if (jobFilter === 'failed') {
+      return filteredByAge.filter((j) => String(j.state || '').toLowerCase() === 'failed')
+    }
+    return filteredByAge
+  }, [jobs, jobFilter, hideOldFailed])
 
   const vmSyncSupported = hostAccess?.mode === 'host_runner'
   const assetServerManageSupported = hostAccess?.mode === 'host_runner'
@@ -232,9 +260,17 @@ export default function ProxmoxAssetsPage() {
 
     <div className='panel'>
       <h4>Sync Jobs</h4>
-      <button disabled={busy} onClick={loadJobs}>Refresh Jobs</button>
+      <p className='muted'>Showing latest 20 jobs (newest first).</p>
+      <div className='group'>
+        <button disabled={busy} onClick={loadJobs}>Refresh Jobs</button>
+        <button disabled={busy} onClick={()=>setJobFilter('all')} style={{fontWeight: jobFilter==='all' ? 700 : 400}}>All</button>
+        <button disabled={busy} onClick={()=>setJobFilter('active')} style={{fontWeight: jobFilter==='active' ? 700 : 400}}>Active</button>
+        <button disabled={busy} onClick={()=>setJobFilter('verified')} style={{fontWeight: jobFilter==='verified' ? 700 : 400}}>Verified</button>
+        <button disabled={busy} onClick={()=>setJobFilter('failed')} style={{fontWeight: jobFilter==='failed' ? 700 : 400}}>Failed</button>
+        <label className='muted'><input type='checkbox' checked={hideOldFailed} onChange={e=>setHideOldFailed(e.target.checked)}/> Hide failed jobs older than 24h</label>
+      </div>
       <table className='vm-table'><thead><tr><th>job_id</th><th>state</th><th>method</th><th>target_node</th><th>proxmox_upid</th><th>error</th><th>details</th></tr></thead><tbody>
-        {jobs.map(j => <tr key={j.id}><td>{j.id}</td><td>{j.state}</td><td>{j.method}</td><td>{j.target_node}</td><td>{j.proxmox_upid || '-'}</td><td>{j.error || '-'}</td><td><button onClick={()=>fetchJob(j.id)}>Load logs</button></td></tr>)}
+        {visibleJobs.map(j => <tr key={j.id}><td>{j.id}</td><td>{j.state}</td><td>{j.method}</td><td>{j.target_node}</td><td>{j.proxmox_upid || '-'}</td><td>{j.error || '-'}</td><td><button onClick={()=>fetchJob(j.id)}>Load logs</button></td></tr>)}
       </tbody></table>
       {Object.entries(jobDetails).map(([id, d]) => <pre key={id} className='muted' style={{whiteSpace:'pre-wrap'}}>Job {id}: {JSON.stringify(d, null, 2)}</pre>)}
     </div>
