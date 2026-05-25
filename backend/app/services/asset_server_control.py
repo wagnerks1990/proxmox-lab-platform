@@ -11,7 +11,11 @@ from app.models.models import ProxmoxCluster, ProxmoxHostAccess, ProxmoxNode
 Kind = Literal['iso', 'ct_template']
 
 
-@dataclass
+class HostRunnerNotConfiguredError(ValueError):
+    pass
+
+
+@dataclass(frozen=True)
 class ServiceSpec:
     service_name: str
     working_directory: str
@@ -51,65 +55,64 @@ class AssetServerControl:
             node = q.filter(ProxmoxNode.node_name == (settings.asset_source_node or '')).first() or q.first()
         if not node:
             raise ValueError('No known Proxmox nodes for cluster.')
+        if str(getattr(node, 'status', '')).lower() not in {'online', 'up'}:
+            raise ValueError(f'Source node {node.node_name} is not online.')
         return node
 
-    def _host_runner_configured(self, cluster_id: int, node_name: str) -> bool:
+    def _resolve_host_access(self, cluster_id: int, node_name: str) -> ProxmoxHostAccess:
         if not settings.host_runner_enabled:
-            return False
+            raise HostRunnerNotConfiguredError('Host runner is not configured. Configure Host Access before managing asset services.')
         row = self.db.query(ProxmoxHostAccess).filter(
             ProxmoxHostAccess.cluster_id == cluster_id,
             ProxmoxHostAccess.node_name == node_name,
-            ProxmoxHostAccess.status == 'host_runner',
         ).first()
-        return bool(row)
+        if not row or str(getattr(row, 'status', '')).lower() != 'host_runner':
+            raise HostRunnerNotConfiguredError('Host runner is not configured. Configure Host Access before managing asset services.')
+        if not getattr(row, 'encrypted_private_key', None) and not getattr(row, 'key_ref', None):
+            raise HostRunnerNotConfiguredError('Host runner is not configured. Configure Host Access before managing asset services.')
+        return row
+
+    def _status_payload(self, kind: str, node_name: str, spec: ServiceSpec, status: str, message: str):
+        return {
+            'kind': kind,
+            'source_node': node_name,
+            'service_name': spec.service_name,
+            'status': status,
+            'base_url': spec.base_url,
+            'working_directory': spec.working_directory,
+            'message': message,
+        }
+
+    def _execute_host_runner(self, *_args, **_kwargs):
+        # Command runner integration intentionally guarded for this environment.
+        return {'status': 'error', 'message': 'Host runner execution integration is not enabled in this environment.'}
 
     def status(self, kind: str, cluster_id: int | None = None, source_node: str | None = None):
         spec = self._validate_kind(kind)
         cid = self._resolve_cluster_id(cluster_id)
         node = self._resolve_node(cid, source_node)
-        if not self._host_runner_configured(cid, node.node_name):
-            return {
-                'kind': kind,
-                'source_node': node.node_name,
-                'service_name': spec.service_name,
-                'status': 'not_configured',
-                'base_url': spec.base_url,
-                'working_directory': spec.working_directory,
-                'message': 'Host runner not configured for this node.',
-            }
-        return {
-            'kind': kind,
-            'source_node': node.node_name,
-            'service_name': spec.service_name,
-            'status': 'unsupported',
-            'base_url': spec.base_url,
-            'working_directory': spec.working_directory,
-            'message': 'Host runner command execution path is not enabled in this environment.',
-        }
+        try:
+            self._resolve_host_access(cid, node.node_name)
+        except HostRunnerNotConfiguredError as exc:
+            return self._status_payload(kind, node.node_name, spec, 'not_configured', str(exc))
+        run = self._execute_host_runner(node_name=node.node_name, action='status', kind=kind)
+        return self._status_payload(kind, node.node_name, spec, run.get('status', 'error'), run.get('message', 'Unknown status.'))
 
     def action(self, action: str, kind: str, cluster_id: int | None = None, source_node: str | None = None, bind_address: str | None = None, port: int | None = None):
+        if action not in {'install', 'start', 'stop'}:
+            raise ValueError('unsupported action')
         spec = self._validate_kind(kind)
         cid = self._resolve_cluster_id(cluster_id)
         node = self._resolve_node(cid, source_node)
-        allowed_port = spec.default_port
-        if port is not None and int(port) != allowed_port:
-            raise ValueError(f'port must be {allowed_port} for {kind}')
-        if not self._host_runner_configured(cid, node.node_name):
-            return {
-                'kind': kind,
-                'source_node': node.node_name,
-                'service_name': spec.service_name,
-                'status': 'not_configured',
-                'base_url': spec.base_url,
-                'working_directory': spec.working_directory,
-                'message': 'Host runner not configured. Configure Host Access in Proxmox Setup first.',
-            }
-        return {
-            'kind': kind,
-            'source_node': node.node_name,
-            'service_name': spec.service_name,
-            'status': 'unsupported',
-            'base_url': spec.base_url,
-            'working_directory': spec.working_directory,
-            'message': f'{action} is blocked: command runner execution path is not enabled.',
-        }
+
+        if port is not None and int(port) != spec.default_port:
+            raise ValueError(f'port must be {spec.default_port} for {kind}')
+
+        if bind_address is not None and spec.base_url:
+            expected = spec.base_url.split('://', 1)[-1].split(':', 1)[0].split('/', 1)[0]
+            if bind_address != expected:
+                raise ValueError(f'bind_address must match configured asset source host ({expected})')
+
+        self._resolve_host_access(cid, node.node_name)
+        run = self._execute_host_runner(node_name=node.node_name, action=action, kind=kind)
+        return self._status_payload(kind, node.node_name, spec, run.get('status', 'error'), run.get('message', f'{action} failed.'))
