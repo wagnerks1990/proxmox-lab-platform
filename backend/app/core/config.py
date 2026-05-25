@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     proxmox_token_id: str
     proxmox_token_secret: str
     proxmox_verify_ssl: bool = False
+    app_secret_key: str | None = None
+    config_encryption_key: str | None = None
 
     lab_vm_ssh_username: str | None = None
     lab_vm_ssh_password: str | None = None
@@ -31,6 +33,11 @@ class Settings(BaseSettings):
 
     replay_store_backend: str = 'memory'
     worker_lock_backend: str = 'memory'
+    asset_source_node: str | None = None
+    asset_source_iso_base_url: str | None = None
+    asset_source_ct_base_url: str | None = None
+    host_runner_enabled: bool = False
+    host_runner_user: str = 'proxmox-lab-runner'
 
 
 settings = Settings()
