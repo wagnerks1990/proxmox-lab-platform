@@ -60,12 +60,27 @@ export default function ProxmoxAssetsPage() {
     return [...s]
   }, [readiness])
 
+  const effectiveIsoSourceUrl = (isoForm.source_url || '').trim() || (hostAccess?.asset_source_iso_base_url && isoForm.filename ? `${hostAccess.asset_source_iso_base_url}/${isoForm.filename}` : '')
+  const effectiveCtSourceUrl = (ctForm.source_url || '').trim() || (hostAccess?.asset_source_ct_base_url && ctForm.filename ? `${hostAccess.asset_source_ct_base_url}/${ctForm.filename}` : '')
+
+  const isoDefaultTargets = useMemo(() => {
+    const missing = readiness?.missing_isos_by_node || {}
+    if (!isoForm.filename) return []
+    return onlineNodes.filter((n) => (missing[n] || []).includes(isoForm.filename))
+  }, [onlineNodes, readiness, isoForm.filename])
+
+  const ctDefaultTargets = useMemo(() => {
+    const missing = readiness?.missing_ct_templates_by_node || {}
+    if (!ctForm.filename) return []
+    return onlineNodes.filter((n) => (missing[n] || []).some((v) => String(v).split('/').pop() === ctForm.filename))
+  }, [onlineNodes, readiness, ctForm.filename])
+
   const pushJobs = (newJobs=[]) => setJobs(prev => [...newJobs, ...prev])
 
   const runIsoSync = async () => {
     setBusy(true); setMsg('')
     try {
-      const { data } = await api.post('/admin/proxmox/assets/sync/iso', { ...isoForm, storage_id: 'local' })
+      const { data } = await api.post('/admin/proxmox/assets/sync/iso', { ...isoForm, source_url: effectiveIsoSourceUrl, storage_id: 'local' })
       pushJobs(data?.jobs || [])
       await load()
     } catch (e) { setMsg(JSON.stringify(e?.response?.data?.detail || e.message)) } finally { setBusy(false) }
@@ -74,7 +89,7 @@ export default function ProxmoxAssetsPage() {
   const runCtSync = async () => {
     setBusy(true); setMsg('')
     try {
-      const { data } = await api.post('/admin/proxmox/assets/sync/ct-template', { ...ctForm, storage_id: 'local' })
+      const { data } = await api.post('/admin/proxmox/assets/sync/ct-template', { ...ctForm, source_url: effectiveCtSourceUrl, storage_id: 'local' })
       pushJobs(data?.jobs || [])
       await load()
     } catch (e) { setMsg(JSON.stringify(e?.response?.data?.detail || e.message)) } finally { setBusy(false) }
@@ -125,6 +140,7 @@ export default function ProxmoxAssetsPage() {
       <p className='muted'>ISO base URL: {hostAccess?.asset_source_iso_base_url || 'not configured'}</p>
       <p className='muted'>CT base URL: {hostAccess?.asset_source_ct_base_url || 'not configured'}</p>
       {!assetServerManageSupported ? <p className='muted'>Host runner is not configured. Configure Host Access in Proxmox Setup before the app can manage source file serving.</p> : null}
+      <p className='muted'>Asset server management is not configured, but sync can still run if the source URL is reachable.</p>
       <table className='vm-table'><thead><tr><th>Kind</th><th>Status</th><th>Source Node</th><th>Actions</th></tr></thead><tbody>
         {['iso','ct_template'].map(k => {
           const s = assetServer[k]
@@ -160,9 +176,10 @@ export default function ProxmoxAssetsPage() {
       {!hostAccess?.asset_source_iso_base_url ? <p className='muted'>Configure static asset source URLs or host runner in Proxmox Setup.</p> : null}
       <div className='group'>
         <select className='input' value={isoForm.filename} onChange={e=>setIsoForm({...isoForm, filename:e.target.value})}><option value=''>Select missing ISO</option>{missingIsoNames.map(v=><option key={v} value={v}>{v}</option>)}</select>
-        <input className='input' placeholder='Source URL (http/https)' value={isoForm.source_url || (hostAccess?.asset_source_iso_base_url ? `${hostAccess.asset_source_iso_base_url}/${isoForm.filename || ''}` : '')} onChange={e=>setIsoForm({...isoForm, source_url:e.target.value})}/>
-        <select className='input' multiple value={isoForm.target_nodes} onChange={e=>setIsoForm({...isoForm, target_nodes:[...e.target.selectedOptions].map(o=>o.value)})}>{onlineNodes.map(n=><option key={n} value={n}>{n}</option>)}</select>
-        <button disabled={busy || !isoForm.source_url || !isoForm.filename || isoForm.target_nodes.length===0} onClick={runIsoSync}>Sync ISO</button>
+        <input className='input' placeholder='Source URL (http/https)' value={effectiveIsoSourceUrl} onChange={e=>setIsoForm({...isoForm, source_url:e.target.value})}/>
+        <select className='input' multiple value={isoForm.target_nodes} onChange={e=>setIsoForm({...isoForm, target_nodes:[...e.target.selectedOptions].map(o=>o.value)})}>{onlineNodes.map(n=><option key={n} value={n}>{n}{isoForm.target_nodes.includes(n) ? ' ✓' : ''}</option>)}</select>
+        <button type='button' disabled={busy || isoDefaultTargets.length===0} onClick={()=>setIsoForm({...isoForm, target_nodes: isoDefaultTargets})}>Use missing/constrained nodes</button>
+        <button disabled={busy || !effectiveIsoSourceUrl || !isoForm.filename || isoForm.target_nodes.length===0} onClick={runIsoSync}>Sync ISO</button>
       </div>
     </div>
 
@@ -171,9 +188,10 @@ export default function ProxmoxAssetsPage() {
       {!hostAccess?.asset_source_ct_base_url ? <p className='muted'>Configure static asset source URLs or host runner in Proxmox Setup.</p> : null}
       <div className='group'>
         <select className='input' value={ctForm.filename} onChange={e=>setCtForm({...ctForm, filename:e.target.value})}><option value=''>Select missing CT template</option>{missingCtNames.map(v=><option key={v} value={v}>{v}</option>)}</select>
-        <input className='input' placeholder='Source URL (http/https)' value={ctForm.source_url || (hostAccess?.asset_source_ct_base_url ? `${hostAccess.asset_source_ct_base_url}/${ctForm.filename || ''}` : '')} onChange={e=>setCtForm({...ctForm, source_url:e.target.value})}/>
-        <select className='input' multiple value={ctForm.target_nodes} onChange={e=>setCtForm({...ctForm, target_nodes:[...e.target.selectedOptions].map(o=>o.value)})}>{onlineNodes.map(n=><option key={n} value={n}>{n}</option>)}</select>
-        <button disabled={busy || !ctForm.source_url || !ctForm.filename || ctForm.target_nodes.length===0} onClick={runCtSync}>Sync CT Template</button>
+        <input className='input' placeholder='Source URL (http/https)' value={effectiveCtSourceUrl} onChange={e=>setCtForm({...ctForm, source_url:e.target.value})}/>
+        <select className='input' multiple value={ctForm.target_nodes} onChange={e=>setCtForm({...ctForm, target_nodes:[...e.target.selectedOptions].map(o=>o.value)})}>{onlineNodes.map(n=><option key={n} value={n}>{n}{ctForm.target_nodes.includes(n) ? ' ✓' : ''}</option>)}</select>
+        <button type='button' disabled={busy || ctDefaultTargets.length===0} onClick={()=>setCtForm({...ctForm, target_nodes: ctDefaultTargets})}>Use missing/constrained nodes</button>
+        <button disabled={busy || !effectiveCtSourceUrl || !ctForm.filename || ctForm.target_nodes.length===0} onClick={runCtSync}>Sync CT Template</button>
       </div>
       {missingCtNames.length===0 ? <p className='muted'>No missing CT templates detected (empty inventory handled).</p> : null}
     </div>
