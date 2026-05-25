@@ -34,6 +34,15 @@ export default function ProxmoxSetupPage(){
   const loadClusters = async ()=>{ const {data} = await api.get('/admin/proxmox/clusters'); setClusters(Array.isArray(data)?data:[]) }
 
   useEffect(()=>{ loadClusters().catch(()=>setClusters([])) },[])
+  useEffect(()=>{
+    const loadHostAccess = async ()=>{
+      try {
+        const { data } = await api.get('/admin/proxmox/host-access/status')
+        setHostAccess(data || null)
+      } catch (_) {}
+    }
+    if (activeCluster) loadHostAccess()
+  }, [activeCluster?.id])
 
   const refreshDiscovery = (id)=>run(async ()=>{
     const [n,s,t,net,cfg,ready] = await Promise.all([
@@ -69,11 +78,12 @@ export default function ProxmoxSetupPage(){
     setMsg('Host access bootstrap completed.')
   })
   const validateHostAccess = ()=>run(async ()=>{
-    if (!selectedId) return
-    await api.post('/admin/proxmox/host-access/validate', { cluster_id: selectedId })
-    const hs = await api.get(`/admin/proxmox/host-access/status?cluster_id=${selectedId}`)
+    const targetClusterId = selectedId || activeCluster?.id
+    if (!targetClusterId) return
+    const res = await api.post('/admin/proxmox/host-access/validate', { cluster_id: targetClusterId })
+    const hs = await api.get(`/admin/proxmox/host-access/status?cluster_id=${targetClusterId}`)
     setHostAccess(hs.data)
-    setMsg('Host access validate completed.')
+    setMsg(res?.data?.message || (res?.data?.ok ? 'Host access validate completed.' : 'Host access validation did not pass.'))
   })
 
   const doBootstrap = ()=>run(async ()=>{
@@ -140,16 +150,18 @@ export default function ProxmoxSetupPage(){
       </div>
       <h3>Host Access</h3>
       <p className='muted'>Current mode: {hostAccess?.mode || 'api_only'}. Root password is used only during this request and is not persisted.</p>
+      {hostAccess?.mode === 'static_asset_server' ? <p className='muted'>Static asset server mode is active: ISO/CT source URLs can be generated. Host-runner command execution is still disabled, and VM-template sync remains guarded.</p> : null}
       <div className='group'>
         <input className='input' placeholder='Root username' value={hostAccessForm.root_username} onChange={e=>setHostAccessForm({...hostAccessForm, root_username:e.target.value})}/>
         <input className='input' type='password' placeholder='Root password (one-time)' value={hostAccessForm.root_password} onChange={e=>setHostAccessForm({...hostAccessForm, root_password:e.target.value})}/>
         <select className='input' multiple value={hostAccessForm.node_names} onChange={e=>setHostAccessForm({...hostAccessForm, node_names:[...e.target.selectedOptions].map(o=>o.value)})}>
-          {nodes.map(n => <option key={n.node_name} value={n.node_name}>{n.node_name}</option>)}
+          {(hostAccess?.nodes || nodes).map(n => <option key={n.node_name} value={n.node_name}>{n.node_name}</option>)}
         </select>
-        <button disabled={loading || !hostAccessForm.root_password || hostAccessForm.node_names.length===0} onClick={bootstrapHostAccess}>Configure Host Runner</button>
-        <button disabled={loading || !selectedId} onClick={validateHostAccess}>Validate Host Access</button>
+        <button disabled={loading || !hostAccessForm.root_password || hostAccessForm.node_names.length===0 || hostAccess?.mode === 'static_asset_server'} onClick={bootstrapHostAccess}>Configure Host Runner</button>
+        <button disabled={loading || !(selectedId || activeCluster?.id)} onClick={validateHostAccess}>Validate Host Access</button>
       </div>
-      {(hostAccess?.nodes || []).length ? <ul>{hostAccess.nodes.map(n => <li key={n.node_name} className='muted'>{n.node_name}: {n.status} ({n.runner_user})</li>)}</ul> : null}
+      {hostAccess?.mode === 'static_asset_server' ? <p className='muted'>Configure Host Runner is disabled because current mode is static_asset_server and host-runner execution is not configured.</p> : null}
+      {(hostAccess?.nodes || []).length ? <ul>{hostAccess.nodes.map(n => <li key={n.node_name} className='muted'>{n.node_name}: {n.host_access_status || n.status} ({n.runner_user})</li>)}</ul> : null}
 
       <h3>Manual Token Fallback</h3>
       <div className='group'>
