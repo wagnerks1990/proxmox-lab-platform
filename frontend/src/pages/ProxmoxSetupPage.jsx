@@ -24,13 +24,14 @@ export default function ProxmoxSetupPage(){
   const [selectedIsoId, setSelectedIsoId] = useState('')
   const [hostAccess, setHostAccess] = useState(null)
   const [hostAccessForm, setHostAccessForm] = useState({ root_username: 'root@pam', root_password: '', node_names: [] })
+  const [hostAccessResult, setHostAccessResult] = useState(null)
 
   const activeCluster = useMemo(()=>clusters.find(c=>c.is_active),[clusters])
   const readinessStatus = String(readiness?.status || '').toUpperCase()
   const readinessTone = readinessStatus === 'PASS' ? '#065f46' : readinessStatus === 'WARN' ? '#92400e' : '#991b1b'
   const readinessBg = readinessStatus === 'PASS' ? '#ecfdf5' : readinessStatus === 'WARN' ? '#fffbeb' : '#fef2f2'
 
-  const run = async (fn)=>{ setLoading(true); setMsg(''); try{ await fn() } catch(e){ setMsg(JSON.stringify(e?.response?.data?.detail || e?.response?.data || e.message)) } finally { setLoading(false) } }
+  const run = async (fn)=>{ setLoading(true); setMsg(''); try{ await fn() } catch(e){ const m = JSON.stringify(e?.response?.data?.detail || e?.response?.data || e.message); setMsg(m); setHostAccessResult({ ok:false, message:m }) } finally { setLoading(false) } }
   const loadClusters = async ()=>{ const {data} = await api.get('/admin/proxmox/clusters'); setClusters(Array.isArray(data)?data:[]) }
 
   useEffect(()=>{ loadClusters().catch(()=>setClusters([])) },[])
@@ -83,7 +84,9 @@ export default function ProxmoxSetupPage(){
     const res = await api.post('/admin/proxmox/host-access/validate', { cluster_id: targetClusterId })
     const hs = await api.get(`/admin/proxmox/host-access/status?cluster_id=${targetClusterId}`)
     setHostAccess(hs.data)
-    setMsg(res?.data?.message || (res?.data?.ok ? 'Host access validate completed.' : 'Host access validation did not pass.'))
+    const resultMessage = res?.data?.message || (res?.data?.ok ? 'Host access validate completed.' : 'Host access validation did not pass.')
+    setMsg(resultMessage)
+    setHostAccessResult({ ok: !!res?.data?.ok, message: resultMessage, data: res?.data })
   })
 
   const doBootstrap = ()=>run(async ()=>{
@@ -150,17 +153,20 @@ export default function ProxmoxSetupPage(){
       </div>
       <h3>Host Access</h3>
       <p className='muted'>Current mode: {hostAccess?.mode || 'api_only'}. Root password is used only during this request and is not persisted.</p>
-      {hostAccess?.mode === 'static_asset_server' ? <p className='muted'>Static asset server mode is active: ISO/CT source URLs can be generated. Host-runner command execution is still disabled, and VM-template sync remains guarded.</p> : null}
+      {hostAccess?.mode === 'static_asset_server' ? <div className='panel'><p className='muted'>Static asset server mode is active. ISO/CT source URLs can be generated.</p><p className='muted'>Host-runner command execution is disabled.</p><p className='muted'>Root password is not used in this mode.</p></div> : null}
       <div className='group'>
-        <input className='input' placeholder='Root username' value={hostAccessForm.root_username} onChange={e=>setHostAccessForm({...hostAccessForm, root_username:e.target.value})}/>
-        <input className='input' type='password' placeholder='Root password (one-time)' value={hostAccessForm.root_password} onChange={e=>setHostAccessForm({...hostAccessForm, root_password:e.target.value})}/>
-        <select className='input' multiple value={hostAccessForm.node_names} onChange={e=>setHostAccessForm({...hostAccessForm, node_names:[...e.target.selectedOptions].map(o=>o.value)})}>
-          {(hostAccess?.nodes || nodes).map(n => <option key={n.node_name} value={n.node_name}>{n.node_name}</option>)}
-        </select>
-        <button disabled={loading || !hostAccessForm.root_password || hostAccessForm.node_names.length===0 || hostAccess?.mode === 'static_asset_server'} onClick={bootstrapHostAccess}>Configure Host Runner</button>
+        {hostAccess?.mode !== 'static_asset_server' ? <>
+          <input className='input' placeholder='Root username' value={hostAccessForm.root_username} onChange={e=>setHostAccessForm({...hostAccessForm, root_username:e.target.value})}/>
+          <input className='input' type='password' placeholder='Root password (one-time)' value={hostAccessForm.root_password} onChange={e=>setHostAccessForm({...hostAccessForm, root_password:e.target.value})}/>
+          <select className='input' multiple value={hostAccessForm.node_names} onChange={e=>setHostAccessForm({...hostAccessForm, node_names:[...e.target.selectedOptions].map(o=>o.value)})}>
+            {(hostAccess?.nodes || nodes).map(n => <option key={n.node_name} value={n.node_name}>{n.node_name}</option>)}
+          </select>
+        </> : null}
+        <button disabled={true} title='Host runner bootstrap is not enabled/configured yet.' onClick={bootstrapHostAccess}>Configure Host Runner</button>
         <button disabled={loading || !(selectedId || activeCluster?.id)} onClick={validateHostAccess}>Validate Host Access</button>
       </div>
-      {hostAccess?.mode === 'static_asset_server' ? <p className='muted'>Configure Host Runner is disabled because current mode is static_asset_server and host-runner execution is not configured.</p> : null}
+      <p className='muted'>Host runner bootstrap is not enabled/configured yet.</p>
+      {hostAccessResult ? <div className='panel' style={{borderColor: hostAccessResult.ok ? '#065f46' : '#92400e'}}><strong>Host Access Validate Result:</strong> {hostAccessResult.message}</div> : null}
       {(hostAccess?.nodes || []).length ? <ul>{hostAccess.nodes.map(n => <li key={n.node_name} className='muted'>{n.node_name}: {n.host_access_status || n.status} ({n.runner_user})</li>)}</ul> : null}
 
       <h3>Manual Token Fallback</h3>
