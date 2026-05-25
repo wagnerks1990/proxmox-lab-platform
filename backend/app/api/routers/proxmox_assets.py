@@ -15,13 +15,18 @@ router = APIRouter()
 
 
 @router.get('/admin/proxmox/assets/source-url')
-async def asset_source_url(kind: str, filename: str, _user=Depends(require_role('Teacher', 'Admin'))):
+async def asset_source_url(asset_type: str | None = None, kind: str | None = None, filename: str = '', _user=Depends(require_role('Teacher', 'Admin'))):
+    resolved_kind = asset_type or kind
+    if asset_type and kind and asset_type != kind:
+        raise HTTPException(status_code=400, detail='asset_type and kind conflict')
+    if not resolved_kind:
+        raise HTTPException(status_code=422, detail='missing query field: asset_type')
     if any(x in filename for x in ('..', '/', '\\')) or filename.startswith('http://') or filename.startswith('https://'):
         raise HTTPException(status_code=400, detail='invalid filename')
-    base = settings.asset_source_iso_base_url if kind == 'iso' else settings.asset_source_ct_base_url if kind in {'ct', 'ct-template', 'vztmpl'} else None
+    base = settings.asset_source_iso_base_url if resolved_kind == 'iso' else settings.asset_source_ct_base_url if resolved_kind in {'ct', 'ct-template', 'vztmpl', 'ct_template'} else None
     if not base:
-        return {'ok': False, 'kind': kind, 'filename': filename, 'message': 'Asset source base URL is not configured.'}
-    return {'ok': True, 'kind': kind, 'filename': filename, 'source_url': f"{base.rstrip('/')}/{quote(filename)}"}
+        return {'ok': False, 'kind': resolved_kind, 'filename': filename, 'message': 'Asset source base URL is not configured.'}
+    return {'ok': True, 'kind': resolved_kind, 'filename': filename, 'source_url': f"{base.rstrip('/')}/{quote(filename)}"}
 
 
 @router.get('/admin/proxmox/assets/inventory')
