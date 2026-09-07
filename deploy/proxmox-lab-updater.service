@@ -1,0 +1,22 @@
+[Unit]
+Description=Proxmox Lab Platform Update Agent
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+EnvironmentFile=/opt/proxmox-lab-platform/app/.env
+Environment=PLATFORM_APP_DIR=/opt/proxmox-lab-platform/app
+Environment=PLATFORM_STATE_DIR=/var/lib/proxmox-lab-platform
+ExecStart=/usr/bin/python3 /opt/proxmox-lab-platform/app/deploy/updater_agent.py
+Restart=on-failure
+RestartSec=5
+UMask=0007
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/proxmox-lab-platform /var/lib/proxmox-lab-platform /run/proxmox-lab-updater /var/run/docker.sock
+
+[Install]
+WantedBy=multi-user.target

@@ -10,6 +10,23 @@ resources.
 
 The source-controlled documentation wiki starts at [`docs/index.md`](docs/index.md).
 
+## Appliance installation
+
+A dedicated Debian or Ubuntu VM on the Proxmox cluster is the recommended
+deployment target. When the repository is public, installation is one command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/wagnerks1990/proxmox-lab-platform/main/deploy/install.sh | sudo sh
+```
+
+The installer deploys the application with Docker Compose, generates bootstrap
+secrets, runs database migrations, installs the local update agent, and waits
+for the application health gate. See
+[`docs/operations/deployment.md`](docs/operations/deployment.md) before using
+the direct-on-hypervisor override. For a private repository, clone with a
+read-only deploy key first; unauthenticated `raw.githubusercontent.com` links do
+not work for private repositories.
+
 ## Stack
 - Frontend: React + Vite (Tailwind-ready)
 - Backend: FastAPI + SQLAlchemy

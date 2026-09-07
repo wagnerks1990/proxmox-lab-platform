@@ -10,7 +10,8 @@ def test_key_routes_registered():
     required_suffixes = [
         '/auth/login', '/auth/me', '/vms', '/vms/{id}/console/terminal-url',
         '/admin/session-activity', '/admin/telemetry/summary', '/admin/runtime/summary',
-        '/admin/validation/summary', '/pools', '/pools/{id}/plan', '/admin/reconciliation/preview'
+        '/admin/validation/summary', '/pools', '/pools/{id}/plan', '/admin/reconciliation/preview',
+        '/ready', '/admin/system/update', '/admin/system/update/apply', '/admin/system/update/rollback'
     ]
     missing = [s for s in required_suffixes if not _has(paths, s)]
     assert not missing, f'missing suffixes: {missing}'

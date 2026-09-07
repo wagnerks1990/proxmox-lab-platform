@@ -5,6 +5,42 @@
 The supported initial deployment target is a dedicated Ubuntu host using Docker
 Compose. Production installation will not require editing source files.
 
+Use a dedicated Debian 12 or Ubuntu 24.04 VM on Proxmox when possible. Allocate
+at least 2 vCPU, 4 GiB RAM, 30 GiB storage, a static IP, DNS, and outbound HTTPS
+access to GitHub and container registries.
+
+Direct installation on a Proxmox host is supported only for development. The
+installer stops when it detects `pveversion` unless
+`--allow-proxmox-host` is supplied. Docker can alter firewall and bridge rules,
+so this override is a real operational risk rather than a cosmetic warning.
+
+## Current one-command installer
+
+On the target VM:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/wagnerks1990/proxmox-lab-platform/main/deploy/install.sh | sudo sh
+```
+
+That exact command requires the repository to be public. While it is private,
+configure a read-only GitHub deploy key, clone the repository, and run
+`sudo deploy/install.sh`. The deploy key must remain available to the root-owned
+updater for later fetches. Do not put a personal access token in `.env`, the
+database, a Compose file, or a command that will be retained in shell history.
+
+For a development branch or private fork, download the installer and pass
+`--repository` and `--branch`. Private repositories require Git credentials or
+a read-only deploy key configured on the host before cloning.
+
+The current installer validates the operating system, generates separate
+bootstrap secrets, starts the Compose stack, runs Alembic migrations, installs
+the root-owned update agent, and waits for `/api/ready`. An installation is not
+reported successful until the health gate passes.
+
+Bootstrap secrets are stored in a root-readable `.env` file. Operational
+settings remain in PostgreSQL. Back up both the database and the `.env` file;
+losing the encryption key can make stored credentials unrecoverable.
+
 The final stack contains:
 
 - reverse proxy;
@@ -47,6 +83,24 @@ The supported installer will:
 An install is unsuccessful if any required component is unhealthy.
 
 ## Upgrade and rollback
+
+Administrators manage implemented updates under **System Updates**. Manual
+checks are read-only. Applying an update refuses a dirty checkout, resolves the
+target commit, creates a PostgreSQL custom-format backup, rebuilds the Compose
+stack, and waits for the public health endpoint.
+
+If build, migration, startup, or health verification fails, the updater checks
+out the previous commit and restores the pre-update database automatically.
+The manual rollback button performs the same application-and-database restore.
+
+Automatic updates are disabled by default. They can be enabled with a branch,
+channel, check interval, and UTC maintenance hour. The repository itself is
+pinned by the host configuration and cannot be redirected from the GUI. GitHub
+credentials are never stored in the application database.
+
+Only one update operation can hold the host lock. The updater is reachable only
+through a group-restricted Unix socket and requires a separate authentication
+token. The Docker socket is not mounted into the web or API containers.
 
 Before an upgrade, the controller records the current version and performs a
 coordinated backup of PostgreSQL, the database encryption key reference,
