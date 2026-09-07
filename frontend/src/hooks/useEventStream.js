@@ -52,7 +52,11 @@ export default function useEventStream(url = '/api/admin/events/stream') {
       return { token, state }
     }
 
-    const buildUrl = (token) => `${url}${url.includes('?') ? '&' : '?'}token=${encodeURIComponent(token || '')}`
+    const buildUrl = (token) => {
+      const separator = url.includes('?') ? '&' : '?'
+      const organizationId = localStorage.getItem('organization_id') || ''
+      return `${url}${separator}token=${encodeURIComponent(token || '')}&organization_id=${encodeURIComponent(organizationId)}`
+    }
 
     const connect = () => {
       if (stopped) return

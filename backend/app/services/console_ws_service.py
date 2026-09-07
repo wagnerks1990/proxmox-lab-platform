@@ -46,7 +46,7 @@ class ConsoleWsService:
             await websocket.accept(); await websocket.send_text('ERROR: LAB_VM_SSH_PASSWORD is not configured on backend.'); await websocket.close(code=1000); return
 
         await websocket.accept()
-        self.db.add(AuditLog(actor_id=user.id, action='ssh_ws_launch', target_type='student_vm', target_id=str(vm.vmid))); safe_commit(self.db)
+        self.db.add(AuditLog(organization_id=vm.organization_id, actor_id=user.id, action='ssh_ws_launch', target_type='student_vm', target_id=str(vm.vmid))); safe_commit(self.db)
         svc = SessionService(self.db)
         launch = svc.create_launch(user, vm, 'SSH_WS', 'success', host)
         session = svc.create_launching_session(user, vm, 'SSH_WS', connection_launch_id=launch.id)
@@ -92,7 +92,7 @@ class ConsoleWsService:
         if not port or not ticket:
             await websocket.close(code=1011, reason='Failed to get noVNC ticket'); return
         await websocket.accept()
-        self.db.add(AuditLog(actor_id=user.id, action='novnc_ws_launch', target_type='student_vm', target_id=str(vm.vmid))); safe_commit(self.db)
+        self.db.add(AuditLog(organization_id=vm.organization_id, actor_id=user.id, action='novnc_ws_launch', target_type='student_vm', target_id=str(vm.vmid))); safe_commit(self.db)
         svc = SessionService(self.db)
         launch = svc.create_launch(user, vm, 'NOVNC_WS', 'success', str(vm.vmid))
         session = svc.create_launching_session(user, vm, 'NOVNC_WS', connection_launch_id=launch.id)

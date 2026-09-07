@@ -11,6 +11,7 @@ theme:
 nav:
   - Home: index.md
   - Architecture: architecture/overview.md
+  - Organization tenancy: security/organization-tenancy.md
   - Security: security/threat-model.md
   - AI: ai/ai-safety.md
   - Operations: operations/deployment.md

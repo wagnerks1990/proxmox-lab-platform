@@ -4,6 +4,7 @@ from app.api.routes import router
 from app.api.routers import pools
 from app.models.models import DesktopPool, VMTemplate, ProxmoxCluster, ProxmoxNode, ProxmoxClusterDefault
 from app.schemas.pools import PoolCreate
+from app.services.organization_access import OrganizationContext
 
 
 class Obj:
@@ -86,7 +87,7 @@ async def test_create_rejects_invalid_template(monkeypatch):
     db = FakeDB({VMTemplate: [], ProxmoxCluster: [], DesktopPool: []})
     payload = PoolCreate(name='lab', description=None, pool_type='persistent', template_vmid=999, template_node=None, default_protocol='NOVNC', target_node=None, storage=None, bridge=None, vlan_tag=None, vmid_start=None, vmid_end=None, naming_pattern=None, desired_size=0, maintenance_mode=False, enabled=True)
     with pytest.raises(Exception) as exc:
-        await pools.create_pool(payload=payload, _user=Obj(id=1), db=db)
+        await pools.create_pool(payload=payload, _user=Obj(id=1), organization=OrganizationContext(1, 'default', 'owner'), db=db)
     assert getattr(exc.value, 'status_code', None) == 422
 
 
@@ -104,13 +105,13 @@ async def test_list_includes_readiness_hints(monkeypatch):
     monkeypatch.setattr(pools.ProxmoxBootstrapService, 'discover_isos', lambda self, active: fake_isos(active))
 
     db = FakeDB({
-        DesktopPool: [Obj(id=1, name='pool', pool_type='persistent', template_vmid=303, template_node='pve-lab-01', default_protocol='NOVNC', desired_size=1, maintenance_mode=False, enabled=True, created_at=None, updated_at=None)],
+        DesktopPool: [Obj(id=1, organization_id=1, name='pool', pool_type='persistent', template_vmid=303, template_node='pve-lab-01', default_protocol='NOVNC', desired_size=1, maintenance_mode=False, enabled=True, created_at=None, updated_at=None)],
         ProxmoxCluster: [Obj(id=1, is_active=True)],
         ProxmoxNode: [Obj(node_name='pve-lab-01', status='online'), Obj(node_name='pve-lab-02', status='online')],
         ProxmoxClusterDefault: [Obj(placement_policy='balanced')],
         VMTemplate: [Obj(id=1, source_vmid=303, proxmox_node='pve-lab-01')],
     })
-    out = await pools.list_pools(_user=Obj(id=1), db=db)
+    out = await pools.list_pools(_user=Obj(id=1), organization=OrganizationContext(1, 'default', 'owner'), db=db)
     row = out.data[0]
     assert hasattr(row, 'readiness_status')
     assert hasattr(row, 'placement_warning')

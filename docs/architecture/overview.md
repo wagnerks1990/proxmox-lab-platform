@@ -64,8 +64,16 @@ than one organization with a different tenant role in each. Tenant roles are
 The existing global `Admin`, `Teacher`, and `Student` roles remain temporarily
 for compatibility. Global `Admin` is an explicit break-glass scope. Existing
 accounts are backfilled into a visible `default` organization so upgrades do
-not silently strand development data. Resource tables will be attached to an
-organization incrementally in subsequent migrations before production use.
+not silently strand development data. Core resources—including templates, VMs,
+sessions, pools, groups, classes, labs, and audit events—carry an organization
+identifier and are filtered at the API boundary.
+
+Authenticated HTTP requests select an organization with `X-Organization-ID`.
+The server verifies active membership; the identifier is context, never proof
+of access. Accounts with one active membership are selected automatically.
+Accounts with multiple memberships must select one. A global `Admin` may select
+any enabled organization through an explicit, audited break-glass path. Browser
+clients persist the selection locally and attach it to each API request.
 
 ## Desired-state workflow
 

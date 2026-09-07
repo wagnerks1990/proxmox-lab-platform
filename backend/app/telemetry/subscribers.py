@@ -18,7 +18,7 @@ def _inc(name: str, *, persist: bool = True):
             row = TelemetryService(db).record_event(event_type=event.name, severity=sev, source='event_bus', metadata_json=json.dumps(event.payload or {}), user_id=(event.payload or {}).get('actor_id'), vm_id=(event.payload or {}).get('vm_id'), session_id=(event.payload or {}).get('session_id'))
             try:
                 loop = asyncio.get_running_loop()
-                loop.create_task(event_stream.publish({'event': event.name, 'id': row.id, 'severity': row.severity, 'created_at': str(row.created_at)}))
+                loop.create_task(event_stream.publish({'organization_id': (event.payload or {}).get('organization_id'), 'event': event.name, 'id': row.id, 'severity': row.severity, 'created_at': str(row.created_at)}))
             except RuntimeError:
                 pass
         finally:

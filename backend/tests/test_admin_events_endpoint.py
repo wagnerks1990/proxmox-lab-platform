@@ -5,6 +5,10 @@ from fastapi import HTTPException
 
 from app.api.routers import admin_events
 from app.models.models import AuditLog, TelemetryEvent, WorkerRun
+from app.services.organization_access import OrganizationContext
+
+
+ORG = OrganizationContext(1, "default", "owner")
 
 
 class Obj:
@@ -62,7 +66,7 @@ def test_admin_events_worker_runs_serialization(monkeypatch):
     ]
     db = FakeDB(mapping={WorkerRun: wr_rows})
 
-    result = admin_events.list_events(limit=5, offset=0, _user=Obj(), db=db)
+    result = admin_events.list_events(limit=5, offset=0, _user=Obj(), db=db, organization=ORG)
 
     assert set(result.keys()) == {"items", "total", "limit", "offset"}
     assert result["limit"] == 5
@@ -83,7 +87,7 @@ def test_admin_events_worker_runs_null_odd_values(monkeypatch):
     ]
     db = FakeDB(mapping={WorkerRun: wr_rows})
 
-    result = admin_events.list_events(limit=10, offset=0, _user=Obj(), db=db)
+    result = admin_events.list_events(limit=10, offset=0, _user=Obj(), db=db, organization=ORG)
 
     worker_items = [i for i in result["items"] if i["source"] == "worker_runs"]
     assert len(worker_items) == 2
@@ -99,7 +103,7 @@ def test_admin_events_source_isolation_audit_failure(monkeypatch):
     wr_rows = [Obj(id=5, worker_name="session_worker", status="ok", started_at=datetime(2026, 5, 24, 13, 0, 0), request_id="req-5")]
     db = FakeDB(mapping={TelemetryEvent: tel_rows, WorkerRun: wr_rows}, fail_models={AuditLog})
 
-    result = admin_events.list_events(limit=20, offset=0, _user=Obj(), db=db)
+    result = admin_events.list_events(limit=20, offset=0, _user=Obj(), db=db, organization=ORG)
 
     sources = {i["source"] for i in result["items"]}
     assert "worker_runs" in sources
@@ -113,7 +117,7 @@ def test_admin_events_source_isolation_telemetry_failure(monkeypatch):
     wr_rows = [Obj(id=6, worker_name="cleanup_worker", status="error", started_at=datetime(2026, 5, 24, 14, 0, 0), request_id="req-6")]
     db = FakeDB(mapping={AuditLog: audit_rows, WorkerRun: wr_rows}, fail_models={TelemetryEvent})
 
-    result = admin_events.list_events(limit=20, offset=0, _user=Obj(), db=db)
+    result = admin_events.list_events(limit=20, offset=0, _user=Obj(), db=db, organization=ORG)
 
     sources = {i["source"] for i in result["items"]}
     assert "worker_runs" in sources
@@ -127,7 +131,7 @@ def test_admin_events_source_isolation_worker_failure(monkeypatch):
     tel_rows = [Obj(id=12, created_at=datetime(2026, 5, 24, 12, 1, 0), severity="info", event_type="heartbeat", vm_id=None)]
     db = FakeDB(mapping={AuditLog: audit_rows, TelemetryEvent: tel_rows}, fail_models={WorkerRun})
 
-    result = admin_events.list_events(limit=20, offset=0, _user=Obj(), db=db)
+    result = admin_events.list_events(limit=20, offset=0, _user=Obj(), db=db, organization=ORG)
 
     sources = {i["source"] for i in result["items"]}
     assert "audit_logs" in sources
@@ -139,10 +143,10 @@ def test_admin_events_rbac_admin_and_teacher_allowed(monkeypatch):
     db = FakeDB()
 
     _set_role(monkeypatch, "Admin")
-    assert admin_events.list_events(limit=1, offset=0, _user=Obj(), db=db)["limit"] == 1
+    assert admin_events.list_events(limit=1, offset=0, _user=Obj(), db=db, organization=ORG)["limit"] == 1
 
     _set_role(monkeypatch, "Teacher")
-    assert admin_events.list_events(limit=1, offset=0, _user=Obj(), db=db)["limit"] == 1
+    assert admin_events.list_events(limit=1, offset=0, _user=Obj(), db=db, organization=ORG)["limit"] == 1
 
 
 def test_admin_events_rbac_student_forbidden(monkeypatch):
@@ -150,6 +154,7 @@ def test_admin_events_rbac_student_forbidden(monkeypatch):
     db = FakeDB()
 
     with pytest.raises(HTTPException) as exc:
-        admin_events.list_events(limit=1, offset=0, _user=Obj(), db=db)
+        admin_events.list_events(limit=1, offset=0, _user=Obj(), db=db, organization=ORG)
 
     assert exc.value.status_code == 403
+

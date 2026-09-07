@@ -41,7 +41,7 @@ class ProtocolService:
             raise HTTPException(status_code=400, detail={'error': 'No IP found. Enable QEMU Guest Agent or set assigned_ip.'})
 
         url = f"http://10.0.16.162:7681/?arg={effective_ip}"
-        self.db.add(AuditLog(actor_id=user.id, action='console_web_terminal', target_type='student_vm', target_id=str(vm.vmid)))
+        self.db.add(AuditLog(organization_id=vm.organization_id, actor_id=user.id, action='console_web_terminal', target_type='student_vm', target_id=str(vm.vmid)))
         self.log_launch(user, vm, 'WEB_TERMINAL', 'success', effective_ip)
         self.db.commit()
         return {'type': 'web_terminal', 'url': url}
@@ -50,7 +50,7 @@ class ProtocolService:
         if not vm.console_enabled:
             raise HTTPException(status_code=400, detail={'error': 'Console is not enabled for this VM.'})
         ticket = await self.proxmox.get_novnc_ticket(vm.proxmox_node, vm.vmid)
-        self.db.add(AuditLog(actor_id=user.id, action='console_novnc_scaffold', target_type='student_vm', target_id=str(vm.vmid)))
+        self.db.add(AuditLog(organization_id=vm.organization_id, actor_id=user.id, action='console_novnc_scaffold', target_type='student_vm', target_id=str(vm.vmid)))
         self.log_launch(user, vm, 'NOVNC', 'pending', 'Console proxy not yet enabled')
         self.db.commit()
         return {

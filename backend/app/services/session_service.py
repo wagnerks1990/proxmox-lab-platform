@@ -45,13 +45,15 @@ class SessionService:
         return validate_transition(current, next_state, SESSION_TRANSITIONS)
 
     def create_launching_session(self, user: User, vm: StudentVM, protocol: str, connection_launch_id: int | None = None, request_id: str | None = None) -> VMSession:
-        row = VMSession(user_id=user.id, vm_id=vm.id, protocol=protocol, state=SessionState.LAUNCHING.value, node=vm.proxmox_node, proxmox_vmid=vm.vmid, connection_launch_id=connection_launch_id, request_id=request_id)
+        row = VMSession(organization_id=vm.organization_id, user_id=user.id, vm_id=vm.id, protocol=protocol, state=SessionState.LAUNCHING.value, node=vm.proxmox_node, proxmox_vmid=vm.vmid, connection_launch_id=connection_launch_id, request_id=request_id)
         self.db.add(row); self.db.flush()
-        bus.publish(DomainEvent(name=SESSION_CREATED, payload={'session_id': row.id, 'vm_id': vm.id, 'actor_id': user.id, 'protocol': protocol}))
+        bus.publish(DomainEvent(name=SESSION_CREATED, payload={'organization_id': vm.organization_id, 'session_id': row.id, 'vm_id': vm.id, 'actor_id': user.id, 'protocol': protocol}))
         return row
 
-    def get_session_for_user(self, session_id: int, user: User) -> VMSession | None:
+    def get_session_for_user(self, session_id: int, user: User, organization_id: int | None = None) -> VMSession | None:
         q = self.db.query(VMSession).filter(VMSession.id == session_id)
+        if organization_id is not None:
+            q = q.filter(VMSession.organization_id == organization_id)
         role = get_role_name(user)
         if role == ROLE_STUDENT:
             q = q.filter(VMSession.user_id == user.id)
@@ -65,7 +67,7 @@ class SessionService:
         ok = self._set_state(row, SessionState.ACTIVE)
         if ok:
             safe_commit(self.db)
-            bus.publish(DomainEvent(name=SESSION_STARTED, payload={'session_id': row.id, 'vm_id': row.vm_id}))
+            bus.publish(DomainEvent(name=SESSION_STARTED, payload={'organization_id': getattr(row, 'organization_id', None), 'session_id': row.id, 'vm_id': row.vm_id}))
         return ok
 
     def mark_failed(self, session_id: int, reason: str | None = None) -> bool:
@@ -85,7 +87,7 @@ class SessionService:
     def mark_reconnecting(self, session_id: int) -> bool:
         row = self.db.query(VMSession).filter(VMSession.id == session_id).first()
         if not row: return False
-        bus.publish(DomainEvent(name=RECONNECT_ATTEMPT, payload={'session_id': row.id}))
+        bus.publish(DomainEvent(name=RECONNECT_ATTEMPT, payload={'organization_id': getattr(row, 'organization_id', None), 'session_id': row.id}))
         ok = self._set_state(row, SessionState.RECONNECTING)
         if ok: safe_commit(self.db)
         return ok
@@ -96,7 +98,7 @@ class SessionService:
         ok = self._set_state(row, SessionState.EXPIRED)
         if ok:
             safe_commit(self.db)
-            bus.publish(DomainEvent(name=SESSION_EXPIRED, payload={'session_id': row.id, 'vm_id': row.vm_id}))
+            bus.publish(DomainEvent(name=SESSION_EXPIRED, payload={'organization_id': getattr(row, 'organization_id', None), 'session_id': row.id, 'vm_id': row.vm_id}))
         return ok
 
     def heartbeat(self, session_id: int, next_state: SessionState | None = None) -> VMSession | None:
@@ -111,8 +113,11 @@ class SessionService:
         safe_commit(self.db)
         return row
 
-    def get_recent_activity(self, limit: int = 200):
-        return self.db.query(VMSession).order_by(VMSession.created_at.desc()).limit(limit).all()
+    def get_recent_activity(self, limit: int = 200, organization_id: int | None = None):
+        q = self.db.query(VMSession)
+        if organization_id is not None:
+            q = q.filter(VMSession.organization_id == organization_id)
+        return q.order_by(VMSession.created_at.desc()).limit(limit).all()
 
     def get_active_sessions(self, user_id: int | None = None):
         q = self.db.query(VMSession).filter(VMSession.state == SessionState.ACTIVE.value)
@@ -135,10 +140,10 @@ class SessionService:
         if not row or not self.verify_reconnect(reconnect_token, session_id, user_id, row.protocol):
             return None
         if not self.mark_reconnecting(session_id):
-            bus.publish(DomainEvent(name=RECONNECT_FAILURE, payload={'session_id': session_id}))
+            bus.publish(DomainEvent(name=RECONNECT_FAILURE, payload={'organization_id': getattr(row, 'organization_id', None), 'session_id': session_id}))
             return None
         self.mark_active(session_id)
-        bus.publish(DomainEvent(name=RECONNECT_SUCCESS, payload={'session_id': session_id}))
+        bus.publish(DomainEvent(name=RECONNECT_SUCCESS, payload={'organization_id': getattr(row, 'organization_id', None), 'session_id': session_id}))
         return self.db.query(VMSession).filter(VMSession.id == session_id).first()
 
     def analytics_counts(self) -> dict[str, int]:
