@@ -7,9 +7,11 @@ from app.services.telemetry_service import TelemetryService
 from app.telemetry.event_stream import event_stream
 
 
-def _inc(name: str):
+def _inc(name: str, *, persist: bool = True):
     def handler(event):
         setattr(metrics, name, getattr(metrics, name) + 1)
+        if not persist:
+            return
         db = SessionLocal()
         try:
             sev = 'error' if 'FAIL' in event.name else ('warning' if 'VALIDATION' in event.name else 'info')
@@ -24,11 +26,11 @@ def _inc(name: str):
     return handler
 
 
-def register_subscribers() -> None:
-    bus.subscribe('SESSION_STARTED', _inc('active_session_count'))
-    bus.subscribe('SESSION_FAILED', _inc('failed_session_count'))
-    bus.subscribe('RECONNECT_ATTEMPT', _inc('reconnect_attempts'))
-    bus.subscribe('RECONNECT_FAILURE', _inc('reconnect_failures'))
-    bus.subscribe('WEBSOCKET_DISCONNECT', _inc('websocket_disconnects'))
-    bus.subscribe('STALE_CLEANUP', _inc('stale_cleanup_count'))
-    bus.subscribe('VALIDATION_FAILED', _inc('launch_failures'))
+def register_subscribers(*, persist: bool = True) -> None:
+    bus.subscribe('SESSION_STARTED', _inc('active_session_count', persist=persist))
+    bus.subscribe('SESSION_FAILED', _inc('failed_session_count', persist=persist))
+    bus.subscribe('RECONNECT_ATTEMPT', _inc('reconnect_attempts', persist=persist))
+    bus.subscribe('RECONNECT_FAILURE', _inc('reconnect_failures', persist=persist))
+    bus.subscribe('WEBSOCKET_DISCONNECT', _inc('websocket_disconnects', persist=persist))
+    bus.subscribe('STALE_CLEANUP', _inc('stale_cleanup_count', persist=persist))
+    bus.subscribe('VALIDATION_FAILED', _inc('launch_failures', persist=persist))
