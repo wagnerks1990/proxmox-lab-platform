@@ -45,7 +45,10 @@
 - Never commit `.env` files.
 - Never commit secrets, private keys, certificates, passwords, tokens, local databases, or generated runtime artifacts.
 - Students may only access their own VMs.
-- Teachers/Admins may manage all VMs.
+- Tenant instructors, administrators, and owners may manage VMs only in the
+  selected organization. Students may manage only VMs they own.
+- Global platform roles do not replace tenant membership. Global `Admin` is the
+  explicit break-glass exception and must still select an organization.
 - Enforce RBAC on backend endpoints.
 
 ## VM/API rules

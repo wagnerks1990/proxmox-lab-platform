@@ -16,16 +16,13 @@ from app.models.models import (
     AuditLog,
 )
 from app.services.health_service import health_summary
-from app.services.rbac import get_role_name
-from app.services.organization_access import OrganizationContext, get_current_organization
+from app.services.organization_access import OrganizationContext, require_organization_role
 
 router = APIRouter()
 
 
 @router.get('/admin/dashboard/summary')
-async def dashboard_summary(_user=Depends(get_current_user), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
-    if get_role_name(_user) not in {'Teacher', 'Admin'}:
-        raise HTTPException(status_code=403, detail='Forbidden')
+async def dashboard_summary(_user=Depends(get_current_user), db: Session = Depends(get_db), organization: OrganizationContext = Depends(require_organization_role('instructor'))):
     health = await health_summary(db)
     active = db.query(ProxmoxCluster).filter(ProxmoxCluster.is_active.is_(True)).first()
     defaults = db.query(ProxmoxClusterDefault).filter(ProxmoxClusterDefault.cluster_id == (active.id if active else -1)).first()

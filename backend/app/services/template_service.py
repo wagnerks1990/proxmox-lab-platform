@@ -1,13 +1,24 @@
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
-from app.services.rbac import get_role_name
-from app.models.models import VMTemplate, Permission
+from app.models.models import GroupMembership, GroupTemplatePermission, VMTemplate, Permission
 
 
-def list_templates(db: Session, user, organization_id: int):
-    if get_role_name(user) in ['Teacher', 'Admin']:
+def list_templates(db: Session, user, organization_id: int, organization_role: str):
+    if organization_role in {'instructor', 'admin', 'owner'}:
         return db.query(VMTemplate).filter(VMTemplate.organization_id == organization_id).all()
-    return db.query(VMTemplate).join(Permission, Permission.template_id == VMTemplate.id).filter(Permission.user_id == user.id, VMTemplate.organization_id == organization_id, VMTemplate.enabled.is_(True)).all()
+    direct_ids = [row.template_id for row in db.query(Permission).filter(Permission.user_id == user.id).all()]
+    group_ids = [row.template_id for row in db.query(GroupTemplatePermission).join(
+        GroupMembership,
+        GroupMembership.group_id == GroupTemplatePermission.group_id,
+    ).filter(GroupMembership.user_id == user.id).all()]
+    assigned_ids = set(direct_ids + group_ids)
+    if not assigned_ids:
+        return []
+    return db.query(VMTemplate).filter(
+        VMTemplate.id.in_(assigned_ids),
+        VMTemplate.organization_id == organization_id,
+        VMTemplate.enabled.is_(True),
+    ).all()
 
 
 def create_template(db: Session, payload, organization_id: int):

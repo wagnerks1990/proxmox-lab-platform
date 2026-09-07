@@ -26,8 +26,9 @@ def _organization_out(db: Session, organization: Organization) -> dict:
     }
 
 
-def _organization_or_404(db: Session, organization_id: int) -> Organization:
-    organization = db.query(Organization).filter(Organization.id == organization_id).first()
+def _organization_or_404(db: Session, organization_id: int, *, lock: bool = False) -> Organization:
+    query = db.query(Organization).filter(Organization.id == organization_id)
+    organization = query.with_for_update().first() if lock else query.first()
     if not organization:
         raise HTTPException(status_code=404, detail='Organization not found')
     return organization
@@ -124,7 +125,7 @@ def list_members(organization_id: int, _user=Depends(require_role('Admin')), db:
 
 @router.put('/admin/organizations/{organization_id}/members/{user_id}')
 def put_member(organization_id: int, user_id: int, payload: dict, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
-    _organization_or_404(db, organization_id)
+    _organization_or_404(db, organization_id, lock=True)
     if not db.query(User).filter(User.id == user_id).first():
         raise HTTPException(status_code=404, detail='User not found')
     role = normalize_organization_role(payload.get('role'))
@@ -152,6 +153,7 @@ def put_member(organization_id: int, user_id: int, payload: dict, _user=Depends(
 
 @router.delete('/admin/organizations/{organization_id}/members/{user_id}')
 def deactivate_member(organization_id: int, user_id: int, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    _organization_or_404(db, organization_id, lock=True)
     membership = db.query(OrganizationMembership).filter(
         OrganizationMembership.organization_id == organization_id,
         OrganizationMembership.user_id == user_id,

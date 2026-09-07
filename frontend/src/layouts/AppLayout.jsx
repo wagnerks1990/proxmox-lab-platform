@@ -40,8 +40,12 @@ export default function AppLayout({ children, setUser, user }) {
   }
   const role = user?.role
   const normalizedRole = (role || '').toLowerCase()
-  const isTeacherOrAdmin = normalizedRole === 'teacher' || normalizedRole === 'admin' || user?.role_id === 2 || user?.role_id === 3
-  const isAdmin = normalizedRole === 'admin' || user?.role_id === 3
+  const activeOrganization = organizations.find(organization => String(organization.id) === organizationId)
+  const tenantRole = activeOrganization?.role
+  const isPlatformAdmin = normalizedRole === 'admin' || user?.role_id === 3
+  const isPlatformTeacher = normalizedRole === 'teacher' || user?.role_id === 2
+  const isTenantInstructor = ['instructor', 'admin', 'owner'].includes(tenantRole) || isPlatformAdmin
+  const isTenantAdmin = ['admin', 'owner'].includes(tenantRole) || isPlatformAdmin
   return <div className='app-shell'>
     <aside className='sidebar'>
       <div className='brand'>Proxmox Lab Control Plane</div>
@@ -52,15 +56,16 @@ export default function AppLayout({ children, setUser, user }) {
       </label>}
       <Link className='nav-link' to='/'>Dashboard</Link>
       <Link className='nav-link' to='/vms'>My Lab VMs</Link>
-      {isTeacherOrAdmin && <><Link className='nav-link' to='/admin/sessions'>Sessions</Link><Link className='nav-link' to='/pools'>Pools</Link><Link className='nav-link' to='/telemetry'>Telemetry</Link><Link className='nav-link' to='/operations'>Operations</Link><Link className='nav-link' to='/troubleshooting'>Troubleshooting</Link></>}
-      {isTeacherOrAdmin && <Link className='nav-link' to='/events'>Events / Tasks</Link>}
-      {isAdmin && <Link className='nav-link' to='/create'>Create VM</Link>}
-      {isAdmin && <Link className='nav-link' to='/admin/proxmox-setup'>Proxmox Setup</Link>}
-      {isAdmin && <Link className='nav-link' to='/admin/proxmox-inventory'>Proxmox Inventory</Link>}
-      {isAdmin && <Link className='nav-link' to='/admin/proxmox-assets'>Proxmox Assets</Link>}
-      {isAdmin && <Link className='nav-link' to='/admin/users'>Users</Link>}
-      {isAdmin && <Link className='nav-link' to='/admin/groups'>Groups</Link>}
-      {isAdmin && <Link className='nav-link' to='/admin/system-update'>System Updates</Link>}
+      <Link className='nav-link' to='/create'>Create VM</Link>
+      {isTenantInstructor && <><Link className='nav-link' to='/admin/sessions'>Sessions</Link><Link className='nav-link' to='/pools'>Pools</Link><Link className='nav-link' to='/events'>Events / Tasks</Link></>}
+      {(isPlatformTeacher || isPlatformAdmin) && <><Link className='nav-link' to='/telemetry'>Telemetry</Link><Link className='nav-link' to='/operations'>Operations</Link><Link className='nav-link' to='/troubleshooting'>Troubleshooting</Link></>}
+      {isPlatformAdmin && <Link className='nav-link' to='/admin/proxmox-setup'>Proxmox Setup</Link>}
+      {isPlatformAdmin && <Link className='nav-link' to='/admin/proxmox-inventory'>Proxmox Inventory</Link>}
+      {isPlatformAdmin && <Link className='nav-link' to='/admin/proxmox-assets'>Proxmox Assets</Link>}
+      {isPlatformAdmin && <Link className='nav-link' to='/admin/users'>Users</Link>}
+      {isTenantAdmin && <Link className='nav-link' to='/admin/groups'>Groups</Link>}
+      {isPlatformAdmin && <Link className='nav-link' to='/admin/organizations'>Organizations</Link>}
+      {isPlatformAdmin && <Link className='nav-link' to='/admin/system-update'>System Updates</Link>}
       <button onClick={logout} style={{marginTop: 10, width: '100%'}}>Logout</button>
       <div style={{marginTop:14, color:'#a7b0d6', fontSize:12}}>Current: {loc.pathname}</div>
     </aside>

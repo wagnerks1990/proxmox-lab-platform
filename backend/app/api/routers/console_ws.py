@@ -2,12 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException, WebSocket
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
-from app.services.rbac import ROLE_STUDENT, STAFF_ROLES, get_role_name
+from app.services.rbac import get_role_name
 from app.db.session import get_db
 from app.core.config import settings
 from app.models.models import StudentVM, User
 from app.services.console_ws_service import ConsoleWsService
-from app.services.organization_access import resolve_organization_context
+from app.services.organization_access import OrganizationContext, organization_role_at_least, resolve_organization_context
 
 router = APIRouter()
 
@@ -26,12 +26,11 @@ def _get_user_from_ws_token(db: Session, token: str | None):
     return user
 
 
-def _get_vm_for_user(db: Session, user: User, vm_id: int, organization_id: int):
-    q = db.query(StudentVM).filter(StudentVM.id == vm_id, StudentVM.organization_id == organization_id)
-    role = get_role_name(user)
-    if role == ROLE_STUDENT:
+def _get_vm_for_user(db: Session, user: User, vm_id: int, organization: OrganizationContext):
+    q = db.query(StudentVM).filter(StudentVM.id == vm_id, StudentVM.organization_id == organization.id)
+    if organization.role == 'student':
         q = q.filter(StudentVM.owner_id == user.id)
-    elif role not in STAFF_ROLES:
+    elif not organization_role_at_least(organization, 'instructor'):
         return None
     return q.first()
 
@@ -46,7 +45,7 @@ async def ssh_ws(id: int, websocket: WebSocket, db: Session = Depends(get_db)):
         organization = resolve_organization_context(db, user, int(requested) if requested else None)
     except (ValueError, HTTPException):
         await websocket.close(code=1008, reason='Invalid organization'); return
-    vm = _get_vm_for_user(db, user, id, organization.id)
+    vm = _get_vm_for_user(db, user, id, organization)
     if not vm:
         await websocket.close(code=1008, reason='Forbidden'); return
     await ConsoleWsService(db).ssh_ws(websocket, user, vm)
@@ -62,7 +61,7 @@ async def novnc_ws(id: int, websocket: WebSocket, db: Session = Depends(get_db))
         organization = resolve_organization_context(db, user, int(requested) if requested else None)
     except (ValueError, HTTPException):
         await websocket.close(code=1008, reason='Invalid organization'); return
-    vm = _get_vm_for_user(db, user, id, organization.id)
+    vm = _get_vm_for_user(db, user, id, organization)
     if not vm:
         await websocket.close(code=1008, reason='Forbidden'); return
     await ConsoleWsService(db).novnc_ws(websocket, user, vm)

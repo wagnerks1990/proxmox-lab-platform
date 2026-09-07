@@ -5,7 +5,10 @@ from fastapi import HTTPException
 
 from app.services.organization_access import (
     ORGANIZATION_ROLES,
+    OrganizationContext,
+    enforce_organization_role,
     normalize_organization_role,
+    organization_role_at_least,
     require_organization_access,
     resolve_organization_context,
 )
@@ -100,3 +103,28 @@ def test_requested_organization_allows_admin_break_glass():
     context = resolve_organization_context(db, _user('Admin'), 9)
     assert context.break_glass is True
     assert context.role == 'owner'
+
+
+@pytest.mark.parametrize(
+    ('role', 'minimum', 'allowed'),
+    [
+        ('student', 'student', True),
+        ('student', 'instructor', False),
+        ('instructor', 'instructor', True),
+        ('instructor', 'admin', False),
+        ('admin', 'instructor', True),
+        ('admin', 'admin', True),
+        ('admin', 'owner', False),
+        ('owner', 'student', True),
+        ('owner', 'owner', True),
+    ],
+)
+def test_organization_role_matrix(role, minimum, allowed):
+    context = OrganizationContext(1, 'test', role)
+    assert organization_role_at_least(context, minimum) is allowed
+    if allowed:
+        assert enforce_organization_role(context, minimum) is context
+    else:
+        with pytest.raises(HTTPException) as exc:
+            enforce_organization_role(context, minimum)
+        assert exc.value.status_code == 403

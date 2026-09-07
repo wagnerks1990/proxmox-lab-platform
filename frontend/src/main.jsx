@@ -21,6 +21,7 @@ import UsersPage from './pages/UsersPage'
 import GroupsPage from './pages/GroupsPage'
 import EventsPage from './pages/EventsPage'
 import SystemUpdatePage from './pages/SystemUpdatePage'
+import OrganizationsPage from './pages/OrganizationsPage'
 import './styles.css'
 
 function App() {
@@ -28,7 +29,7 @@ function App() {
   const [message, setMessage] = React.useState(null)
   if (loading) return <div className='login-wrap'>Loading...</div>
   if (user === false) return <><MessageBanner message={message} /><LoginPage onLogin={refresh} setMessage={setMessage} /></>
-  return <BrowserRouter><AppLayout setUser={setUser} user={user}><MessageBanner message={message} /><Routes><Route path='/' element={<DashboardPage user={user} />} /><Route path='/vms' element={<VmsPage setMessage={setMessage} />} /><Route path='/create' element={<CreateVmPage setMessage={setMessage} />} /><Route path='/admin/sessions' element={<SessionActivityPage setMessage={setMessage} />} /><Route path='/telemetry' element={<TelemetryPage />} /><Route path='/events' element={<EventsPage />} /><Route path='/pools' element={<PoolsPage />} /><Route path='/pools/:id' element={<PoolDetailPage />} /><Route path='/operations' element={<OperationsPage />} /><Route path='/troubleshooting' element={<TroubleshootingPage />} /><Route path='/admin/proxmox-setup' element={<ProxmoxSetupPage />} /><Route path='/admin/proxmox-inventory' element={<ProxmoxInventoryPage />} /><Route path='/admin/proxmox-assets' element={<ProxmoxAssetsPage />} /><Route path='/admin/users' element={<UsersPage />} /><Route path='/admin/groups' element={<GroupsPage />} /><Route path='/admin/system-update' element={<SystemUpdatePage setMessage={setMessage} />} /><Route path='*' element={<Navigate to='/' />} /></Routes></AppLayout></BrowserRouter>
+  return <BrowserRouter><AppLayout setUser={setUser} user={user}><MessageBanner message={message} /><Routes><Route path='/' element={<DashboardPage user={user} />} /><Route path='/vms' element={<VmsPage setMessage={setMessage} />} /><Route path='/create' element={<CreateVmPage setMessage={setMessage} />} /><Route path='/admin/sessions' element={<SessionActivityPage setMessage={setMessage} />} /><Route path='/telemetry' element={<TelemetryPage />} /><Route path='/events' element={<EventsPage />} /><Route path='/pools' element={<PoolsPage />} /><Route path='/pools/:id' element={<PoolDetailPage />} /><Route path='/operations' element={<OperationsPage />} /><Route path='/troubleshooting' element={<TroubleshootingPage />} /><Route path='/admin/proxmox-setup' element={<ProxmoxSetupPage />} /><Route path='/admin/proxmox-inventory' element={<ProxmoxInventoryPage />} /><Route path='/admin/proxmox-assets' element={<ProxmoxAssetsPage />} /><Route path='/admin/users' element={<UsersPage />} /><Route path='/admin/groups' element={<GroupsPage />} /><Route path='/admin/organizations' element={<OrganizationsPage />} /><Route path='/admin/system-update' element={<SystemUpdatePage setMessage={setMessage} />} /><Route path='*' element={<Navigate to='/' />} /></Routes></AppLayout></BrowserRouter>
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App />)

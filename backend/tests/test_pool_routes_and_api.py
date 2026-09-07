@@ -52,10 +52,6 @@ class FakeDB:
         pass
 
 
-def _role(monkeypatch, role):
-    monkeypatch.setattr(pools, 'get_role_name', lambda _u: role)
-
-
 def test_admin_pool_routes_registered():
     paths = {r.path for r in router.routes}
     assert '/api/admin/pools' in paths
@@ -64,26 +60,23 @@ def test_admin_pool_routes_registered():
 
 @pytest.mark.asyncio
 async def test_student_cannot_manage_pools(monkeypatch):
-    _role(monkeypatch, 'Student')
     db = FakeDB({DesktopPool: []})
     with pytest.raises(Exception) as exc:
-        await pools.list_pools(_user=Obj(), db=db)
+        await pools.list_pools(_user=Obj(), organization=OrganizationContext(1, 'default', 'student'), db=db)
     assert getattr(exc.value, 'status_code', None) == 403
 
 
 @pytest.mark.asyncio
 async def test_create_rejects_missing_name(monkeypatch):
-    _role(monkeypatch, 'Admin')
     db = FakeDB({ProxmoxCluster: [], DesktopPool: [], VMTemplate: []})
     payload = PoolCreate(name='', description=None, pool_type='persistent', template_vmid=None, template_node=None, default_protocol='NOVNC', target_node=None, storage=None, bridge=None, vlan_tag=None, vmid_start=None, vmid_end=None, naming_pattern=None, desired_size=0, maintenance_mode=False, enabled=True)
     with pytest.raises(Exception) as exc:
-        await pools.create_pool(payload=payload, _user=Obj(id=1), db=db)
+        await pools.create_pool(payload=payload, _user=Obj(id=1), organization=OrganizationContext(1, 'default', 'instructor'), db=db)
     assert getattr(exc.value, 'status_code', None) == 422
 
 
 @pytest.mark.asyncio
 async def test_create_rejects_invalid_template(monkeypatch):
-    _role(monkeypatch, 'Admin')
     db = FakeDB({VMTemplate: [], ProxmoxCluster: [], DesktopPool: []})
     payload = PoolCreate(name='lab', description=None, pool_type='persistent', template_vmid=999, template_node=None, default_protocol='NOVNC', target_node=None, storage=None, bridge=None, vlan_tag=None, vmid_start=None, vmid_end=None, naming_pattern=None, desired_size=0, maintenance_mode=False, enabled=True)
     with pytest.raises(Exception) as exc:
@@ -93,7 +86,6 @@ async def test_create_rejects_invalid_template(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_list_includes_readiness_hints(monkeypatch):
-    _role(monkeypatch, 'Admin')
 
     async def fake_templates(_):
         return [{'vmid': 303, 'node': 'pve-lab-01'}]

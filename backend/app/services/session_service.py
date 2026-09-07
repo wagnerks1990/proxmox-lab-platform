@@ -50,14 +50,14 @@ class SessionService:
         bus.publish(DomainEvent(name=SESSION_CREATED, payload={'organization_id': vm.organization_id, 'session_id': row.id, 'vm_id': vm.id, 'actor_id': user.id, 'protocol': protocol}))
         return row
 
-    def get_session_for_user(self, session_id: int, user: User, organization_id: int | None = None) -> VMSession | None:
+    def get_session_for_user(self, session_id: int, user: User, organization_id: int | None = None, organization_role: str | None = None) -> VMSession | None:
         q = self.db.query(VMSession).filter(VMSession.id == session_id)
         if organization_id is not None:
             q = q.filter(VMSession.organization_id == organization_id)
         role = get_role_name(user)
-        if role == ROLE_STUDENT:
+        if organization_role == 'student' or (organization_role is None and role == ROLE_STUDENT):
             q = q.filter(VMSession.user_id == user.id)
-        elif role not in STAFF_ROLES:
+        elif organization_role not in {'instructor', 'admin', 'owner'} and role not in STAFF_ROLES:
             return None
         return q.first()
 
