@@ -28,6 +28,12 @@ guest or the control plane.
 
 - Missing, unknown, or conflicting roles are denied.
 - Roles grant capabilities; ownership and organization scope restrict objects.
+- `X-Organization-ID` selects context but never grants access; active membership
+  is verified server-side before loading a tenant resource.
+- Core resource queries include organization scope before ownership or role
+  checks, preventing valid IDs from becoming cross-tenant object references.
+- A platform administrator's cross-organization access is an explicit
+  break-glass path, not an implicit membership.
 - Teachers are scoped to assigned classes unless a separate permission grants broader access.
 - Students require an active enrollment and explicit assignment.
 - Frontend visibility is never considered an authorization control.

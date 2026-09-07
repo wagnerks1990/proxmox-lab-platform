@@ -3,14 +3,15 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import require_role
 from app.db.session import get_db
-from app.models.models import Group, GroupMembership, GroupTemplatePermission, User, VMTemplate
+from app.models.models import Group, GroupMembership, GroupTemplatePermission, OrganizationMembership, User, VMTemplate
+from app.services.organization_access import OrganizationContext, get_current_organization
 
 router = APIRouter()
 
 
 @router.get('/admin/groups')
-def list_groups(_user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
-    rows = db.query(Group).order_by(Group.id.asc()).all()
+def list_groups(_user=Depends(require_role('Admin')), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
+    rows = db.query(Group).filter(Group.organization_id == organization.id).order_by(Group.id.asc()).all()
     out = []
     for g in rows:
         out.append({
@@ -25,27 +26,27 @@ def list_groups(_user=Depends(require_role('Admin')), db: Session = Depends(get_
 
 
 @router.get('/admin/groups/{id}')
-def get_group(id: int, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
-    g = db.query(Group).filter(Group.id == id).first()
+def get_group(id: int, _user=Depends(require_role('Admin')), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
+    g = db.query(Group).filter(Group.id == id, Group.organization_id == organization.id).first()
     if not g:
         raise HTTPException(status_code=404, detail='Group not found')
     return {'id': g.id, 'name': g.name, 'description': g.description, 'enabled': g.enabled}
 
 
 @router.post('/admin/groups')
-def create_group(payload: dict, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+def create_group(payload: dict, _user=Depends(require_role('Admin')), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
     if not payload.get('name'):
         raise HTTPException(status_code=422, detail='name is required')
-    if db.query(Group).filter(Group.name == payload['name']).first():
+    if db.query(Group).filter(Group.name == payload['name'], Group.organization_id == organization.id).first():
         raise HTTPException(status_code=409, detail='Group already exists')
-    g = Group(name=payload['name'], description=payload.get('description'), enabled=payload.get('enabled', True))
+    g = Group(organization_id=organization.id, name=payload['name'], description=payload.get('description'), enabled=payload.get('enabled', True))
     db.add(g); db.commit(); db.refresh(g)
     return {'id': g.id, 'name': g.name, 'description': g.description, 'enabled': g.enabled}
 
 
 @router.patch('/admin/groups/{id}')
-def patch_group(id: int, payload: dict, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
-    g = db.query(Group).filter(Group.id == id).first()
+def patch_group(id: int, payload: dict, _user=Depends(require_role('Admin')), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
+    g = db.query(Group).filter(Group.id == id, Group.organization_id == organization.id).first()
     if not g:
         raise HTTPException(status_code=404, detail='Group not found')
     for k in ('name', 'description', 'enabled'):
@@ -56,8 +57,8 @@ def patch_group(id: int, payload: dict, _user=Depends(require_role('Admin')), db
 
 
 @router.delete('/admin/groups/{id}')
-def delete_group(id: int, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
-    g = db.query(Group).filter(Group.id == id).first()
+def delete_group(id: int, _user=Depends(require_role('Admin')), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
+    g = db.query(Group).filter(Group.id == id, Group.organization_id == organization.id).first()
     if not g:
         raise HTTPException(status_code=404, detail='Group not found')
     db.query(GroupMembership).filter(GroupMembership.group_id == id).delete()
@@ -67,8 +68,8 @@ def delete_group(id: int, _user=Depends(require_role('Admin')), db: Session = De
 
 
 @router.get('/admin/groups/{id}/members')
-def list_group_members(id: int, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
-    if not db.query(Group).filter(Group.id == id).first():
+def list_group_members(id: int, _user=Depends(require_role('Admin')), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
+    if not db.query(Group).filter(Group.id == id, Group.organization_id == organization.id).first():
         raise HTTPException(status_code=404, detail='Group not found')
     rows = db.query(GroupMembership).filter(GroupMembership.group_id == id).all()
     users = {u.id: u for u in db.query(User).filter(User.id.in_([r.user_id for r in rows])).all()} if rows else {}
@@ -76,12 +77,14 @@ def list_group_members(id: int, _user=Depends(require_role('Admin')), db: Sessio
 
 
 @router.post('/admin/groups/{id}/members')
-def add_group_member(id: int, payload: dict, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
-    if not db.query(Group).filter(Group.id == id).first():
+def add_group_member(id: int, payload: dict, _user=Depends(require_role('Admin')), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
+    if not db.query(Group).filter(Group.id == id, Group.organization_id == organization.id).first():
         raise HTTPException(status_code=404, detail='Group not found')
     uid = payload.get('user_id')
     if not uid or not db.query(User).filter(User.id == uid).first():
         raise HTTPException(status_code=422, detail='valid user_id is required')
+    if not db.query(OrganizationMembership).filter(OrganizationMembership.organization_id == organization.id, OrganizationMembership.user_id == uid, OrganizationMembership.is_active.is_(True)).first():
+        raise HTTPException(status_code=422, detail='User must be an active member of this organization')
     existing = db.query(GroupMembership).filter(GroupMembership.group_id == id, GroupMembership.user_id == uid).first()
     if not existing:
         db.add(GroupMembership(group_id=id, user_id=uid, role_in_group=payload.get('role_in_group')))
@@ -90,7 +93,10 @@ def add_group_member(id: int, payload: dict, _user=Depends(require_role('Admin')
 
 
 @router.delete('/admin/groups/{id}/members/{user_id}')
-def remove_group_member(id: int, user_id: int, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+def remove_group_member(id: int, user_id: int, _user=Depends(require_role('Admin')), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
+    group = db.query(Group).filter(Group.id == id, Group.organization_id == organization.id).first()
+    if not group:
+        raise HTTPException(status_code=404, detail='Group not found')
     row = db.query(GroupMembership).filter(GroupMembership.group_id == id, GroupMembership.user_id == user_id).first()
     if not row:
         raise HTTPException(status_code=404, detail='Group membership not found')
@@ -99,20 +105,23 @@ def remove_group_member(id: int, user_id: int, _user=Depends(require_role('Admin
 
 
 @router.get('/admin/groups/{id}/template-permissions')
-def list_group_template_permissions(id: int, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
-    if not db.query(Group).filter(Group.id == id).first():
+def list_group_template_permissions(id: int, _user=Depends(require_role('Admin')), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
+    if not db.query(Group).filter(Group.id == id, Group.organization_id == organization.id).first():
         raise HTTPException(status_code=404, detail='Group not found')
     rows = db.query(GroupTemplatePermission).filter(GroupTemplatePermission.group_id == id).all()
     template_ids = [r.template_id for r in rows]
-    templates = db.query(VMTemplate).filter(VMTemplate.id.in_(template_ids)).all() if template_ids else []
+    templates = db.query(VMTemplate).filter(VMTemplate.id.in_(template_ids), VMTemplate.organization_id == organization.id).all() if template_ids else []
     return {'template_ids': template_ids, 'templates': [{'id': t.id, 'name': t.name, 'source_vmid': t.source_vmid} for t in templates]}
 
 
 @router.patch('/admin/groups/{id}/template-permissions')
-def patch_group_template_permissions(id: int, payload: dict, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
-    if not db.query(Group).filter(Group.id == id).first():
+def patch_group_template_permissions(id: int, payload: dict, _user=Depends(require_role('Admin')), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
+    if not db.query(Group).filter(Group.id == id, Group.organization_id == organization.id).first():
         raise HTTPException(status_code=404, detail='Group not found')
     template_ids = [int(x) for x in (payload.get('template_ids') or [])]
+    valid_template_ids = {row.id for row in db.query(VMTemplate).filter(VMTemplate.id.in_(template_ids), VMTemplate.organization_id == organization.id).all()} if template_ids else set()
+    if valid_template_ids != set(template_ids):
+        raise HTTPException(status_code=422, detail='Every template must belong to the active organization')
     db.query(GroupTemplatePermission).filter(GroupTemplatePermission.group_id == id).delete()
     for tid in template_ids:
         db.add(GroupTemplatePermission(group_id=id, template_id=tid))

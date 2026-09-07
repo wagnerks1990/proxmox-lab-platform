@@ -5,6 +5,7 @@ from app.api.deps import require_role
 from app.db.session import get_db
 from app.models.models import User, Role, Permission, VMTemplate, StudentVM, VMSession, AuditLog
 from app.services.security import hash_password
+from app.services.organization_access import OrganizationContext, get_current_organization
 
 router = APIRouter()
 
@@ -150,21 +151,28 @@ def delete_admin_user(id: int, force: bool = False, _user=Depends(require_role('
 
 
 @router.get('/admin/users/{id}/permissions')
-def user_permissions(id: int, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+def user_permissions(id: int, _user=Depends(require_role('Admin')), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
     if not db.query(User).filter(User.id == id).first():
         raise HTTPException(status_code=404, detail='User not found')
     rows = db.query(Permission).filter(Permission.user_id == id).all()
     template_ids = [r.template_id for r in rows]
-    templates = db.query(VMTemplate).filter(VMTemplate.id.in_(template_ids)).all() if template_ids else []
-    return {'direct_template_ids': template_ids, 'templates': [{'id': t.id, 'name': t.name, 'source_vmid': t.source_vmid, 'proxmox_node': t.proxmox_node} for t in templates]}
+    templates = db.query(VMTemplate).filter(VMTemplate.id.in_(template_ids), VMTemplate.organization_id == organization.id).all() if template_ids else []
+    scoped_ids = [template.id for template in templates]
+    return {'direct_template_ids': scoped_ids, 'templates': [{'id': t.id, 'name': t.name, 'source_vmid': t.source_vmid, 'proxmox_node': t.proxmox_node} for t in templates]}
 
 
 @router.patch('/admin/users/{id}/permissions')
-def patch_user_permissions(id: int, payload: dict, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+def patch_user_permissions(id: int, payload: dict, _user=Depends(require_role('Admin')), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
     if not db.query(User).filter(User.id == id).first():
         raise HTTPException(status_code=404, detail='User not found')
     template_ids = [int(x) for x in (payload.get('template_ids') or [])]
-    db.query(Permission).filter(Permission.user_id == id).delete()
+    templates = db.query(VMTemplate).filter(VMTemplate.id.in_(template_ids), VMTemplate.organization_id == organization.id).all() if template_ids else []
+    valid_ids = {template.id for template in templates}
+    if valid_ids != set(template_ids):
+        raise HTTPException(status_code=422, detail='All templates must belong to the selected organization')
+    scoped_template_ids = [row.id for row in db.query(VMTemplate).filter(VMTemplate.organization_id == organization.id).all()]
+    if scoped_template_ids:
+        db.query(Permission).filter(Permission.user_id == id, Permission.template_id.in_(scoped_template_ids)).delete()
     for tid in template_ids:
         db.add(Permission(user_id=id, template_id=tid))
     db.commit()
@@ -172,15 +180,15 @@ def patch_user_permissions(id: int, payload: dict, _user=Depends(require_role('A
 
 
 @router.get('/admin/users/{id}/activity')
-def user_activity(id: int, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+def user_activity(id: int, _user=Depends(require_role('Admin')), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
     u = db.query(User).filter(User.id == id).first()
     if not u:
         raise HTTPException(status_code=404, detail='User not found')
     return {
         'user_id': id,
         'username': u.username,
-        'vm_count': db.query(StudentVM).filter(StudentVM.owner_id == id).count(),
-        'session_count': db.query(VMSession).filter(VMSession.user_id == id).count(),
-        'audit_log_count': db.query(AuditLog).filter(AuditLog.actor_id == id).count(),
+        'vm_count': db.query(StudentVM).filter(StudentVM.owner_id == id, StudentVM.organization_id == organization.id).count(),
+        'session_count': db.query(VMSession).filter(VMSession.user_id == id, VMSession.organization_id == organization.id).count(),
+        'audit_log_count': db.query(AuditLog).filter(AuditLog.actor_id == id, AuditLog.organization_id == organization.id).count(),
         'last_login_at': u.last_login_at.isoformat() if u.last_login_at else None,
     }

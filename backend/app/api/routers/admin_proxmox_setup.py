@@ -10,6 +10,7 @@ from app.services.proxmox import ProxmoxClient
 from app.services.proxmox_resource_stats import ProxmoxResourceStatsService
 from app.services.asset_server_control import AssetServerControl, HostRunnerNotConfiguredError
 from app.services.host_runner import HostRunnerService
+from app.services.organization_access import OrganizationContext, get_current_organization
 
 router = APIRouter()
 
@@ -456,14 +457,17 @@ async def cluster_resource_stats(id: int, _user=Depends(require_role('Admin')), 
 
 
 @router.get('/admin/proxmox/templates/discovered')
-async def discovered_templates(_user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+async def discovered_templates(_user=Depends(require_role('Admin')), organization: OrganizationContext = Depends(get_current_organization), db: Session = Depends(get_db)):
     active = db.query(ProxmoxCluster).filter(ProxmoxCluster.is_active.is_(True)).first()
     if not active:
         raise HTTPException(status_code=404, detail='No active Proxmox cluster configured')
     discovered = await ProxmoxBootstrapService(db).discover_templates(active)
     out = []
     for t in discovered:
-        existing = db.query(VMTemplate).filter(VMTemplate.source_vmid == t.get('vmid')).first()
+        existing = db.query(VMTemplate).filter(
+            VMTemplate.organization_id == organization.id,
+            VMTemplate.source_vmid == t.get('vmid'),
+        ).first()
         out.append({
             'node': t.get('node'), 'vmid': t.get('vmid'), 'name': t.get('name'), 'status': t.get('status'), 'template': bool(t.get('template', True)),
             'already_imported': bool(existing), 'imported_template_id': getattr(existing, 'id', None)
@@ -472,7 +476,7 @@ async def discovered_templates(_user=Depends(require_role('Admin')), db: Session
 
 
 @router.post('/admin/proxmox/templates/import')
-async def import_templates(payload: dict, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+async def import_templates(payload: dict, _user=Depends(require_role('Admin')), organization: OrganizationContext = Depends(get_current_organization), db: Session = Depends(get_db)):
     items = payload.get('templates') if isinstance(payload.get('templates'), list) else [payload]
     imported = []
     for item in items:
@@ -480,9 +484,12 @@ async def import_templates(payload: dict, _user=Depends(require_role('Admin')), 
         node = item.get('proxmox_node') or item.get('node')
         name = item.get('name') or f'template-{vmid}'
         enabled = bool(item.get('enabled', True))
-        row = db.query(VMTemplate).filter(VMTemplate.source_vmid == vmid).first()
+        row = db.query(VMTemplate).filter(
+            VMTemplate.organization_id == organization.id,
+            VMTemplate.source_vmid == vmid,
+        ).first()
         if row is None:
-            row = VMTemplate(name=name, proxmox_node=node, source_vmid=vmid, enabled=enabled)
+            row = VMTemplate(organization_id=organization.id, name=name, proxmox_node=node, source_vmid=vmid, enabled=enabled)
             db.add(row)
         else:
             row.name = name or row.name
@@ -496,7 +503,7 @@ async def import_templates(payload: dict, _user=Depends(require_role('Admin')), 
 
 
 @router.post('/admin/proxmox/templates/sync')
-async def sync_templates(_user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+async def sync_templates(_user=Depends(require_role('Admin')), organization: OrganizationContext = Depends(get_current_organization), db: Session = Depends(get_db)):
     active = db.query(ProxmoxCluster).filter(ProxmoxCluster.is_active.is_(True)).first()
     if not active:
         raise HTTPException(status_code=404, detail='No active Proxmox cluster configured')
@@ -504,9 +511,12 @@ async def sync_templates(_user=Depends(require_role('Admin')), db: Session = Dep
     imported = []
     for t in discovered:
         vmid = int(t.get('vmid'))
-        row = db.query(VMTemplate).filter(VMTemplate.source_vmid == vmid).first()
+        row = db.query(VMTemplate).filter(
+            VMTemplate.organization_id == organization.id,
+            VMTemplate.source_vmid == vmid,
+        ).first()
         if row is None:
-            row = VMTemplate(name=t.get('name') or f'template-{vmid}', proxmox_node=t.get('node'), source_vmid=vmid, enabled=True)
+            row = VMTemplate(organization_id=organization.id, name=t.get('name') or f'template-{vmid}', proxmox_node=t.get('node'), source_vmid=vmid, enabled=True)
             db.add(row)
         else:
             row.name = t.get('name') or row.name
@@ -518,13 +528,13 @@ async def sync_templates(_user=Depends(require_role('Admin')), db: Session = Dep
 
 
 @router.get('/admin/proxmox/inventory/vms')
-async def proxmox_inventory_vms(status: str | None = None, node: str | None = None, template: bool | None = None, q: str | None = None, linked: bool | None = None, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+async def proxmox_inventory_vms(status: str | None = None, node: str | None = None, template: bool | None = None, q: str | None = None, linked: bool | None = None, _user=Depends(require_role('Admin')), organization: OrganizationContext = Depends(get_current_organization), db: Session = Depends(get_db)):
     active = db.query(ProxmoxCluster).filter(ProxmoxCluster.is_active.is_(True)).first()
     if not active:
         raise HTTPException(status_code=404, detail='No active Proxmox cluster configured')
     stats = await ProxmoxResourceStatsService(db).cluster_stats(active)
-    tpl_map = {t.source_vmid: t for t in db.query(VMTemplate).all()}
-    vm_map = {v.vmid: v for v in db.query(StudentVM).all()}
+    tpl_map = {t.source_vmid: t for t in db.query(VMTemplate).filter(VMTemplate.organization_id == organization.id).all()}
+    vm_map = {v.vmid: v for v in db.query(StudentVM).filter(StudentVM.organization_id == organization.id).all()}
     users = {u.id: u.username for u in db.query(User).all()}
     items = []
     for n in stats.get('nodes', []):
@@ -587,7 +597,7 @@ async def admin_vm_status(node: str, vmid: int, _user=Depends(require_role('Admi
 
 
 @router.get('/admin/proxmox/templates/availability')
-async def template_availability(_user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+async def template_availability(_user=Depends(require_role('Admin')), organization: OrganizationContext = Depends(get_current_organization), db: Session = Depends(get_db)):
     active = db.query(ProxmoxCluster).filter(ProxmoxCluster.is_active.is_(True)).first()
     if not active:
         raise HTTPException(status_code=404, detail='No active Proxmox cluster configured')
@@ -600,7 +610,7 @@ async def template_availability(_user=Depends(require_role('Admin')), db: Sessio
         by_vmid.setdefault(int(t.get('vmid')), []).append(t)
 
     imported_by_vmid = {}
-    for row in db.query(VMTemplate).all():
+    for row in db.query(VMTemplate).filter(VMTemplate.organization_id == organization.id).all():
         vmid = int(row.source_vmid)
         imported_by_vmid[vmid] = row
         found = by_vmid.get(vmid, [])
@@ -653,14 +663,14 @@ async def template_availability(_user=Depends(require_role('Admin')), db: Sessio
 
 
 @router.get('/admin/proxmox/reconciliation/vms')
-async def reconcile_vms(_user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
-    inv = await proxmox_inventory_vms(_user=_user, db=db)
+async def reconcile_vms(_user=Depends(require_role('Admin')), organization: OrganizationContext = Depends(get_current_organization), db: Session = Depends(get_db)):
+    inv = await proxmox_inventory_vms(_user=_user, organization=organization, db=db)
     inv_map = {(x.get('node'), int(x.get('vmid'))): x for x in inv}
     report = []
     matched = 0
     missing = 0
     status_updated = 0
-    app_rows = db.query(StudentVM).all()
+    app_rows = db.query(StudentVM).filter(StudentVM.organization_id == organization.id).all()
     for vm in app_rows:
         key = (vm.proxmox_node, int(vm.vmid))
         found = inv_map.get(key)

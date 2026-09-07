@@ -4,12 +4,14 @@ from datetime import datetime
 from fastapi import APIRouter, Request, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import or_, select
 
 from app.api.deps import get_user_from_token, get_current_user
 from app.db.session import get_db
-from app.models.models import AuditLog, TelemetryEvent, WorkerRun
+from app.models.models import AuditLog, StudentVM, TelemetryEvent, WorkerRun
 from app.services.rbac import get_role_name
+from app.services.organization_access import OrganizationContext, get_current_organization
+from app.services.organization_access import resolve_organization_context
 from app.telemetry.event_stream import event_stream
 
 router = APIRouter()
@@ -79,6 +81,11 @@ async def events_stream(request: Request, db: Session = Depends(get_db)):
     user = get_user_from_token(token, db)
     if get_role_name(user) not in {'Teacher', 'Admin'}:
         raise HTTPException(status_code=403, detail='Forbidden')
+    requested = request.headers.get('x-organization-id') or request.query_params.get('organization_id')
+    try:
+        organization = resolve_organization_context(db, user, int(requested) if requested else None)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail='Invalid organization ID')
 
     async def gen():
         q = event_stream.subscribe()
@@ -86,6 +93,8 @@ async def events_stream(request: Request, db: Session = Depends(get_db)):
             while True:
                 try:
                     evt = await asyncio.wait_for(q.get(), timeout=10)
+                    if safe_int(evt.get('organization_id')) != organization.id:
+                        continue
                     yield _sse_pack(json.dumps(evt))
                 except asyncio.TimeoutError:
                     yield _sse_pack('{"type":"heartbeat","status":"ok"}')
@@ -109,6 +118,7 @@ def list_events(
     offset: int = 0,
     _user=Depends(get_current_user),
     db: Session = Depends(get_db),
+    organization: OrganizationContext = Depends(get_current_organization),
 ):
     role = get_role_name(_user)
     if role not in {'Teacher', 'Admin'}:
@@ -118,7 +128,7 @@ def list_events(
     items = []
 
     try:
-        audit_q = db.query(AuditLog)
+        audit_q = db.query(AuditLog).filter(AuditLog.organization_id == organization.id)
         if q:
             audit_q = audit_q.filter(or_(AuditLog.action.ilike(f'%{q}%'), AuditLog.target_type.ilike(f'%{q}%')))
         for a in audit_q.order_by(AuditLog.created_at.desc()).limit(limit).all():
@@ -138,7 +148,8 @@ def list_events(
         pass
 
     try:
-        tel_q = db.query(TelemetryEvent)
+        organization_vm_ids = select(StudentVM.id).where(StudentVM.organization_id == organization.id)
+        tel_q = db.query(TelemetryEvent).filter(or_(TelemetryEvent.vm_id.is_(None), TelemetryEvent.vm_id.in_(organization_vm_ids)))
         if q:
             tel_q = tel_q.filter(TelemetryEvent.event_type.ilike(f'%{q}%'))
         if severity:

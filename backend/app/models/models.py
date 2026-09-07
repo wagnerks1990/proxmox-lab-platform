@@ -83,8 +83,10 @@ class User(Base):
 
 class VMTemplate(Base):
     __tablename__ = 'vm_templates'
+    __table_args__ = (UniqueConstraint('organization_id', 'name', name='uq_vm_templates_organization_name'),)
     id = Column(Integer, primary_key=True)
-    name = Column(String(100), unique=True, nullable=False)
+    organization_id = Column(Integer, ForeignKey('organizations.id'), nullable=False, index=True)
+    name = Column(String(100), nullable=False)
     proxmox_node = Column(String(50), nullable=False)
     source_vmid = Column(Integer, nullable=False)
     enabled = Column(Boolean, default=True)
@@ -100,6 +102,7 @@ class Permission(Base):
 class StudentVM(Base):
     __tablename__ = 'student_vms'
     id = Column(Integer, primary_key=True)
+    organization_id = Column(Integer, ForeignKey('organizations.id'), nullable=False, index=True)
     owner_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     template_id = Column(Integer, ForeignKey('vm_templates.id'), nullable=False)
     vm_name = Column(String(100), nullable=False)
@@ -124,6 +127,7 @@ class StudentVM(Base):
 class AuditLog(Base):
     __tablename__ = 'audit_logs'
     id = Column(Integer, primary_key=True)
+    organization_id = Column(Integer, ForeignKey('organizations.id'), nullable=True, index=True)
     actor_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     action = Column(String(100), nullable=False)
     target_type = Column(String(50), nullable=False)
@@ -145,6 +149,7 @@ class ConnectionLaunch(Base):
 class VMSession(Base):
     __tablename__ = 'vm_sessions'
     id = Column(Integer, primary_key=True)
+    organization_id = Column(Integer, ForeignKey('organizations.id'), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     vm_id = Column(Integer, ForeignKey('student_vms.id'), nullable=False)
     pool_id = Column(Integer, nullable=True)
@@ -183,8 +188,10 @@ class TelemetryEvent(Base):
 
 class DesktopPool(Base):
     __tablename__ = 'desktop_pools'
+    __table_args__ = (UniqueConstraint('organization_id', 'name', name='uq_desktop_pools_organization_name'),)
     id = Column(Integer, primary_key=True)
-    name = Column(String(120), nullable=False, unique=True, index=True)
+    organization_id = Column(Integer, ForeignKey('organizations.id'), nullable=False, index=True)
+    name = Column(String(120), nullable=False, index=True)
     description = Column(String(255), nullable=True)
     pool_type = Column(String(32), nullable=False, index=True)
     template_vmid = Column(Integer, nullable=True)
@@ -266,8 +273,10 @@ class ProxmoxClusterDefault(Base):
 
 class Group(Base):
     __tablename__ = 'groups'
+    __table_args__ = (UniqueConstraint('organization_id', 'name', name='uq_groups_organization_name'),)
     id = Column(Integer, primary_key=True)
-    name = Column(String(120), nullable=False, unique=True)
+    organization_id = Column(Integer, ForeignKey('organizations.id'), nullable=False, index=True)
+    name = Column(String(120), nullable=False)
     description = Column(String(255), nullable=True)
     enabled = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
@@ -359,8 +368,10 @@ class AssetSyncJobEvent(Base):
 
 class Class(Base):
     __tablename__ = 'classes'
+    __table_args__ = (UniqueConstraint('organization_id', 'name', name='uq_classes_organization_name'),)
     id = Column(Integer, primary_key=True)
-    name = Column(String(120), nullable=False, unique=True)
+    organization_id = Column(Integer, ForeignKey('organizations.id'), nullable=False, index=True)
+    name = Column(String(120), nullable=False)
     term = Column(String(120), nullable=True)
     instructor_id = Column(Integer, ForeignKey('users.id'), nullable=True, index=True)
     join_code = Column(String(64), nullable=True)
@@ -380,6 +391,7 @@ class Enrollment(Base):
 class Lab(Base):
     __tablename__ = 'labs'
     id = Column(Integer, primary_key=True)
+    organization_id = Column(Integer, ForeignKey('organizations.id'), nullable=False, index=True)
     class_id = Column(Integer, ForeignKey('classes.id'), nullable=False, index=True)
     name = Column(String(120), nullable=False)
     description = Column(String(255), nullable=True)

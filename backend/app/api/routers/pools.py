@@ -11,21 +11,22 @@ from app.services.pool_planning_service import PoolPlanningService
 from app.schemas.pool_plan import PoolPlanResponse
 from app.services.proxmox_bootstrap import ProxmoxBootstrapService
 from app.services.rbac import get_role_name
+from app.services.organization_access import OrganizationContext, get_current_organization
 
 router = APIRouter()
 
 
 def _attach_pool_counts(db: Session, row: DesktopPool) -> DesktopPool:
     if row.template_vmid:
-        tpl = db.query(VMTemplate).filter(VMTemplate.source_vmid == row.template_vmid).first()
-        row.linked_vm_count = db.query(StudentVM).filter(StudentVM.template_id == tpl.id).count() if tpl else 0
+        tpl = db.query(VMTemplate).filter(VMTemplate.source_vmid == row.template_vmid, VMTemplate.organization_id == row.organization_id).first()
+        row.linked_vm_count = db.query(StudentVM).filter(StudentVM.template_id == tpl.id, StudentVM.organization_id == row.organization_id).count() if tpl else 0
     else:
         row.linked_vm_count = 0
     row.linked_template_count = 1 if row.template_vmid else 0
     row.linked_group_count = (
         db.query(GroupTemplatePermission)
         .join(VMTemplate, VMTemplate.id == GroupTemplatePermission.template_id)
-        .filter(VMTemplate.source_vmid == row.template_vmid)
+        .filter(VMTemplate.source_vmid == row.template_vmid, VMTemplate.organization_id == row.organization_id)
         .count()
         if row.template_vmid
         else 0
@@ -89,10 +90,10 @@ async def _attach_pool_readiness_hints(db: Session, row: DesktopPool) -> Desktop
 
 @router.get('/pools', response_model=ApiEnvelope[list[PoolOut]])
 @router.get('/admin/pools', response_model=ApiEnvelope[list[PoolOut]])
-async def list_pools(_user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+async def list_pools(_user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
     if get_role_name(_user) not in {'Teacher', 'Admin'}:
         raise HTTPException(status_code=403, detail='Forbidden')
-    rows = db.query(DesktopPool).order_by(DesktopPool.id.desc()).all()
+    rows = db.query(DesktopPool).filter(DesktopPool.organization_id == organization.id).order_by(DesktopPool.id.desc()).all()
     out = []
     for r in rows:
         out.append(await _attach_pool_readiness_hints(db, _attach_pool_counts(db, r)))
@@ -101,7 +102,7 @@ async def list_pools(_user=Depends(require_role('Teacher', 'Admin')), db: Sessio
 
 @router.post('/pools', response_model=ApiEnvelope[PoolOut])
 @router.post('/admin/pools', response_model=ApiEnvelope[PoolOut])
-async def create_pool(payload: PoolCreate, _user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+async def create_pool(payload: PoolCreate, _user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
     if get_role_name(_user) not in {'Teacher', 'Admin'}:
         raise HTTPException(status_code=403, detail='Forbidden')
     svc = PoolService(db)
@@ -116,23 +117,23 @@ async def create_pool(payload: PoolCreate, _user=Depends(require_role('Teacher',
     if errs:
         raise HTTPException(status_code=422, detail={'errors': errs})
     if data.get('template_vmid'):
-        tpl = db.query(VMTemplate).filter(VMTemplate.source_vmid == data['template_vmid']).first()
+        tpl = db.query(VMTemplate).filter(VMTemplate.source_vmid == data['template_vmid'], VMTemplate.organization_id == organization.id).first()
         if not tpl:
             raise HTTPException(status_code=422, detail='Import Proxmox templates before creating pools.')
         if not data.get('template_node'):
             data['template_node'] = tpl.proxmox_node
-    row = DesktopPool(**data)
+    row = DesktopPool(organization_id=organization.id, **data)
     db.add(row); db.commit(); db.refresh(row)
-    _write_audit(db, _user.id, 'POOL_CREATED', str(row.id), f'Pool {row.name} created')
+    _write_audit(db, _user.id, organization.id, 'POOL_CREATED', str(row.id), f'Pool {row.name} created')
     return ApiEnvelope(success=True, data=await _attach_pool_readiness_hints(db, _attach_pool_counts(db, row)))
 
 
 @router.get('/pools/{id}', response_model=ApiEnvelope[PoolOut])
 @router.get('/admin/pools/{id}', response_model=ApiEnvelope[PoolOut])
-async def get_pool(id: int, _user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+async def get_pool(id: int, _user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
     if get_role_name(_user) not in {'Teacher', 'Admin'}:
         raise HTTPException(status_code=403, detail='Forbidden')
-    row = db.query(DesktopPool).filter(DesktopPool.id == id).first()
+    row = db.query(DesktopPool).filter(DesktopPool.id == id, DesktopPool.organization_id == organization.id).first()
     if not row:
         raise HTTPException(status_code=404, detail='Pool not found')
     return ApiEnvelope(success=True, data=await _attach_pool_readiness_hints(db, _attach_pool_counts(db, row)))
@@ -140,10 +141,10 @@ async def get_pool(id: int, _user=Depends(require_role('Teacher', 'Admin')), db:
 
 @router.patch('/pools/{id}', response_model=ApiEnvelope[PoolOut])
 @router.patch('/admin/pools/{id}', response_model=ApiEnvelope[PoolOut])
-async def patch_pool(id: int, payload: PoolPatch, _user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+async def patch_pool(id: int, payload: PoolPatch, _user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
     if get_role_name(_user) not in {'Teacher', 'Admin'}:
         raise HTTPException(status_code=403, detail='Forbidden')
-    row = db.query(DesktopPool).filter(DesktopPool.id == id).first()
+    row = db.query(DesktopPool).filter(DesktopPool.id == id, DesktopPool.organization_id == organization.id).first()
     if not row:
         raise HTTPException(status_code=404, detail='Pool not found')
     merged = {**row.__dict__, **payload.model_dump(exclude_none=True)}
@@ -153,31 +154,31 @@ async def patch_pool(id: int, payload: PoolPatch, _user=Depends(require_role('Te
     for k, v in payload.model_dump(exclude_none=True).items():
         setattr(row, k, v)
     db.commit(); db.refresh(row)
-    _write_audit(db, _user.id, 'POOL_UPDATED', str(row.id), f'Pool {row.name} updated')
+    _write_audit(db, _user.id, organization.id, 'POOL_UPDATED', str(row.id), f'Pool {row.name} updated')
     return ApiEnvelope(success=True, data=await _attach_pool_readiness_hints(db, _attach_pool_counts(db, row)))
 
 
 @router.delete('/pools/{id}', response_model=ApiEnvelope[dict])
 @router.delete('/admin/pools/{id}', response_model=ApiEnvelope[dict])
-def delete_pool(id: int, force: bool = False, _user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+def delete_pool(id: int, force: bool = False, _user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
     if get_role_name(_user) not in {'Teacher', 'Admin'}:
         raise HTTPException(status_code=403, detail='Forbidden')
-    row = db.query(DesktopPool).filter(DesktopPool.id == id).first()
+    row = db.query(DesktopPool).filter(DesktopPool.id == id, DesktopPool.organization_id == organization.id).first()
     if not row:
         raise HTTPException(status_code=404, detail='Pool not found')
-    tpl = db.query(VMTemplate).filter(VMTemplate.source_vmid == row.template_vmid).first() if row.template_vmid else None
-    attached = db.query(StudentVM).filter(StudentVM.template_id == tpl.id).count() if tpl else 0
+    tpl = db.query(VMTemplate).filter(VMTemplate.source_vmid == row.template_vmid, VMTemplate.organization_id == organization.id).first() if row.template_vmid else None
+    attached = db.query(StudentVM).filter(StudentVM.template_id == tpl.id, StudentVM.organization_id == organization.id).count() if tpl else 0
     if attached > 0 and not force:
         raise HTTPException(status_code=409, detail='Pool may have VM dependencies; pass force=true to remove app pool record')
-    _write_audit(db, _user.id, 'POOL_DELETED', str(row.id), f'Pool {row.name} deleted')
+    _write_audit(db, _user.id, organization.id, 'POOL_DELETED', str(row.id), f'Pool {row.name} deleted')
     db.delete(row)
     db.commit()
     return ApiEnvelope(success=True, data={'deleted': True, 'id': id, 'message': 'Pool app record deleted. No Proxmox VMs were changed.'})
 
 
 @router.patch('/pools/{id}/enabled', response_model=ApiEnvelope[PoolOut])
-def patch_pool_enabled(id: int, payload: dict, _user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
-    row = db.query(DesktopPool).filter(DesktopPool.id == id).first()
+def patch_pool_enabled(id: int, payload: dict, _user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
+    row = db.query(DesktopPool).filter(DesktopPool.id == id, DesktopPool.organization_id == organization.id).first()
     if not row:
         raise HTTPException(status_code=404, detail='Pool not found')
     row.enabled = bool(payload.get('enabled'))
@@ -186,8 +187,8 @@ def patch_pool_enabled(id: int, payload: dict, _user=Depends(require_role('Teach
 
 
 @router.patch('/pools/{id}/maintenance', response_model=ApiEnvelope[PoolOut])
-def patch_pool_maintenance(id: int, payload: dict, _user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
-    row = db.query(DesktopPool).filter(DesktopPool.id == id).first()
+def patch_pool_maintenance(id: int, payload: dict, _user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
+    row = db.query(DesktopPool).filter(DesktopPool.id == id, DesktopPool.organization_id == organization.id).first()
     if not row:
         raise HTTPException(status_code=404, detail='Pool not found')
     row.maintenance_mode = bool(payload.get('maintenance_mode'))
@@ -196,16 +197,16 @@ def patch_pool_maintenance(id: int, payload: dict, _user=Depends(require_role('T
 
 
 @router.get('/pools/{id}/members', response_model=ApiEnvelope[list[dict]])
-def pool_members(id: int, _user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
-    row = db.query(DesktopPool).filter(DesktopPool.id == id).first()
+def pool_members(id: int, _user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
+    row = db.query(DesktopPool).filter(DesktopPool.id == id, DesktopPool.organization_id == organization.id).first()
     if not row:
         raise HTTPException(status_code=404, detail='Pool not found')
     return ApiEnvelope(success=True, data=[])
 
 
 @router.get('/pools/{id}/readiness', response_model=ApiEnvelope[dict])
-async def pool_readiness(id: int, _user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
-    row = db.query(DesktopPool).filter(DesktopPool.id == id).first()
+async def pool_readiness(id: int, _user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
+    row = db.query(DesktopPool).filter(DesktopPool.id == id, DesktopPool.organization_id == organization.id).first()
     if not row:
         raise HTTPException(status_code=404, detail='Pool not found')
     warnings, failures = [], []
@@ -218,7 +219,7 @@ async def pool_readiness(id: int, _user=Depends(require_role('Teacher', 'Admin')
     if not row.template_vmid:
         failures.append('No template selected.')
     else:
-        tpl = db.query(VMTemplate).filter(VMTemplate.source_vmid == row.template_vmid).first()
+        tpl = db.query(VMTemplate).filter(VMTemplate.source_vmid == row.template_vmid, VMTemplate.organization_id == organization.id).first()
         if not tpl:
             failures.append('Selected template is not imported in app vm_templates.')
         if active:
@@ -244,16 +245,16 @@ async def pool_readiness(id: int, _user=Depends(require_role('Teacher', 'Admin')
 
 
 @router.get('/pools/{id}/plan', response_model=ApiEnvelope[PoolPlanResponse])
-def plan_pool(id: int, _user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
-    row = db.query(DesktopPool).filter(DesktopPool.id == id).first()
+def plan_pool(id: int, _user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
+    row = db.query(DesktopPool).filter(DesktopPool.id == id, DesktopPool.organization_id == organization.id).first()
     if not row:
         raise HTTPException(status_code=404, detail='Pool not found')
     plan = PoolPlanningService().build_plan(row)
     return ApiEnvelope(success=True, data=plan)
-def _write_audit(db: Session, actor_id: int, action: str, target_id: str, details: str | None = None):
+def _write_audit(db: Session, actor_id: int, organization_id: int, action: str, target_id: str, details: str | None = None):
     try:
         from app.models.models import AuditLog
-        row = AuditLog(actor_id=actor_id, action=action, target_type='desktop_pool', target_id=target_id)
+        row = AuditLog(organization_id=organization_id, actor_id=actor_id, action=action, target_type='desktop_pool', target_id=target_id)
         db.add(row)
         if details:
             # Keep details in action text if separate column is unavailable in schema.

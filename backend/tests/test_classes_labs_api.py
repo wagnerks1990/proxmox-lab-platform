@@ -2,8 +2,9 @@ import pytest
 
 from app.api.routes import router
 from app.api.routers import classes_labs
-from app.models.models import Class, Enrollment, Lab, User, DesktopPool
+from app.models.models import Class, Enrollment, Lab, OrganizationMembership, User, DesktopPool
 from app.schemas.classes_labs import ClassCreate, EnrollmentCreate, LabCreate
+from app.services.organization_access import OrganizationContext
 
 
 class Obj:
@@ -71,11 +72,17 @@ def test_student_cannot_manage_classes_and_labs(monkeypatch):
 
 def test_admin_create_class_and_enrollment_duplicate(monkeypatch):
     _role(monkeypatch, 'Admin')
+    organization = OrganizationContext(id=4, slug='science', role='owner')
     db = FakeDB({User: [Obj(id=2)], Class: [], Enrollment: []})
-    out = classes_labs.create_class(ClassCreate(name='BIO101', term='2026S'), _user=Obj(id=1), db=db)
+    out = classes_labs.create_class(ClassCreate(name='BIO101', term='2026S'), _user=Obj(id=1), organization=organization, db=db)
     assert out.success is True
+    assert out.data.organization_id == 4
 
-    db2 = FakeDB({Class: [Obj(id=1)], User: [Obj(id=2)], Enrollment: [Obj(id=9, class_id=1, user_id=2, role='student')]})
-    e = classes_labs.add_enrollment(1, EnrollmentCreate(user_id=2, role='student'), _user=Obj(id=1), db=db2)
+    db2 = FakeDB({
+        Class: [Obj(id=1, organization_id=4)],
+        OrganizationMembership: [Obj(user_id=2, organization_id=4, role='student', is_active=True)],
+        Enrollment: [Obj(id=9, class_id=1, user_id=2, role='student')],
+    })
+    e = classes_labs.add_enrollment(1, EnrollmentCreate(user_id=2, role='student'), _user=Obj(id=1), organization=organization, db=db2)
     assert e.success is True
     assert e.data.id == 9

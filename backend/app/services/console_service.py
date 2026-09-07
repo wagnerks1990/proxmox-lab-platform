@@ -38,7 +38,7 @@ class ConsoleService:
                 session = self.sessions.create_launching_session(user, vm, 'WEB_TERMINAL', connection_launch_id=launch.id)
                 self.sessions.mark_failed(session.id, 'missing assigned IP')
                 raise HTTPException(status_code=400, detail={'error': 'No IP address found for WEB TERMINAL.'})
-            self.db.add(AuditLog(actor_id=user.id, action='console_web_terminal', target_type='student_vm', target_id=str(vm.vmid)))
+            self.db.add(AuditLog(organization_id=vm.organization_id, actor_id=user.id, action='console_web_terminal', target_type='student_vm', target_id=str(vm.vmid)))
             launch = self.sessions.create_launch(user, vm, 'WEB_TERMINAL', 'success', vm.assigned_ip, session_state=SessionState.LAUNCHING)
             session = self.sessions.create_launching_session(user, vm, 'WEB_TERMINAL', connection_launch_id=launch.id)
             safe_commit(self.db)

@@ -7,6 +7,7 @@ from app.services.organization_access import (
     ORGANIZATION_ROLES,
     normalize_organization_role,
     require_organization_access,
+    resolve_organization_context,
 )
 
 
@@ -19,6 +20,15 @@ class _Query:
 
     def first(self):
         return self.result
+
+    def all(self):
+        return self.result
+
+    def join(self, *_args):
+        return self
+
+    def order_by(self, *_args):
+        return self
 
 
 class _Db:
@@ -58,3 +68,35 @@ def test_unknown_membership_role_fails_closed():
     with pytest.raises(HTTPException) as exc:
         require_organization_access(db, _user('Teacher'), 1)
     assert exc.value.status_code == 403
+
+
+def test_single_membership_is_selected_automatically():
+    organization = SimpleNamespace(id=11, slug='engineering', enabled=True)
+    membership = SimpleNamespace(role='instructor', is_active=True, organization=organization)
+    db = _Db([membership])
+    context = resolve_organization_context(db, _user('Teacher'), None)
+    assert (context.id, context.slug, context.role, context.break_glass) == (11, 'engineering', 'instructor', False)
+
+
+def test_multiple_memberships_require_explicit_header():
+    organizations = [SimpleNamespace(id=1, slug='one'), SimpleNamespace(id=2, slug='two')]
+    memberships = [SimpleNamespace(role='student', organization=organization) for organization in organizations]
+    db = _Db(memberships)
+    with pytest.raises(HTTPException) as exc:
+        resolve_organization_context(db, _user('Student'), None)
+    assert exc.value.status_code == 400
+    assert 'X-Organization-ID' in exc.value.detail
+
+
+def test_requested_organization_denies_non_member():
+    db = _Db(SimpleNamespace(id=9, slug='private', enabled=True), None)
+    with pytest.raises(HTTPException) as exc:
+        resolve_organization_context(db, _user('Student'), 9)
+    assert exc.value.status_code == 403
+
+
+def test_requested_organization_allows_admin_break_glass():
+    db = _Db(SimpleNamespace(id=9, slug='private', enabled=True))
+    context = resolve_organization_context(db, _user('Admin'), 9)
+    assert context.break_glass is True
+    assert context.role == 'owner'
