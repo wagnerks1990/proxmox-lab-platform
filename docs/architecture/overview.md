@@ -55,6 +55,18 @@ Each feature owns its API schemas, application service, persistence model,
 authorization policies, and tests. Proxmox-specific code is behind an adapter
 interface so tests can use a deterministic fake implementation.
 
+## Organization identity
+
+V2 introduces organizations as the tenant boundary. A user may belong to more
+than one organization with a different tenant role in each. Tenant roles are
+`student`, `instructor`, `admin`, and `owner`; unknown roles always fail closed.
+
+The existing global `Admin`, `Teacher`, and `Student` roles remain temporarily
+for compatibility. Global `Admin` is an explicit break-glass scope. Existing
+accounts are backfilled into a visible `default` organization so upgrades do
+not silently strand development data. Resource tables will be attached to an
+organization incrementally in subsequent migrations before production use.
+
 ## Desired-state workflow
 
 Infrastructure operations follow this sequence:

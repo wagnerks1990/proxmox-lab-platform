@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, func, Boolean
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, func, Boolean, UniqueConstraint
 from sqlalchemy.orm import relationship
 from app.db.session import Base
 
@@ -7,6 +7,33 @@ class Role(Base):
     __tablename__ = 'roles'
     id = Column(Integer, primary_key=True)
     name = Column(String(50), unique=True, nullable=False)
+
+
+class Organization(Base):
+    __tablename__ = 'organizations'
+    id = Column(Integer, primary_key=True)
+    name = Column(String(120), nullable=False)
+    slug = Column(String(80), unique=True, nullable=False, index=True)
+    enabled = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class OrganizationMembership(Base):
+    __tablename__ = 'organization_memberships'
+    __table_args__ = (
+        UniqueConstraint('organization_id', 'user_id', name='uq_organization_membership_user'),
+    )
+    id = Column(Integer, primary_key=True)
+    organization_id = Column(Integer, ForeignKey('organizations.id'), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    role = Column(String(32), nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+    organization = relationship('Organization', foreign_keys=[organization_id])
+    user = relationship('User', foreign_keys=[user_id])
 
 
 class User(Base):

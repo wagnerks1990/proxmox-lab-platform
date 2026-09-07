@@ -24,6 +24,7 @@ from app.api.routers.admin_groups import router as admin_groups_router
 from app.api.routers.admin_dashboard import router as admin_dashboard_router
 from app.api.routers.proxmox_assets import router as proxmox_assets_router
 from app.api.routers.classes_labs import router as classes_labs_router
+from app.api.routers.admin_organizations import router as admin_organizations_router
 
 router = APIRouter(prefix='/api')
 
@@ -52,3 +53,4 @@ router.include_router(admin_groups_router)
 router.include_router(admin_dashboard_router)
 router.include_router(proxmox_assets_router)
 router.include_router(classes_labs_router)
+router.include_router(admin_organizations_router)
