@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.services.rbac import get_role_name
+from app.services.rbac import ROLE_STUDENT, STAFF_ROLES, get_role_name
 from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.models import User, StudentVM
@@ -14,8 +14,11 @@ router = APIRouter()
 
 def _get_vm_for_user(db: Session, user: User, vm_id: int):
     q = db.query(StudentVM).filter(StudentVM.id == vm_id)
-    if get_role_name(user) == 'Student':
+    role = get_role_name(user)
+    if role == ROLE_STUDENT:
         q = q.filter(StudentVM.owner_id == user.id)
+    elif role not in STAFF_ROLES:
+        raise HTTPException(status_code=403, detail='A valid role is required')
     vm = q.first()
     if not vm:
         raise HTTPException(status_code=404, detail='VM not found')

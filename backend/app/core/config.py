@@ -12,12 +12,19 @@ class Settings(BaseSettings):
     proxmox_base_url: str
     proxmox_token_id: str
     proxmox_token_secret: str
-    proxmox_verify_ssl: bool = False
+    proxmox_verify_ssl: bool = True
     app_secret_key: str | None = None
     config_encryption_key: str | None = None
 
     lab_vm_ssh_username: str | None = None
     lab_vm_ssh_password: str | None = None
+
+    guacamole_internal_url: str | None = None
+    guacamole_base_url: str = '/guacamole'
+    guacamole_admin_user: str | None = None
+    guacamole_admin_password: str | None = None
+    guacamole_datasource: str = 'postgresql'
+    guacamole_verify_ssl: bool = True
 
     heartbeat_timeout_seconds: int = 60
     session_reconnect_timeout_seconds: int = 180

@@ -9,6 +9,13 @@ from app.services.security import hash_password
 router = APIRouter()
 
 
+def _role_or_422(db: Session, role_id: int) -> Role:
+    role = db.query(Role).filter(Role.id == role_id).first()
+    if not role:
+        raise HTTPException(status_code=422, detail='role_id not found')
+    return role
+
+
 def _user_out(u: User, role_name: str | None = None):
     return {
         'id': u.id,
@@ -51,6 +58,7 @@ def create_admin_user(payload: dict, _user=Depends(require_role('Admin')), db: S
         role_id = rr.id if rr else None
     if not role_id:
         raise HTTPException(status_code=422, detail='role_id or role is required')
+    selected_role = _role_or_422(db, int(role_id))
     if db.query(User).filter(User.username == payload['username']).first():
         raise HTTPException(status_code=409, detail='username already exists')
     if db.query(User).filter(User.email == payload['email']).first():
@@ -59,7 +67,8 @@ def create_admin_user(payload: dict, _user=Depends(require_role('Admin')), db: S
         username=payload['username'],
         email=payload['email'],
         password_hash=hash_password(payload['password']),
-        role_id=role_id,
+        role_id=selected_role.id,
+        role=selected_role.name,
         display_name=payload.get('display_name'),
         is_active=payload.get('is_active', True),
         force_password_change=payload.get('force_password_change', False),
@@ -77,7 +86,9 @@ def patch_admin_user(id: int, payload: dict, _user=Depends(require_role('Admin')
         if k in payload:
             setattr(u, k, payload[k])
     if 'role_id' in payload:
-        u.role_id = payload['role_id']
+        selected_role = _role_or_422(db, int(payload['role_id']))
+        u.role_id = selected_role.id
+        u.role = selected_role.name
     db.commit(); db.refresh(u)
     return _user_out(u)
 
@@ -113,7 +124,9 @@ def change_user_role(id: int, payload: dict, _user=Depends(require_role('Admin')
     role_id = payload.get('role_id')
     if not role_id:
         raise HTTPException(status_code=422, detail='role_id is required')
-    u.role_id = role_id
+    selected_role = _role_or_422(db, int(role_id))
+    u.role_id = selected_role.id
+    u.role = selected_role.name
     db.commit(); db.refresh(u)
     return _user_out(u)
 

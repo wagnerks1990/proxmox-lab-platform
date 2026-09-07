@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, WebSocket
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
-from app.services.rbac import get_role_name
+from app.services.rbac import ROLE_STUDENT, STAFF_ROLES, get_role_name
 from app.db.session import get_db
 from app.core.config import settings
 from app.models.models import StudentVM, User
@@ -19,13 +19,19 @@ def _get_user_from_ws_token(db: Session, token: str | None):
         username = payload.get('sub')
     except JWTError:
         return None
-    return db.query(User).filter(User.username == username).first()
+    user = db.query(User).filter(User.username == username).first()
+    if not user or not getattr(user, 'is_active', True) or not get_role_name(user):
+        return None
+    return user
 
 
 def _get_vm_for_user(db: Session, user: User, vm_id: int):
     q = db.query(StudentVM).filter(StudentVM.id == vm_id)
-    if get_role_name(user) == 'Student':
+    role = get_role_name(user)
+    if role == ROLE_STUDENT:
         q = q.filter(StudentVM.owner_id == user.id)
+    elif role not in STAFF_ROLES:
+        return None
     return q.first()
 
 
