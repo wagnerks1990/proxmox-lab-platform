@@ -35,6 +35,9 @@ guest or the control plane.
 - A platform administrator's cross-organization access is an explicit
   break-glass path, not an implicit membership.
 - Teachers are scoped to assigned classes unless a separate permission grants broader access.
+- Tenant permissions come from the active organization membership rather than
+  the legacy global role label; global `Admin` remains the explicit platform
+  break-glass exception.
 - Students require an active enrollment and explicit assignment.
 - Frontend visibility is never considered an authorization control.
 - Console, lifecycle, reset, snapshot, and deletion paths repeat authorization at the backend boundary.

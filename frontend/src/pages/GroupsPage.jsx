@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import api from '../services/api'
 import { listGroups, createGroup, patchGroup, deleteGroup, listGroupMembers, addGroupMember, removeGroupMember, listGroupTemplatePermissions, patchGroupTemplatePermissions } from '../services/adminGroupsApi'
+import api from '../services/api'
+import { listCurrentOrganizationMembers } from '../services/organizationApi'
 
 const empty = { name:'', description:'', enabled:true }
 
@@ -15,7 +16,7 @@ export default function GroupsPage(){
   const [msg,setMsg]=useState('')
 
   const load = ()=> listGroups().then(setRows).catch(()=>setRows([]))
-  useEffect(()=>{ load(); api.get('/admin/users').then(r=>setUsers(Array.isArray(r.data)?r.data:[])).catch(()=>setUsers([])); api.get('/admin/templates').then(r=>setTemplates(Array.isArray(r.data)?r.data:[])).catch(()=>setTemplates([])) },[])
+  useEffect(()=>{ load(); listCurrentOrganizationMembers().then(rows=>setUsers(rows.map(row=>({id:row.user_id,...row})))).catch(()=>setUsers([])); api.get('/admin/templates').then(r=>setTemplates(Array.isArray(r.data)?r.data:[])).catch(()=>setTemplates([])) },[])
 
   const save = async ()=> {
     try{

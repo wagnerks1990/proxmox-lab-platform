@@ -47,10 +47,6 @@ class FakeDB:
         pass
 
 
-def _role(monkeypatch, role):
-    monkeypatch.setattr(classes_labs, 'get_role_name', lambda _u: role)
-
-
 def test_class_and_lab_routes_registered():
     paths = {r.path for r in router.routes}
     assert '/api/admin/classes' in paths
@@ -58,20 +54,19 @@ def test_class_and_lab_routes_registered():
 
 
 def test_student_cannot_manage_classes_and_labs(monkeypatch):
-    _role(monkeypatch, 'Student')
+    organization = OrganizationContext(id=4, slug='science', role='student')
     db = FakeDB({Class: [], Lab: []})
     with pytest.raises(Exception) as exc:
-        classes_labs.create_class(ClassCreate(name='X'), _user=Obj(id=1), db=db)
+        classes_labs.create_class(ClassCreate(name='X'), _user=Obj(id=1), organization=organization, db=db)
     assert getattr(exc.value, 'status_code', None) == 403
 
     with pytest.raises(Exception) as exc2:
         import asyncio
-        asyncio.run(classes_labs.create_lab(LabCreate(class_id=1, name='L1', default_pool_id=1), _user=Obj(id=1), db=db))
+        asyncio.run(classes_labs.create_lab(LabCreate(class_id=1, name='L1', default_pool_id=1), _user=Obj(id=1), organization=organization, db=db))
     assert getattr(exc2.value, 'status_code', None) == 403
 
 
 def test_admin_create_class_and_enrollment_duplicate(monkeypatch):
-    _role(monkeypatch, 'Admin')
     organization = OrganizationContext(id=4, slug='science', role='owner')
     db = FakeDB({User: [Obj(id=2)], Class: [], Enrollment: []})
     out = classes_labs.create_class(ClassCreate(name='BIO101', term='2026S'), _user=Obj(id=1), organization=organization, db=db)

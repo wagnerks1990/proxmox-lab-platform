@@ -53,6 +53,29 @@ active owner. The API rejects demoting or deactivating the last active owner.
 Template imports, dashboard counts, event history, user-template permissions,
 and reconciliation previews all use the selected organization.
 
+## Tenant role policy
+
+Tenant roles are ordered by authority:
+
+| Role | Current authority |
+|---|---|
+| `student` | List and operate only owned VMs; use only assigned, enabled templates |
+| `instructor` | Student authority plus templates, pools, sessions, events, and assigned-class/lab management |
+| `admin` | Instructor authority plus organization groups and all classes in the organization |
+| `owner` | Full tenant authority and protection from removing the organization's last active owner |
+
+Tenant authority is evaluated from the selected active membership. A user's
+legacy global role does not elevate that user inside a tenant. For example, a
+globally labeled `Student` with an `instructor` membership receives instructor
+authority in that organization, while the same account remains a student in a
+different organization.
+
+Instructors see and modify only classes assigned to their user ID and labs
+belonging to those classes. Organization administrators and owners may manage
+all classes in their organization. Physical Proxmox configuration, global user
+accounts, organization creation, and deployment updates remain platform-admin
+functions.
+
 ## WebSocket and streaming clients
 
 WebSocket clients cannot set arbitrary HTTP headers in all browsers, so console

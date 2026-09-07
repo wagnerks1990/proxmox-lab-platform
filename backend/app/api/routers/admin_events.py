@@ -9,9 +9,7 @@ from sqlalchemy import or_, select
 from app.api.deps import get_user_from_token, get_current_user
 from app.db.session import get_db
 from app.models.models import AuditLog, StudentVM, TelemetryEvent, WorkerRun
-from app.services.rbac import get_role_name
-from app.services.organization_access import OrganizationContext, get_current_organization
-from app.services.organization_access import resolve_organization_context
+from app.services.organization_access import OrganizationContext, enforce_organization_role, require_organization_role, resolve_organization_context
 from app.telemetry.event_stream import event_stream
 
 router = APIRouter()
@@ -79,13 +77,12 @@ async def events_stream(request: Request, db: Session = Depends(get_db)):
     if not token:
         raise HTTPException(status_code=401, detail='Unauthorized')
     user = get_user_from_token(token, db)
-    if get_role_name(user) not in {'Teacher', 'Admin'}:
-        raise HTTPException(status_code=403, detail='Forbidden')
     requested = request.headers.get('x-organization-id') or request.query_params.get('organization_id')
     try:
         organization = resolve_organization_context(db, user, int(requested) if requested else None)
     except (TypeError, ValueError):
         raise HTTPException(status_code=400, detail='Invalid organization ID')
+    enforce_organization_role(organization, 'instructor')
 
     async def gen():
         q = event_stream.subscribe()
@@ -118,11 +115,9 @@ def list_events(
     offset: int = 0,
     _user=Depends(get_current_user),
     db: Session = Depends(get_db),
-    organization: OrganizationContext = Depends(get_current_organization),
+    organization: OrganizationContext = Depends(require_organization_role('instructor')),
 ):
-    role = get_role_name(_user)
-    if role not in {'Teacher', 'Admin'}:
-        raise HTTPException(status_code=403, detail='Forbidden')
+    enforce_organization_role(organization, 'instructor')
     limit = max(1, min(limit, 200))
     offset = max(0, offset)
     items = []

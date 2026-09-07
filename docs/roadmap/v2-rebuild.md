@@ -21,9 +21,11 @@ tests are green, and V2 work has enforceable repository rules.
 
 ## Phase 1: identity and organization foundation
 
-Status: in progress. Organization context and core resource tenancy are now
-implemented; the remaining exit criteria require the full policy matrix,
-structured audit-event conversion, and identity lifecycle hardening.
+Status: in progress. Organization context, core resource tenancy, tenant-role
+authorization, instructor-owned class scope, an administrative organization
+GUI, and a two-organization HTTP isolation matrix are implemented. The
+remaining exit criteria require structured audit-event conversion and identity
+lifecycle hardening.
 
 - organization, membership, role, and capability models;
 - canonical policy engine and ownership service;

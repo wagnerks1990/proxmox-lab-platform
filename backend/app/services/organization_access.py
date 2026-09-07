@@ -26,6 +26,27 @@ def normalize_organization_role(value: str | None) -> str | None:
     return role if role in ROLE_RANK else None
 
 
+def organization_role_at_least(context: OrganizationContext, minimum_role: str) -> bool:
+    minimum = normalize_organization_role(minimum_role)
+    current = normalize_organization_role(context.role)
+    if minimum is None:
+        raise ValueError(f'Unknown minimum organization role: {minimum_role}')
+    return current is not None and ROLE_RANK[current] >= ROLE_RANK[minimum]
+
+
+def enforce_organization_role(context: OrganizationContext, minimum_role: str) -> OrganizationContext:
+    if not organization_role_at_least(context, minimum_role):
+        raise HTTPException(status_code=403, detail=f'Organization role {minimum_role} or higher is required')
+    return context
+
+
+def require_organization_role(minimum_role: str):
+    def dependency(context: OrganizationContext = Depends(get_current_organization)) -> OrganizationContext:
+        return enforce_organization_role(context, minimum_role)
+
+    return dependency
+
+
 def get_active_membership(db: Session, user_id: int, organization_id: int):
     return (
         db.query(OrganizationMembership)

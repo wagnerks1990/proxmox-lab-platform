@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_role
+from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.models import DesktopPool, VMTemplate, ProxmoxCluster, ProxmoxNode, ProxmoxClusterDefault, StudentVM, GroupTemplatePermission
 from app.schemas.common import ApiEnvelope
@@ -10,8 +10,7 @@ from app.services.pool_service import PoolService
 from app.services.pool_planning_service import PoolPlanningService
 from app.schemas.pool_plan import PoolPlanResponse
 from app.services.proxmox_bootstrap import ProxmoxBootstrapService
-from app.services.rbac import get_role_name
-from app.services.organization_access import OrganizationContext, get_current_organization
+from app.services.organization_access import OrganizationContext, enforce_organization_role, require_organization_role
 
 router = APIRouter()
 
@@ -90,9 +89,8 @@ async def _attach_pool_readiness_hints(db: Session, row: DesktopPool) -> Desktop
 
 @router.get('/pools', response_model=ApiEnvelope[list[PoolOut]])
 @router.get('/admin/pools', response_model=ApiEnvelope[list[PoolOut]])
-async def list_pools(_user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
-    if get_role_name(_user) not in {'Teacher', 'Admin'}:
-        raise HTTPException(status_code=403, detail='Forbidden')
+async def list_pools(_user=Depends(get_current_user), db: Session = Depends(get_db), organization: OrganizationContext = Depends(require_organization_role('instructor'))):
+    enforce_organization_role(organization, 'instructor')
     rows = db.query(DesktopPool).filter(DesktopPool.organization_id == organization.id).order_by(DesktopPool.id.desc()).all()
     out = []
     for r in rows:
@@ -102,9 +100,8 @@ async def list_pools(_user=Depends(require_role('Teacher', 'Admin')), db: Sessio
 
 @router.post('/pools', response_model=ApiEnvelope[PoolOut])
 @router.post('/admin/pools', response_model=ApiEnvelope[PoolOut])
-async def create_pool(payload: PoolCreate, _user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
-    if get_role_name(_user) not in {'Teacher', 'Admin'}:
-        raise HTTPException(status_code=403, detail='Forbidden')
+async def create_pool(payload: PoolCreate, _user=Depends(get_current_user), db: Session = Depends(get_db), organization: OrganizationContext = Depends(require_organization_role('instructor'))):
+    enforce_organization_role(organization, 'instructor')
     svc = PoolService(db)
     data = payload.model_dump()
     if not data.get('name'):
@@ -130,9 +127,8 @@ async def create_pool(payload: PoolCreate, _user=Depends(require_role('Teacher',
 
 @router.get('/pools/{id}', response_model=ApiEnvelope[PoolOut])
 @router.get('/admin/pools/{id}', response_model=ApiEnvelope[PoolOut])
-async def get_pool(id: int, _user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
-    if get_role_name(_user) not in {'Teacher', 'Admin'}:
-        raise HTTPException(status_code=403, detail='Forbidden')
+async def get_pool(id: int, _user=Depends(get_current_user), db: Session = Depends(get_db), organization: OrganizationContext = Depends(require_organization_role('instructor'))):
+    enforce_organization_role(organization, 'instructor')
     row = db.query(DesktopPool).filter(DesktopPool.id == id, DesktopPool.organization_id == organization.id).first()
     if not row:
         raise HTTPException(status_code=404, detail='Pool not found')
@@ -141,9 +137,8 @@ async def get_pool(id: int, _user=Depends(require_role('Teacher', 'Admin')), db:
 
 @router.patch('/pools/{id}', response_model=ApiEnvelope[PoolOut])
 @router.patch('/admin/pools/{id}', response_model=ApiEnvelope[PoolOut])
-async def patch_pool(id: int, payload: PoolPatch, _user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
-    if get_role_name(_user) not in {'Teacher', 'Admin'}:
-        raise HTTPException(status_code=403, detail='Forbidden')
+async def patch_pool(id: int, payload: PoolPatch, _user=Depends(get_current_user), db: Session = Depends(get_db), organization: OrganizationContext = Depends(require_organization_role('instructor'))):
+    enforce_organization_role(organization, 'instructor')
     row = db.query(DesktopPool).filter(DesktopPool.id == id, DesktopPool.organization_id == organization.id).first()
     if not row:
         raise HTTPException(status_code=404, detail='Pool not found')
@@ -160,9 +155,8 @@ async def patch_pool(id: int, payload: PoolPatch, _user=Depends(require_role('Te
 
 @router.delete('/pools/{id}', response_model=ApiEnvelope[dict])
 @router.delete('/admin/pools/{id}', response_model=ApiEnvelope[dict])
-def delete_pool(id: int, force: bool = False, _user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
-    if get_role_name(_user) not in {'Teacher', 'Admin'}:
-        raise HTTPException(status_code=403, detail='Forbidden')
+def delete_pool(id: int, force: bool = False, _user=Depends(get_current_user), db: Session = Depends(get_db), organization: OrganizationContext = Depends(require_organization_role('instructor'))):
+    enforce_organization_role(organization, 'instructor')
     row = db.query(DesktopPool).filter(DesktopPool.id == id, DesktopPool.organization_id == organization.id).first()
     if not row:
         raise HTTPException(status_code=404, detail='Pool not found')
@@ -177,7 +171,8 @@ def delete_pool(id: int, force: bool = False, _user=Depends(require_role('Teache
 
 
 @router.patch('/pools/{id}/enabled', response_model=ApiEnvelope[PoolOut])
-def patch_pool_enabled(id: int, payload: dict, _user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
+def patch_pool_enabled(id: int, payload: dict, _user=Depends(get_current_user), db: Session = Depends(get_db), organization: OrganizationContext = Depends(require_organization_role('instructor'))):
+    enforce_organization_role(organization, 'instructor')
     row = db.query(DesktopPool).filter(DesktopPool.id == id, DesktopPool.organization_id == organization.id).first()
     if not row:
         raise HTTPException(status_code=404, detail='Pool not found')
@@ -187,7 +182,8 @@ def patch_pool_enabled(id: int, payload: dict, _user=Depends(require_role('Teach
 
 
 @router.patch('/pools/{id}/maintenance', response_model=ApiEnvelope[PoolOut])
-def patch_pool_maintenance(id: int, payload: dict, _user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
+def patch_pool_maintenance(id: int, payload: dict, _user=Depends(get_current_user), db: Session = Depends(get_db), organization: OrganizationContext = Depends(require_organization_role('instructor'))):
+    enforce_organization_role(organization, 'instructor')
     row = db.query(DesktopPool).filter(DesktopPool.id == id, DesktopPool.organization_id == organization.id).first()
     if not row:
         raise HTTPException(status_code=404, detail='Pool not found')
@@ -197,7 +193,8 @@ def patch_pool_maintenance(id: int, payload: dict, _user=Depends(require_role('T
 
 
 @router.get('/pools/{id}/members', response_model=ApiEnvelope[list[dict]])
-def pool_members(id: int, _user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
+def pool_members(id: int, _user=Depends(get_current_user), db: Session = Depends(get_db), organization: OrganizationContext = Depends(require_organization_role('instructor'))):
+    enforce_organization_role(organization, 'instructor')
     row = db.query(DesktopPool).filter(DesktopPool.id == id, DesktopPool.organization_id == organization.id).first()
     if not row:
         raise HTTPException(status_code=404, detail='Pool not found')
@@ -205,7 +202,8 @@ def pool_members(id: int, _user=Depends(require_role('Teacher', 'Admin')), db: S
 
 
 @router.get('/pools/{id}/readiness', response_model=ApiEnvelope[dict])
-async def pool_readiness(id: int, _user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
+async def pool_readiness(id: int, _user=Depends(get_current_user), db: Session = Depends(get_db), organization: OrganizationContext = Depends(require_organization_role('instructor'))):
+    enforce_organization_role(organization, 'instructor')
     row = db.query(DesktopPool).filter(DesktopPool.id == id, DesktopPool.organization_id == organization.id).first()
     if not row:
         raise HTTPException(status_code=404, detail='Pool not found')
@@ -245,7 +243,8 @@ async def pool_readiness(id: int, _user=Depends(require_role('Teacher', 'Admin')
 
 
 @router.get('/pools/{id}/plan', response_model=ApiEnvelope[PoolPlanResponse])
-def plan_pool(id: int, _user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
+def plan_pool(id: int, _user=Depends(get_current_user), db: Session = Depends(get_db), organization: OrganizationContext = Depends(require_organization_role('instructor'))):
+    enforce_organization_role(organization, 'instructor')
     row = db.query(DesktopPool).filter(DesktopPool.id == id, DesktopPool.organization_id == organization.id).first()
     if not row:
         raise HTTPException(status_code=404, detail='Pool not found')
