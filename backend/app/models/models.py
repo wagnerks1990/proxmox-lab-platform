@@ -36,6 +36,33 @@ class OrganizationMembership(Base):
     user = relationship('User', foreign_keys=[user_id])
 
 
+class DeploymentUpdateSettings(Base):
+    __tablename__ = 'deployment_update_settings'
+    id = Column(Integer, primary_key=True)
+    branch = Column(String(120), nullable=False, default='main')
+    channel = Column(String(32), nullable=False, default='stable')
+    automatic_updates = Column(Boolean, nullable=False, default=False)
+    check_interval_minutes = Column(Integer, nullable=False, default=360)
+    maintenance_hour_utc = Column(Integer, nullable=False, default=7)
+    last_checked_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class DeploymentUpdateRun(Base):
+    __tablename__ = 'deployment_update_runs'
+    id = Column(Integer, primary_key=True)
+    requested_by = Column(Integer, ForeignKey('users.id'), nullable=True, index=True)
+    action = Column(String(32), nullable=False)
+    status = Column(String(32), nullable=False, index=True)
+    from_version = Column(String(64), nullable=True)
+    to_version = Column(String(64), nullable=True)
+    backup_path = Column(String(512), nullable=True)
+    details = Column(String(2048), nullable=True)
+    started_at = Column(DateTime, server_default=func.now(), nullable=False)
+    finished_at = Column(DateTime, nullable=True)
+
+
 class User(Base):
     __tablename__ = 'users'
     id = Column(Integer, primary_key=True)
