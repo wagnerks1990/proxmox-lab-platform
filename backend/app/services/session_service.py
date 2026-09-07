@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.services.rbac import get_role_name
+from app.services.rbac import ROLE_STUDENT, STAFF_ROLES, get_role_name
 from app.models.models import ConnectionLaunch, StudentVM, User, VMSession
 from app.architecture.events import bus, DomainEvent, SESSION_CREATED, SESSION_EXPIRED, SESSION_STARTED, RECONNECT_ATTEMPT, RECONNECT_SUCCESS, RECONNECT_FAILURE, STALE_CLEANUP
 from app.architecture.state_machines import SessionState, SESSION_TRANSITIONS, validate_transition
@@ -39,6 +39,11 @@ class SessionService:
         row.updated_at = now
         return True
 
+    @staticmethod
+    def transition(current: SessionState, next_state: SessionState) -> bool:
+        """Validate a session transition without accessing persistence."""
+        return validate_transition(current, next_state, SESSION_TRANSITIONS)
+
     def create_launching_session(self, user: User, vm: StudentVM, protocol: str, connection_launch_id: int | None = None, request_id: str | None = None) -> VMSession:
         row = VMSession(user_id=user.id, vm_id=vm.id, protocol=protocol, state=SessionState.LAUNCHING.value, node=vm.proxmox_node, proxmox_vmid=vm.vmid, connection_launch_id=connection_launch_id, request_id=request_id)
         self.db.add(row); self.db.flush()
@@ -47,8 +52,11 @@ class SessionService:
 
     def get_session_for_user(self, session_id: int, user: User) -> VMSession | None:
         q = self.db.query(VMSession).filter(VMSession.id == session_id)
-        if get_role_name(user) == 'Student':
+        role = get_role_name(user)
+        if role == ROLE_STUDENT:
             q = q.filter(VMSession.user_id == user.id)
+        elif role not in STAFF_ROLES:
+            return None
         return q.first()
 
     def mark_active(self, session_id: int) -> bool:

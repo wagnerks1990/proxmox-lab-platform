@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - 'codex/rebuild-v2-*'
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: proxmox_lab_test
+          POSTGRES_USER: proxmox_lab
+          POSTGRES_PASSWORD: test-only-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U proxmox_lab -d proxmox_lab_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PYTHONPATH: backend
+      DATABASE_URL: postgresql+psycopg://proxmox_lab:test-only-password@127.0.0.1:5432/proxmox_lab_test
+      JWT_SECRET_KEY: ci-only-jwt-secret-that-is-never-used-in-production
+      CONFIG_ENCRYPTION_KEY: ci-only-encryption-secret-that-is-never-used-in-production
+      PROXMOX_BASE_URL: https://127.0.0.1:8006/api2/json
+      PROXMOX_TOKEN_ID: ci@pve!test
+      PROXMOX_TOKEN_SECRET: ci-only-token
+      PROXMOX_VERIFY_SSL: 'true'
+      WORKER_SCHEDULER_ENABLED: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+      - run: pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+      - run: python -m compileall -q backend/app backend/tests
+      - run: alembic -c backend/alembic.ini upgrade head
+      - run: pytest -q --disable-warnings backend/tests
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npm audit --omit=dev --audit-level=high
+
+  documentation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install mkdocs==1.6.1
+      - run: mkdocs build --strict

@@ -1,4 +1,4 @@
-from app.services.rbac import get_role_name
+from app.services.rbac import ROLE_STUDENT, STAFF_ROLES, get_role_name
 from app.models.models import User, StudentVM
 
 
@@ -7,9 +7,10 @@ class PolicyError(PermissionError):
 
 
 def can_launch_vm(user: User, vm: StudentVM) -> None:
-    if get_role_name(user) in {'Teacher', 'Admin'}:
+    role = get_role_name(user)
+    if role in STAFF_ROLES:
         return
-    if vm.owner_id != user.id:
+    if role != ROLE_STUDENT or vm.owner_id != user.id:
         raise PolicyError('Not allowed to launch this VM.')
 
 

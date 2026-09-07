@@ -1,0 +1,24 @@
+site_name: Proxmox Lab Platform
+site_description: Administration, classroom, operations, and development documentation
+repo_url: https://github.com/wagnerks1990/proxmox-lab-platform
+docs_dir: docs
+site_dir: site
+strict: true
+
+theme:
+  name: mkdocs
+
+nav:
+  - Home: index.md
+  - Architecture: architecture/overview.md
+  - Security: security/threat-model.md
+  - AI: ai/ai-safety.md
+  - Operations: operations/deployment.md
+  - V2 Roadmap: roadmap/v2-rebuild.md
+  - Existing documentation:
+      - Backend architecture: backend-architecture.md
+      - Frontend architecture: frontend-architecture.md
+      - Database migrations: database-migrations.md
+      - Proxmox setup: proxmox-setup-wizard.md
+      - Cluster placement: cluster-aware-placement.md
+      - User and groups: user-group-management.md

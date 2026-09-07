@@ -86,3 +86,17 @@
 - Never use `admin/admin` in production.
 - `reset_dev_users.py` must never run automatically.
 - Do not remove force-password-change behavior globally; only seed dev admin with `force_password_change=false`.
+
+## V2 rebuild invariants
+- V2 work belongs on `codex/rebuild-v2-*` or another focused branch, never directly on `main`.
+- Unknown or missing roles are denied. Authorization must positively identify an allowed role.
+- Student access is always scoped by organization, enrollment, assignment, and resource ownership.
+- A template must be enabled and assigned before a student can provision it.
+- Proxmox mutations are durable jobs with idempotency keys and persisted task identifiers.
+- Database record removal and Proxmox resource deletion are separate, explicitly named operations.
+- Destructive operations require a preview, an authorization check, an audit record, and a verified result.
+- Proxmox, console, SSH, database, and AI provider secrets never appear in URLs, logs, browser storage, or API responses.
+- AI features begin read-only. AI-generated mutations require a human-approved execution plan.
+- Configuration belongs in the database when it is operational state. Bootstrap secrets belong in a secret store or protected environment file.
+- OpenAPI is the frontend/backend contract. Do not hand-code a second incompatible client contract.
+- Documentation and migration changes ship in the same pull request as the behavior they describe.

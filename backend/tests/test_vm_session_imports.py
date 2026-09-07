@@ -3,7 +3,8 @@ def test_vm_session_model_importable():
     assert VMSession is not None
 
 
-def test_vm_session_migration_importable():
-    import importlib
-    mod = importlib.import_module('alembic.versions.20260516_0003_vm_sessions')
-    assert mod.revision == '20260516_0003'
+def test_vm_session_is_part_of_canonical_baseline():
+    from pathlib import Path
+
+    baseline = Path('backend/alembic/versions/20260521_0001_canonical_dev_baseline.py')
+    assert 'vm_sessions' in baseline.read_text()

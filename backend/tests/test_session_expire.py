@@ -14,6 +14,8 @@ class Q:
 class DB:
     def __init__(self, rows): self.rows = rows
     def query(self, *_args, **_kwargs): return Q(self.rows)
+    def commit(self): return None
+    def rollback(self): return None
 
 
 def test_expire_stale_sessions_marks_count():
@@ -23,4 +25,4 @@ def test_expire_stale_sessions_marks_count():
     row.updated_at = datetime.now(timezone.utc)
     db = DB([row])
     svc = SessionService(db)
-    assert svc.expire_stale_sessions(stale_seconds=10) >= 0
+    assert svc.expire_stale_sessions(stale_seconds=10) == 1

@@ -1,6 +1,14 @@
 # Proxmox Lab Access Platform
 
-Full-stack starter platform for managing student access to Proxmox lab resources.
+Classroom-focused control plane for managing student access to Proxmox lab
+resources.
+
+> **Development status:** the current application is an alpha. It is suitable
+> for isolated development and review, but it is not yet approved for
+> unsupervised student or production use. The V2 stabilization and rebuild
+> roadmap is documented in [`docs/roadmap/v2-rebuild.md`](docs/roadmap/v2-rebuild.md).
+
+The source-controlled documentation wiki starts at [`docs/index.md`](docs/index.md).
 
 ## Stack
 - Frontend: React + Vite (Tailwind-ready)
@@ -43,8 +51,9 @@ cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
-python -m app.db.bootstrap
-# seed with init.sql using psql
+# Generate and review secrets before continuing.
+python scripts/ensure_config_encryption_key.py --create
+alembic upgrade head
 uvicorn app.main:app --reload
 ```
 

@@ -2,10 +2,21 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.services.rbac import get_role_name
+from app.services.rbac import ROLE_STUDENT, STAFF_ROLES, get_role_name
 from app.api.deps import get_current_user
 from app.db.session import get_db
-from app.models.models import StudentVM, User, VMTemplate, AuditLog, ProxmoxCluster, ProxmoxClusterDefault, ProxmoxNode
+from app.models.models import (
+    AuditLog,
+    GroupMembership,
+    GroupTemplatePermission,
+    Permission,
+    ProxmoxCluster,
+    ProxmoxClusterDefault,
+    ProxmoxNode,
+    StudentVM,
+    User,
+    VMTemplate,
+)
 from app.schemas.vm import VMResponse, VMCreateResponse, CreateVMRequest
 from app.services.proxmox import ProxmoxClient
 from app.services.placement import choose_cluster_node, PlacementError
@@ -17,8 +28,11 @@ router = APIRouter()
 
 def _get_vm_for_user(db: Session, user: User, vm_id: int):
     q = db.query(StudentVM).filter(StudentVM.id == vm_id)
-    if get_role_name(user) == 'Student':
+    role = get_role_name(user)
+    if role == ROLE_STUDENT:
         q = q.filter(StudentVM.owner_id == user.id)
+    elif role not in STAFF_ROLES:
+        raise HTTPException(status_code=403, detail='A valid role is required')
     vm = q.first()
     if not vm:
         raise HTTPException(status_code=404, detail='VM not found')
@@ -28,8 +42,11 @@ def _get_vm_for_user(db: Session, user: User, vm_id: int):
 @router.get('/vms', response_model=list[VMResponse])
 async def list_vms(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     q = db.query(StudentVM)
-    if get_role_name(user) == 'Student':
+    role = get_role_name(user)
+    if role == ROLE_STUDENT:
         q = q.filter(StudentVM.owner_id == user.id)
+    elif role not in STAFF_ROLES:
+        raise HTTPException(status_code=403, detail='A valid role is required')
     rows = q.all()
     proxmox = ProxmoxClient()
     for vm in rows:
@@ -47,6 +64,26 @@ async def create_vm(payload: CreateVMRequest, user: User = Depends(get_current_u
     template = db.query(VMTemplate).filter(VMTemplate.id == payload.template_id).first()
     if not template:
         raise HTTPException(status_code=404, detail='Template not found')
+    if not template.enabled:
+        raise HTTPException(status_code=409, detail='Template is disabled')
+
+    role = get_role_name(user)
+    if role == ROLE_STUDENT:
+        direct = db.query(Permission).filter(
+            Permission.user_id == user.id,
+            Permission.template_id == template.id,
+        ).first()
+        group = db.query(GroupTemplatePermission).join(
+            GroupMembership,
+            GroupMembership.group_id == GroupTemplatePermission.group_id,
+        ).filter(
+            GroupMembership.user_id == user.id,
+            GroupTemplatePermission.template_id == template.id,
+        ).first()
+        if not direct and not group:
+            raise HTTPException(status_code=403, detail='Template is not assigned to this user')
+    elif role not in STAFF_ROLES:
+        raise HTTPException(status_code=403, detail='A valid role is required')
 
     selected_node = template.proxmox_node
     placement_reason = 'template default node'

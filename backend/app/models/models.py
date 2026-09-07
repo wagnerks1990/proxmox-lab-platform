@@ -168,7 +168,7 @@ class ProxmoxCluster(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String(120), nullable=False, unique=True)
     api_url = Column(String(255), nullable=False)
-    verify_ssl = Column(Boolean, nullable=False, default=False)
+    verify_ssl = Column(Boolean, nullable=False, default=True)
     auth_mode = Column(String(32), nullable=False, default='token')
     root_username = Column(String(120), nullable=True)
     token_user = Column(String(120), nullable=True)

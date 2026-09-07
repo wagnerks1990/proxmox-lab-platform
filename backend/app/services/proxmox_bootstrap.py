@@ -15,7 +15,7 @@ class ProxmoxBootstrapService:
 
     async def bootstrap_with_root(self, payload: dict) -> dict:
         api_url = payload['api_url'].rstrip('/')
-        verify_ssl = bool(payload.get('verify_ssl', False))
+        verify_ssl = bool(payload.get('verify_ssl', True))
         root_username = payload.get('root_username', 'root@pam')
         root_password = payload['root_password']
         cluster_name = payload['name']
@@ -35,6 +35,7 @@ class ProxmoxBootstrapService:
         if cluster is None:
             cluster = ProxmoxCluster(name=cluster_name)
             self.db.add(cluster)
+            self.db.flush()
 
         cluster.api_url = api_url
         cluster.verify_ssl = verify_ssl
@@ -77,7 +78,7 @@ class ProxmoxBootstrapService:
 
     async def upsert_manual_token(self, payload: dict) -> dict:
         api_url = payload['api_url'].rstrip('/')
-        verify_ssl = bool(payload.get('verify_ssl', False))
+        verify_ssl = bool(payload.get('verify_ssl', True))
         name = payload['name']
         token_user = payload['token_user']
         token_id = payload['token_id']

@@ -8,4 +8,6 @@ def login_user(db: Session, username: str, password: str) -> str:
     user = db.query(User).filter(User.username == username).first()
     if not user or not verify_password(password, user.password_hash):
         raise HTTPException(status_code=401, detail='Invalid credentials')
+    if not getattr(user, 'is_active', True):
+        raise HTTPException(status_code=403, detail='User account is disabled')
     return create_access_token(user.username)
