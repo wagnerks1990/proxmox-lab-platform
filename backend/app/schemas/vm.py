@@ -57,10 +57,15 @@ class VMCreateResponse(VMResponse):
 
 class AuditLogResponse(BaseModel):
     id: int
-    actor_id: int
+    actor_id: int | None = None
     action: str
     target_type: str
     target_id: str
+    outcome: str = 'success'
+    message: str | None = None
+    request_id: str | None = None
+    source_ip: str | None = None
+    metadata_json: str | None = None
     created_at: datetime | None = None
 
 

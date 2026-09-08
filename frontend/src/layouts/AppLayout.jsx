@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { listOrganizations } from '../services/organizationApi'
+import { logoutSession } from '../services/authApi'
 
 export default function AppLayout({ children, setUser, user }) {
   const nav = useNavigate()
@@ -9,7 +10,7 @@ export default function AppLayout({ children, setUser, user }) {
   const [organizationReady, setOrganizationReady] = useState(false)
   const [organizationError, setOrganizationError] = useState('')
   const [organizationId, setOrganizationId] = useState(localStorage.getItem('organization_id') || '')
-  const logout = () => { localStorage.removeItem('token'); localStorage.removeItem('organization_id'); setUser(false); nav('/') }
+  const logout = async () => { try { await logoutSession() } catch {} localStorage.removeItem('token'); localStorage.removeItem('organization_id'); setUser(false); nav('/') }
   useEffect(() => {
     let active = true
     listOrganizations().then((rows) => {
@@ -57,6 +58,7 @@ export default function AppLayout({ children, setUser, user }) {
       <Link className='nav-link' to='/'>Dashboard</Link>
       <Link className='nav-link' to='/vms'>My Lab VMs</Link>
       <Link className='nav-link' to='/create'>Create VM</Link>
+      <Link className='nav-link' to='/account/security'>Account Security</Link>
       {isTenantInstructor && <><Link className='nav-link' to='/admin/sessions'>Sessions</Link><Link className='nav-link' to='/pools'>Pools</Link><Link className='nav-link' to='/events'>Events / Tasks</Link></>}
       {(isPlatformTeacher || isPlatformAdmin) && <><Link className='nav-link' to='/telemetry'>Telemetry</Link><Link className='nav-link' to='/operations'>Operations</Link><Link className='nav-link' to='/troubleshooting'>Troubleshooting</Link></>}
       {isPlatformAdmin && <Link className='nav-link' to='/admin/proxmox-setup'>Proxmox Setup</Link>}

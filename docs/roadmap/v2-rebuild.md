@@ -22,15 +22,16 @@ tests are green, and V2 work has enforceable repository rules.
 ## Phase 1: identity and organization foundation
 
 Status: in progress. Organization context, core resource tenancy, tenant-role
-authorization, instructor-owned class scope, an administrative organization
-GUI, and a two-organization HTTP isolation matrix are implemented. The
-remaining exit criteria require structured audit-event conversion and identity
-lifecycle hardening.
+authorization, instructor-owned class scope, administrative organization GUI,
+revocable login sessions, password lifecycle, persistent login throttling,
+structured identity audit events, and a two-organization HTTP isolation matrix
+are implemented. The remaining work is the legacy user/role migration report
+and conversion of non-identity legacy audit writers.
 
 - organization, membership, role, and capability models;
 - canonical policy engine and ownership service;
-- secure login, password change, reset, revocation, and rate limiting;
-- structured audit events;
+- secure login, password change, reset, revocation, and rate limiting (implemented);
+- structured identity audit events (implemented; operational writer conversion remains);
 - administrative organization and user workflows;
 - legacy user/role dry-run migration report.
 

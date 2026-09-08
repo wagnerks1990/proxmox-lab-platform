@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import api from '../services/api'
-import { listUsers, createUser, patchUser, patchUserPassword, patchUserActivate, deleteUser, getUserPermissions, patchUserPermissions, getUserActivity } from '../services/adminUsersApi'
+import { listUsers, createUser, patchUser, patchUserPassword, patchUserActivate, deleteUser, getUserPermissions, patchUserPermissions, getUserActivity, revokeUserSessions } from '../services/adminUsersApi'
 
-const empty = { username:'', email:'', display_name:'', role:'Student', password:'', is_active:true, force_password_change:false }
+const empty = { username:'', email:'', display_name:'', role:'Student', password:'', is_active:true, force_password_change:true }
 
 export default function UsersPage(){
   const [rows,setRows]=useState([])
@@ -44,6 +44,7 @@ export default function UsersPage(){
       {rows.map(u=><tr key={u.id}><td>{u.username}</td><td>{u.email}</td><td>{u.display_name||'-'}</td><td>{u.role||u.role_id}</td><td>{String(u.is_active)}</td><td>{String(u.force_password_change)}</td><td>{u.last_login_at||'-'}</td><td><div className='group'>
         <button onClick={()=>{setEditing(u.id); setForm({...empty,...u, password:'', role:u.role||'Student'})}}>Edit</button>
         <button onClick={async()=>{const np=prompt('New password'); if(!np) return; await patchUserPassword(u.id,{password:np, force_password_change:true}); setMsg('Password reset.')}}>Reset Password</button>
+        <button onClick={async()=>{const result=await revokeUserSessions(u.id); setMsg(`${result.sessions_revoked} session(s) revoked.`)}}>Revoke Sessions</button>
         <button onClick={async()=>{await patchUserActivate(u.id,!u.is_active); await load()}}>{u.is_active?'Deactivate':'Activate'}</button>
         <button onClick={async()=>{const p=await getUserPermissions(u.id); setPermUser(u); setPermIds(p.direct_template_ids||[])}}>Permissions</button>
         <button onClick={async()=>{setActivity(await getUserActivity(u.id))}}>Activity</button>

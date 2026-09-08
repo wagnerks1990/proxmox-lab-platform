@@ -1,10 +1,14 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_role
 from app.db.session import get_db
-from app.models.models import User, Role, Permission, VMTemplate, StudentVM, VMSession, AuditLog
-from app.services.security import hash_password
+from app.models.models import AuthSession, User, Role, Permission, VMTemplate, StudentVM, VMSession, AuditLog
+from app.services.audit_service import record_audit_event
+from app.services.auth_service import revoke_all_sessions
+from app.services.security import hash_password, validate_password
 from app.services.organization_access import OrganizationContext, get_current_organization
 
 router = APIRouter()
@@ -60,6 +64,7 @@ def create_admin_user(payload: dict, _user=Depends(require_role('Admin')), db: S
     if not role_id:
         raise HTTPException(status_code=422, detail='role_id or role is required')
     selected_role = _role_or_422(db, int(role_id))
+    validate_password(payload['password'])
     if db.query(User).filter(User.username == payload['username']).first():
         raise HTTPException(status_code=409, detail='username already exists')
     if db.query(User).filter(User.email == payload['email']).first():
@@ -72,9 +77,11 @@ def create_admin_user(payload: dict, _user=Depends(require_role('Admin')), db: S
         role=selected_role.name,
         display_name=payload.get('display_name'),
         is_active=payload.get('is_active', True),
-        force_password_change=payload.get('force_password_change', False),
+        force_password_change=payload.get('force_password_change', True),
     )
-    db.add(u); db.commit(); db.refresh(u)
+    db.add(u); db.flush()
+    record_audit_event(db, actor_id=_user.id, action='identity.user_created', target_type='user', target_id=str(u.id), metadata={'role': selected_role.name})
+    db.commit(); db.refresh(u)
     return _user_out(u)
 
 
@@ -83,6 +90,10 @@ def patch_admin_user(id: int, payload: dict, _user=Depends(require_role('Admin')
     u = db.query(User).filter(User.id == id).first()
     if not u:
         raise HTTPException(status_code=404, detail='User not found')
+    if u.id == _user.id and payload.get('is_active') is False:
+        raise HTTPException(status_code=400, detail='Cannot deactivate the current user')
+    previous_username = u.username
+    was_active = u.is_active
     for k in ('username', 'email', 'display_name', 'is_active', 'force_password_change'):
         if k in payload:
             setattr(u, k, payload[k])
@@ -90,6 +101,9 @@ def patch_admin_user(id: int, payload: dict, _user=Depends(require_role('Admin')
         selected_role = _role_or_422(db, int(payload['role_id']))
         u.role_id = selected_role.id
         u.role = selected_role.name
+    if previous_username != u.username or (was_active and not u.is_active):
+        revoke_all_sessions(db, u, reason='account_updated')
+    record_audit_event(db, actor_id=_user.id, action='identity.user_updated', target_type='user', target_id=str(u.id), metadata={'changed_fields': sorted(payload.keys())})
     db.commit(); db.refresh(u)
     return _user_out(u)
 
@@ -101,8 +115,12 @@ def reset_user_password(id: int, payload: dict, _user=Depends(require_role('Admi
         raise HTTPException(status_code=404, detail='User not found')
     if not payload.get('password'):
         raise HTTPException(status_code=422, detail='password is required')
+    validate_password(payload['password'])
     u.password_hash = hash_password(payload['password'])
     u.force_password_change = payload.get('force_password_change', True)
+    u.password_changed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    revoked = revoke_all_sessions(db, u, reason='admin_password_reset')
+    record_audit_event(db, actor_id=_user.id, action='identity.password_reset', target_type='user', target_id=str(u.id), metadata={'sessions_revoked': revoked})
     db.commit()
     return {'ok': True, 'message': 'Password updated.'}
 
@@ -112,7 +130,12 @@ def activate_user(id: int, payload: dict, _user=Depends(require_role('Admin')), 
     u = db.query(User).filter(User.id == id).first()
     if not u:
         raise HTTPException(status_code=404, detail='User not found')
+    if u.id == _user.id and payload.get('is_active') is False:
+        raise HTTPException(status_code=400, detail='Cannot deactivate the current user')
     u.is_active = bool(payload.get('is_active', True))
+    if not u.is_active:
+        revoke_all_sessions(db, u, reason='account_disabled')
+    record_audit_event(db, actor_id=_user.id, action='identity.account_enabled' if u.is_active else 'identity.account_disabled', target_type='user', target_id=str(u.id))
     db.commit(); db.refresh(u)
     return _user_out(u)
 
@@ -128,12 +151,15 @@ def change_user_role(id: int, payload: dict, _user=Depends(require_role('Admin')
     selected_role = _role_or_422(db, int(role_id))
     u.role_id = selected_role.id
     u.role = selected_role.name
+    record_audit_event(db, actor_id=_user.id, action='identity.platform_role_changed', target_type='user', target_id=str(u.id), metadata={'role': selected_role.name})
     db.commit(); db.refresh(u)
     return _user_out(u)
 
 
 @router.delete('/admin/users/{id}')
 def delete_admin_user(id: int, force: bool = False, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    if id == _user.id:
+        raise HTTPException(status_code=400, detail='Cannot delete the current user')
     u = db.query(User).filter(User.id == id).first()
     if not u:
         raise HTTPException(status_code=404, detail='User not found')
@@ -141,13 +167,28 @@ def delete_admin_user(id: int, force: bool = False, _user=Depends(require_role('
         'vms': db.query(StudentVM).filter(StudentVM.owner_id == id).count(),
         'sessions': db.query(VMSession).filter(VMSession.user_id == id).count(),
         'audit_logs': db.query(AuditLog).filter(AuditLog.actor_id == id).count(),
+        'auth_sessions': db.query(AuthSession).filter(AuthSession.user_id == id).count(),
     }
     if any(deps.values()) and not force:
         u.is_active = False
+        revoke_all_sessions(db, u, reason='account_disabled')
+        record_audit_event(db, actor_id=_user.id, action='identity.account_disabled', target_type='user', target_id=str(u.id), message='User retained because dependent records exist')
         db.commit()
         return {'ok': True, 'deleted': False, 'deactivated': True, 'message': 'User has dependencies; user was deactivated instead of deleted.', 'dependencies': deps}
+    record_audit_event(db, actor_id=_user.id, action='identity.user_deleted', target_type='user', target_id=str(u.id))
     db.delete(u); db.commit()
     return {'ok': True, 'deleted': True}
+
+
+@router.post('/admin/users/{id}/revoke-sessions')
+def revoke_user_sessions(id: int, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
+    u = db.query(User).filter(User.id == id).first()
+    if not u:
+        raise HTTPException(status_code=404, detail='User not found')
+    revoked = revoke_all_sessions(db, u, reason='admin_revoked')
+    record_audit_event(db, actor_id=_user.id, action='identity.sessions_revoked', target_type='user', target_id=str(u.id), metadata={'sessions_revoked': revoked})
+    db.commit()
+    return {'ok': True, 'sessions_revoked': revoked}
 
 
 @router.get('/admin/users/{id}/permissions')

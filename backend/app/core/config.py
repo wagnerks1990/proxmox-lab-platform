@@ -8,6 +8,10 @@ class Settings(BaseSettings):
     jwt_secret_key: str
     jwt_algorithm: str = 'HS256'
     access_token_expire_minutes: int = 60
+    password_min_length: int = 12
+    login_max_failures: int = 5
+    login_failure_window_seconds: int = 300
+    login_lockout_seconds: int = 900
 
     proxmox_base_url: str
     proxmox_token_id: str
