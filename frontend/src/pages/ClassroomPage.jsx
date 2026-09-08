@@ -15,9 +15,11 @@ import {
   listRunAssignments,
   removeEnrollment,
   revokeRunAssignment,
+  previewLabRunClose,
 } from '../services/classroomApi'
 
 const detail = error => typeof error?.response?.data?.detail === 'string' ? error.response.data.detail : JSON.stringify(error?.response?.data?.detail || 'Request failed')
+const localDateTimeToIso = value => value ? new Date(value).toISOString() : null
 
 export default function ClassroomPage({ setMessage }) {
   const [classes, setClasses] = useState([])
@@ -48,6 +50,15 @@ export default function ClassroomPage({ setMessage }) {
   const classLabs = useMemo(() => labs.filter(lab => String(lab.class_id) === String(selectedClass)), [labs, selectedClass])
   const selectedRunRow = runs.find(run => String(run.id) === String(selectedRun))
   const save = async (work, message) => { try { await work(); await reload(); setMessage({ type: 'success', text: message }) } catch (error) { setMessage({ type: 'error', text: detail(error) }) } }
+  const endRun = async () => {
+    try {
+      const preview = await previewLabRunClose(selectedRun, 'end')
+      if (!window.confirm(`End this run, expire ${preview.assignments_affected} assignment(s), and queue deletion of ${preview.vm_deletions_to_queue} Proxmox VM(s)?`)) return
+      await changeLabRunState(selectedRun, 'end', preview.confirmation)
+      await reload()
+      setMessage({ type: 'success', text: 'Lab run ended; verified VM cleanup was queued.' })
+    } catch (error) { setMessage({ type: 'error', text: detail(error) }) }
+  }
 
   return <section>
     <h2>Classroom</h2>
@@ -79,10 +90,10 @@ export default function ClassroomPage({ setMessage }) {
       <label className='muted'>Starts <input className='input' type='datetime-local' value={runForm.starts_at} onChange={event => setRunForm({...runForm,starts_at:event.target.value})}/></label>
       <label className='muted'>Ends <input className='input' type='datetime-local' value={runForm.ends_at} onChange={event => setRunForm({...runForm,ends_at:event.target.value})}/></label>
       <label className='muted'>VMs/student <input className='input' type='number' min='1' max='10' value={runForm.max_vms_per_student} onChange={event => setRunForm({...runForm,max_vms_per_student:Number(event.target.value)})}/></label>
-      <button disabled={!runForm.lab_id || !runForm.name} onClick={() => save(async () => { await createLabRun({...runForm,lab_id:Number(runForm.lab_id),starts_at:runForm.starts_at||null,ends_at:runForm.ends_at||null}); setRunForm({...runForm,name:''}) }, 'Lab run created.')}>Create run</button>
+      <button disabled={!runForm.lab_id || !runForm.name} onClick={() => save(async () => { await createLabRun({...runForm,lab_id:Number(runForm.lab_id),starts_at:localDateTimeToIso(runForm.starts_at),ends_at:localDateTimeToIso(runForm.ends_at)}); setRunForm({...runForm,name:''}) }, 'Lab run created.')}>Create run</button>
       <select className='input' value={selectedRun} onChange={event => setSelectedRun(event.target.value)}><option value=''>Select run…</option>{runs.filter(run => classLabs.some(lab => lab.id === run.lab_id)).map(row => <option key={row.id} value={row.id}>{row.name} — {row.state}</option>)}</select>
     </div>
-    {selectedRunRow && <><div className='group' style={{marginTop:12}}><button onClick={() => save(async () => { await bulkAssignRun(selectedRun); setAssignments(await listRunAssignments(selectedRun)) }, 'Assignments created for the active roster.')}>Assign roster</button>{selectedRunRow.state === 'draft' && selectedRunRow.starts_at && <button onClick={() => save(() => changeLabRunState(selectedRun,'schedule'), 'Lab run scheduled; access will open inside its window.')}>Schedule</button>}{selectedRunRow.state === 'draft' && <button onClick={() => save(() => changeLabRunState(selectedRun,'activate'), 'Lab run activated.')}>Activate now</button>}{selectedRunRow.state === 'scheduled' && <button onClick={() => save(() => changeLabRunState(selectedRun,'activate'), 'Lab run activated.')}>Activate now</button>}{selectedRunRow.state === 'active' && <button className='btn-danger' onClick={() => save(() => changeLabRunState(selectedRun,'end'), 'Lab run ended and assignments expired.')}>End run</button>}</div>
+    {selectedRunRow && <><div className='group' style={{marginTop:12}}><button onClick={() => save(async () => { await bulkAssignRun(selectedRun); setAssignments(await listRunAssignments(selectedRun)) }, 'Assignments created for the active roster.')}>Assign roster</button>{['start','stop','reboot'].map(action => <button key={action} onClick={() => save(() => api.post(`/admin/lab-runs/${selectedRun}/vms/${action}`), `${action} queued for assigned VMs.`)}>{action[0].toUpperCase()+action.slice(1)} all</button>)}{selectedRunRow.state === 'draft' && selectedRunRow.starts_at && <button onClick={() => save(() => changeLabRunState(selectedRun,'schedule'), 'Lab run scheduled; access will open inside its window.')}>Schedule</button>}{selectedRunRow.state === 'draft' && <button onClick={() => save(() => changeLabRunState(selectedRun,'activate'), 'Lab run activated.')}>Activate now</button>}{selectedRunRow.state === 'scheduled' && <button onClick={() => save(() => changeLabRunState(selectedRun,'activate'), 'Lab run activated.')}>Activate now</button>}{selectedRunRow.state === 'active' && <button className='btn-danger' onClick={endRun}>End run</button>}</div>
       <p className='muted'>State: {selectedRunRow.state} | Currently open: {String(selectedRunRow.effective_open)} | Quota: {selectedRunRow.max_vms_per_student} VM(s) per student</p>
       <table className='vm-table'><thead><tr><th>Student</th><th>Slot</th><th>Template</th><th>Status</th><th>VM</th><th>Action</th></tr></thead><tbody>{assignments.map(row => <tr key={row.id}><td>{row.username || row.user_id}</td><td>{row.slot_index}</td><td>{row.template_name || row.template_id}</td><td>{row.status}</td><td>{row.student_vm_id || '-'}</td><td><button className='btn-danger' onClick={() => save(async () => { await revokeRunAssignment(selectedRun,row.id); setAssignments(await listRunAssignments(selectedRun)) }, 'Assignment revoked.')}>Revoke</button></td></tr>)}</tbody></table></>}
     </div>

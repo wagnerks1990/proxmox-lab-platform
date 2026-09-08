@@ -15,8 +15,7 @@ export default function AccountSecurityPage({ forceChange = false, onChanged, se
     setError('')
     if (newPassword !== confirmPassword) return setError('New passwords do not match.')
     try {
-      const result = await changePassword({ current_password: currentPassword, new_password: newPassword })
-      localStorage.setItem('token', result.access_token)
+      await changePassword({ current_password: currentPassword, new_password: newPassword })
       setCurrentPassword(''); setNewPassword(''); setConfirmPassword('')
       setMessage?.({ type: 'success', text: 'Password changed and other sessions revoked.' })
       await load()
@@ -43,7 +42,7 @@ export default function AccountSecurityPage({ forceChange = false, onChanged, se
     {!forceChange && <div className='panel'>
       <h3>Active Sessions</h3>
       {sessions.length === 0 ? <p className='muted'>No active sessions found.</p> : <table className='vm-table'><thead><tr><th>Device</th><th>IP</th><th>Created</th><th>Expires</th><th>Action</th></tr></thead><tbody>
-        {sessions.map(session => <tr key={session.id}><td>{session.current ? 'Current session' : (session.user_agent || 'Unknown device')}</td><td>{session.client_ip || '-'}</td><td>{session.created_at || '-'}</td><td>{session.expires_at || '-'}</td><td><button className='btn-danger' onClick={async () => { await revokeSession(session.id); if (session.current) { localStorage.removeItem('token'); window.location.reload(); } else { await load() } }}>Revoke</button></td></tr>)}
+        {sessions.map(session => <tr key={session.id}><td>{session.current ? 'Current session' : (session.user_agent || 'Unknown device')}</td><td>{session.client_ip || '-'}</td><td>{session.created_at || '-'}</td><td>{session.expires_at || '-'}</td><td><button className='btn-danger' onClick={async () => { await revokeSession(session.id); if (session.current) { window.location.reload() } else { await load() } }}>Revoke</button></td></tr>)}
       </tbody></table>}
     </div>}
   </section>

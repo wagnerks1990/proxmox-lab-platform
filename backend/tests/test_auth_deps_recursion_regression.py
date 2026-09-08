@@ -1,8 +1,8 @@
-from jose import jwt
+import jwt
 from fastapi import HTTPException
 
 from app.api.deps import get_user_from_token
-from app.models.models import AuthSession, User
+from app.models.models import AuthSession
 
 
 class _Query:

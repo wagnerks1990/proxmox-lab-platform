@@ -1,18 +1,26 @@
 from datetime import datetime, timezone
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import jwt, JWTError
+import jwt
+from jwt import InvalidTokenError
 from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.services.rbac import get_role_name
 from app.db.session import get_db
 from app.models.models import AuthSession, User
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl='/api/auth/login')
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl='/api/auth/login', auto_error=False)
 
 
-def get_authenticated_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
+def get_request_token(request: Request, bearer_token: str | None = Depends(oauth2_scheme)) -> str:
+    token = bearer_token or request.cookies.get(settings.auth_cookie_name)
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Authentication required')
+    return token
+
+
+def get_authenticated_user(token: str = Depends(get_request_token), db: Session = Depends(get_db)) -> User:
     return get_user_from_token(token, db)
 
 
@@ -34,7 +42,7 @@ def get_user_from_token(token: str, db: Session) -> User:
     credentials_exception = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid token')
     try:
         payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
-    except JWTError:
+    except InvalidTokenError:
         raise credentials_exception
 
     username = payload.get('sub')
@@ -59,11 +67,11 @@ def get_user_from_token(token: str, db: Session) -> User:
     return user
 
 
-def get_current_auth_session(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> AuthSession:
+def get_current_auth_session(token: str = Depends(get_request_token), db: Session = Depends(get_db)) -> AuthSession:
     credentials_exception = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid token')
     try:
         payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
-    except JWTError:
+    except InvalidTokenError:
         raise credentials_exception
     user = get_user_from_token(token, db)
     session = db.query(AuthSession).filter(AuthSession.token_id == payload.get('jti'), AuthSession.user_id == user.id).first()

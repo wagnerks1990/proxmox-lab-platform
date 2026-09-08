@@ -11,6 +11,7 @@ from app.db.session import get_db
 from app.models.models import AuditLog, StudentVM, TelemetryEvent, WorkerRun
 from app.services.organization_access import OrganizationContext, enforce_organization_role, require_organization_role, resolve_organization_context
 from app.telemetry.event_stream import event_stream
+from app.core.config import settings
 
 router = APIRouter()
 
@@ -72,8 +73,8 @@ async def events_stream(request: Request, db: Session = Depends(get_db)):
     token = None
     if auth.lower().startswith('bearer '):
         token = auth.split(' ', 1)[1].strip()
-    elif request.query_params.get('token'):
-        token = request.query_params.get('token')
+    elif request.cookies.get(settings.auth_cookie_name):
+        token = request.cookies.get(settings.auth_cookie_name)
     if not token:
         raise HTTPException(status_code=401, detail='Unauthorized')
     user = get_user_from_token(token, db)

@@ -33,4 +33,5 @@ backend/.venv/
 .mypy_cache/
 .coverage
 htmlcov/
+site/
 .DS_Store

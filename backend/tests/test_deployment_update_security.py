@@ -43,3 +43,13 @@ def test_update_settings_reject_unsafe_git_references(value):
 def test_update_settings_accept_normal_release_reference():
     row = DeploymentUpdateService(_Db()).update_settings({'branch': 'release/v2.1.0'}, actor_id=1)
     assert row.branch == 'release/v2.1.0'
+
+
+def test_automatic_updates_fail_closed_without_host_policy(monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, 'updater_allow_automatic', False)
+    monkeypatch.setattr(settings, 'updater_require_signed_commits', False)
+    with pytest.raises(HTTPException) as exc:
+        DeploymentUpdateService(_Db()).update_settings({'automatic_updates': True}, actor_id=1)
+    assert exc.value.status_code == 409

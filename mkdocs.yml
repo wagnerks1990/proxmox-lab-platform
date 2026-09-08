@@ -16,7 +16,13 @@ nav:
   - Classroom runs and assignments: classroom/lab-runs-and-assignments.md
   - Security: security/threat-model.md
   - AI: ai/ai-safety.md
-  - Operations: operations/deployment.md
+  - Operations:
+      - Deployment: operations/deployment.md
+      - First run: operations/first-run.md
+      - Durable jobs: operations/durable-operations.md
+      - Consoles: operations/consoles.md
+      - Updates and rollback: operations/updates.md
+  - Development validation: development/validation.md
   - V2 Roadmap: roadmap/v2-rebuild.md
   - Existing documentation:
       - Backend architecture: backend-architecture.md

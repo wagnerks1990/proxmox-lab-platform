@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import ast
+import json
+import math
 from datetime import datetime
 from urllib.parse import urlparse
 
 from sqlalchemy.orm import Session
 
-from app.models.models import AssetCatalog, AssetNodeState, AssetSyncJob, AssetSyncJobEvent
+from app.models.models import AssetSyncJob, AssetSyncJobEvent
 from app.services.proxmox_assets import ProxmoxAssetsService
 from app.db.session import SessionLocal
 from app.core.config import settings
@@ -40,13 +43,13 @@ class AssetSyncService:
                 raise ValueError(f'storage {storage_id} missing on node {n}')
 
     def _new_job(self, method: str, target_node: str, asset_id: int | None = None, **meta):
-        job = AssetSyncJob(asset_id=asset_id, target_node=target_node, state='queued', method=method, metadata_json=str(meta), started_at=datetime.utcnow())
+        job = AssetSyncJob(asset_id=asset_id, target_node=target_node, state='queued', method=method, metadata_json=json.dumps(meta, sort_keys=True), started_at=datetime.utcnow())
         self.db.add(job)
         self.db.flush()
         return job
 
     def _log(self, job_id: int, level: str, message: str, meta: dict | None = None):
-        self.db.add(AssetSyncJobEvent(job_id=job_id, level=level, message=message, metadata_json=str(meta or {})))
+        self.db.add(AssetSyncJobEvent(job_id=job_id, level=level, message=message, metadata_json=json.dumps(meta or {}, sort_keys=True)))
 
     def _finish(self, job: AssetSyncJob, state: str, error: str | None = None):
         job.state = state
@@ -59,19 +62,19 @@ class AssetSyncService:
     async def _poll_task_until_done(self, job: AssetSyncJob, node: str, upid: str):
         poll_interval = max(1, int(settings.asset_sync_poll_interval_seconds or 3))
         timeout_seconds = max(poll_interval, int(settings.asset_sync_download_timeout_seconds or 7200))
-        deadline = datetime.utcnow().timestamp() + timeout_seconds
         attempt = 0
         latest_task_status = 'unknown'
         latest_exitstatus = None
 
-        while datetime.utcnow().timestamp() < deadline:
+        max_attempts = max(1, math.ceil(timeout_seconds / poll_interval))
+        while attempt < max_attempts:
             attempt += 1
             status = await self.assets.task_status(node, upid)
             task_status = str((status or {}).get('status') or '').lower()
             exitstatus = (status or {}).get('exitstatus')
             latest_task_status = task_status or latest_task_status
             latest_exitstatus = exitstatus
-            elapsed = int(timeout_seconds - max(0, deadline - datetime.utcnow().timestamp()))
+            elapsed = min(timeout_seconds, attempt * poll_interval)
             self._log(job.id, 'info', 'Polling task status', {
                 'attempt': attempt,
                 'status': task_status,
@@ -133,7 +136,13 @@ class AssetSyncService:
             job = db.query(AssetSyncJob).filter(AssetSyncJob.id == job_id).first()
             if not job:
                 return
-            meta = eval(job.metadata_json) if job.metadata_json else {}
+            try:
+                meta = json.loads(job.metadata_json) if job.metadata_json else {}
+            except json.JSONDecodeError:
+                # Read-only compatibility for jobs queued before metadata became JSON.
+                meta = ast.literal_eval(job.metadata_json)
+            if not isinstance(meta, dict):
+                raise ValueError('Job metadata must be a JSON object')
             filename = meta.get('filename')
             storage_id = meta.get('storage_id', 'local')
             source_url = meta.get('source_url')

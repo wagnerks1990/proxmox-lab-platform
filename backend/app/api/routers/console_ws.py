@@ -7,6 +7,7 @@ from app.models.models import StudentVM, User
 from app.services.console_ws_service import ConsoleWsService
 from app.services.organization_access import OrganizationContext, organization_role_at_least, resolve_organization_context
 from app.services.classroom_access import enforce_student_vm_operation
+from app.core.config import settings
 
 router = APIRouter()
 
@@ -40,7 +41,7 @@ def _get_vm_for_user(db: Session, user: User, vm_id: int, organization: Organiza
 
 @router.websocket('/vms/{id}/console/ssh/ws')
 async def ssh_ws(id: int, websocket: WebSocket, db: Session = Depends(get_db)):
-    user = _get_user_from_ws_token(db, websocket.query_params.get('token'))
+    user = _get_user_from_ws_token(db, websocket.cookies.get(settings.auth_cookie_name))
     if not user:
         await websocket.close(code=1008, reason='Invalid token'); return
     requested = websocket.query_params.get('organization_id')
@@ -56,7 +57,7 @@ async def ssh_ws(id: int, websocket: WebSocket, db: Session = Depends(get_db)):
 
 @router.websocket('/vms/{id}/console/novnc/ws')
 async def novnc_ws(id: int, websocket: WebSocket, db: Session = Depends(get_db)):
-    user = _get_user_from_ws_token(db, websocket.query_params.get('token'))
+    user = _get_user_from_ws_token(db, websocket.cookies.get(settings.auth_cookie_name))
     if not user:
         await websocket.close(code=1008, reason='Invalid token'); return
     requested = websocket.query_params.get('organization_id')

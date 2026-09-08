@@ -8,9 +8,9 @@ import hmac
 import json
 import os
 import re
-import shutil
 import socket
 import subprocess
+import threading
 import time
 import urllib.request
 from datetime import datetime, timezone
@@ -26,6 +26,8 @@ UPDATER_GID = int(os.environ.get('UPDATER_GID', '0'))
 ALLOWED_REPOSITORY = os.environ.get('UPDATER_REPOSITORY', 'https://github.com/wagnerks1990/proxmox-lab-platform.git')
 HEALTH_URL = os.environ.get('PLATFORM_HEALTH_URL', 'http://127.0.0.1:8080/api/ready')
 REF_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._/-]{0,119}$')
+SHA_RE = re.compile(r'^[0-9a-f]{40}$')
+REQUIRE_SIGNED_COMMITS = os.environ.get('UPDATER_REQUIRE_SIGNED_COMMITS', 'false').lower() == 'true'
 
 
 def run(args: list[str], *, check: bool = True, stdout=None, input_file=None) -> subprocess.CompletedProcess:
@@ -42,7 +44,7 @@ def normalize_repo(value: str) -> str:
 
 def validate_request(payload: dict) -> tuple[str, str]:
     repository = str(payload.get('repository') or ALLOWED_REPOSITORY)
-    branch = str(payload.get('target_ref') or payload.get('branch') or 'main')
+    branch = str(payload.get('branch') or 'main')
     if normalize_repo(repository) != normalize_repo(ALLOWED_REPOSITORY):
         raise ValueError('Repository is not allowed by the host configuration')
     if not REF_RE.fullmatch(branch) or '..' in branch:
@@ -121,11 +123,18 @@ def check_update(payload: dict) -> dict:
 
 def apply_update(payload: dict) -> dict:
     _, branch = validate_request(payload)
+    requested = str(payload.get('target_ref') or '')
+    if not SHA_RE.fullmatch(requested):
+        raise ValueError('target_ref must be the exact 40-character commit SHA returned by the update check')
     if run(['git', 'status', '--porcelain'], stdout=subprocess.PIPE).stdout.strip():
         raise RuntimeError('Deployment checkout has local changes; refusing to overwrite them')
     run(['git', 'fetch', '--prune', 'origin'])
     previous = commit()
-    target = commit(f'origin/{branch}') if not payload.get('target_ref') else commit(branch)
+    target = commit(requested)
+    if run(['git', 'merge-base', '--is-ancestor', target, f'origin/{branch}'], check=False).returncode != 0:
+        raise RuntimeError('Requested commit is not reachable from the configured update branch')
+    if REQUIRE_SIGNED_COMMITS:
+        run(['git', 'verify-commit', target])
     if previous == target:
         return {'ok': True, 'from_version': previous, 'to_version': target, 'message': 'Already current'}
     backup = backup_database(previous)
@@ -184,7 +193,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path != '/v1/status':
             return self._reply(404, {'ok': False, 'message': 'Not found'})
         state = read_state()
-        self._reply(200, {'ok': True, 'available': True, 'current_version': commit(), 'previous_version': state.get('previous_version'), 'backup_path': state.get('backup_path')})
+        self._reply(200, {'ok': True, 'available': True, 'current_version': commit(), 'previous_version': state.get('previous_version'), 'backup_path': state.get('backup_path'), 'operation': state.get('operation'), 'signed_commits_required': REQUIRE_SIGNED_COMMITS})
 
     def do_POST(self):
         if not self._authorized():
@@ -195,11 +204,21 @@ class Handler(BaseHTTPRequestHandler):
             action = {'/v1/check': check_update, '/v1/apply': apply_update, '/v1/rollback': rollback_update}.get(self.path)
             if action is None:
                 return self._reply(404, {'ok': False, 'message': 'Not found'})
+            if self.path == '/v1/check':
+                return self._reply(200, action(payload))
             STATE_DIR.mkdir(parents=True, exist_ok=True)
-            with (STATE_DIR / 'update.lock').open('w') as lock:
-                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                result = action(payload)
-            self._reply(200, result)
+            current_operation = read_state().get('operation') or {}
+            if current_operation.get('status') in {'queued', 'running'}:
+                return self._reply(409, {'ok': False, 'message': 'Another update operation is running'})
+            lock_path = STATE_DIR / 'update.lock'
+            with lock_path.open('w') as probe:
+                fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            operation_id = f'{int(time.time())}-{os.getpid()}'
+            state = read_state()
+            state['operation'] = {'id': operation_id, 'action': self.path.rsplit('/', 1)[-1], 'status': 'queued', 'started_at': datetime.now(timezone.utc).isoformat()}
+            write_state(state)
+            threading.Thread(target=_run_async_action, args=(operation_id, action, payload), daemon=True).start()
+            self._reply(202, {'ok': True, 'accepted': True, 'operation_id': operation_id, 'message': 'Update operation accepted; poll updater status'})
         except BlockingIOError:
             self._reply(409, {'ok': False, 'message': 'Another update operation is running'})
         except Exception as exc:
@@ -207,6 +226,27 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
         print(f'{self.log_date_time_string()} {fmt % args}', flush=True)
+
+
+def _run_async_action(operation_id: str, action, payload: dict) -> None:
+    try:
+        with (STATE_DIR / 'update.lock').open('w') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            state = read_state()
+            state['operation'] = {**state.get('operation', {}), 'id': operation_id, 'status': 'running'}
+            write_state(state)
+            try:
+                result = action(payload)
+                state = read_state()
+                state['operation'] = {'id': operation_id, 'status': 'succeeded', 'result': result, 'finished_at': datetime.now(timezone.utc).isoformat()}
+            except Exception as exc:
+                state = read_state()
+                state['operation'] = {'id': operation_id, 'status': 'failed', 'error': str(exc), 'finished_at': datetime.now(timezone.utc).isoformat()}
+            write_state(state)
+    except Exception as exc:
+        state = read_state()
+        state['operation'] = {'id': operation_id, 'status': 'failed', 'error': str(exc), 'finished_at': datetime.now(timezone.utc).isoformat()}
+        write_state(state)
 
 
 def main() -> None:

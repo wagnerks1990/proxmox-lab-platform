@@ -7,8 +7,7 @@ export default function LoginPage({ onLogin, setMessage }) {
   const submit = async (e) => {
     e.preventDefault()
     try {
-      const { data } = await api.post('/auth/login', { username, password })
-      localStorage.setItem('token', data.access_token)
+      await api.post('/auth/login', { username, password })
       setMessage({ type: 'success', text: 'Welcome back. Login successful.' })
       onLogin()
     } catch (error) {

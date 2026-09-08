@@ -43,7 +43,6 @@ class ConsoleService:
             session = self.sessions.create_launching_session(user, vm, 'WEB_TERMINAL', connection_launch_id=launch.id)
             safe_commit(self.db)
             self.sessions.mark_active(session.id)
-            token = self.sessions.issue_reconnect_token(session.id, user.id, 'WEB_TERMINAL')
-            return {'type': 'web_terminal', 'launch_url': f'http://10.0.16.162:7681/?arg={vm.assigned_ip}', 'session_id': session.id, 'protocol': 'WEB_TERMINAL', 'state': 'active', 'reconnect_token': token, 'heartbeat_interval_seconds': 30, 'expires_at': None}
+            return {'type': 'web_terminal', 'launch_url': f'/terminal/{vm.id}', 'session_id': session.id, 'protocol': 'WEB_TERMINAL', 'state': 'active', 'heartbeat_interval_seconds': 30, 'expires_at': None}
         finally:
             idempotency_store.release(key)

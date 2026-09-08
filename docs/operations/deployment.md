@@ -41,18 +41,17 @@ Bootstrap secrets are stored in a root-readable `.env` file. Operational
 settings remain in PostgreSQL. Back up both the database and the `.env` file;
 losing the encryption key can make stored credentials unrecoverable.
 
-The final stack contains:
+The current Compose stack contains:
 
 - reverse proxy;
 - web application;
 - API service;
-- worker service;
-- scheduler service;
+- an API process with an embedded scheduler and leased durable workers;
 - PostgreSQL;
 - Redis;
-- Guacamole and guacd;
-- version-matched documentation;
-- optional AI gateway.
+
+Guacamole, a separately scaled worker service, TLS automation, and an AI gateway
+are planned components and are not silently installed by the current script.
 
 ## Configuration boundary
 
@@ -65,20 +64,20 @@ Secrets remain encrypted at rest and are never exported through normal settings
 APIs. Changing the database encryption key is a deliberate rotation procedure,
 not a normal update.
 
-## Installer contract
+## Current installer contract
 
 The supported installer will:
 
-1. verify Docker, Compose, CPU, memory, storage, ports, time, and DNS;
+1. verify root access, a supported Debian/Ubuntu OS, and the Proxmox-host safety guard;
 2. create protected random bootstrap secrets;
-3. pull immutable, versioned images;
-4. create persistent volumes and private networks;
+3. clone the configured Git branch and build local images;
+4. create persistent PostgreSQL and Redis volumes;
 5. start PostgreSQL and Redis and wait for readiness;
-6. run Alembic migrations as a one-shot job;
-7. start API, worker, scheduler, Guacamole, docs, and web services;
-8. create a one-time first-admin enrollment link;
-9. run a complete smoke test;
-10. print the URL and backup location without printing secrets.
+6. run Alembic migrations in the API entrypoint;
+7. start API/scheduler, PostgreSQL, Redis, and web services;
+8. create a one-time first-admin enrollment token;
+9. wait for the readiness endpoint;
+10. print the URL and bootstrap token to the root operator.
 
 An install is unsuccessful if any required component is unhealthy.
 
@@ -93,28 +92,22 @@ If build, migration, startup, or health verification fails, the updater checks
 out the previous commit and restores the pre-update database automatically.
 The manual rollback button performs the same application-and-database restore.
 
-Automatic updates are disabled by default. They can be enabled with a branch,
-channel, check interval, and UTC maintenance hour. The repository itself is
-pinned by the host configuration and cannot be redirected from the GUI. GitHub
-credentials are never stored in the application database.
+Automatic updates are disabled by default and additionally require the host
+policy `UPDATER_ALLOW_AUTOMATIC=true`. The repository is pinned by host
+configuration and cannot be redirected from the GUI. Apply operations require
+the exact SHA returned by a check and verify that it is reachable from the
+configured branch. GitHub credentials are never stored in the application
+database.
 
 Only one update operation can hold the host lock. The updater is reachable only
 through a group-restricted Unix socket and requires a separate authentication
 token. The Docker socket is not mounted into the web or API containers.
 
-Before an upgrade, the controller records the current version and performs a
-coordinated backup of PostgreSQL, the database encryption key reference,
-application configuration, Compose metadata, and current immutable image
-identifiers.
-
-The upgrade process downloads the selected release, validates signatures,
-checks migration compatibility, shows release notes, creates the backup, runs
-migrations, starts the new stack, and performs health and workflow probes.
-
-Automatic rollback is permitted only when the database migration is declared
-backward-compatible. Otherwise the UI must explain that database restore is
-required and request explicit approval. A rollback button must never imply that
-all migrations are automatically reversible.
+The current backup covers PostgreSQL. It does not include `.env`, key material,
+TLS configuration, or Proxmox resources. Optional commit verification is
+enabled with `UPDATER_REQUIRE_SIGNED_COMMITS=true` and requires host Git trust
+configuration. Release-note display, migration compatibility manifests, and
+non-destructive workflow probes remain release-engineering work.
 
 ## Backup requirements
 

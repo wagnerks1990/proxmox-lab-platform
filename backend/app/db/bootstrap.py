@@ -1,5 +1,5 @@
 from app.db.session import Base, engine
-from app.models import models
+from app.models import models  # noqa: F401 - registers SQLAlchemy metadata
 
 
 def init_db():

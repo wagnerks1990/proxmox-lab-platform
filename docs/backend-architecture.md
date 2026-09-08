@@ -1,43 +1,50 @@
-# Backend Architecture (Proxmox-only)
+# Backend architecture
 
-This platform is **Proxmox-only** and intentionally does not implement VMware/Hyper-V/XenServer/cloud providers.
+The FastAPI application is Proxmox-only. `app/api/routes.py` composes feature
+routers from `app/api/routers/`; there is no legacy parallel router.
 
-## API organization
-- `app/api/router.py` central registration.
-- Modular route files under `app/api/routes/`:
-  - `auth.py`
-  - `vms.py`
-  - `templates.py`
-  - `resource_pools.py`
-  - `desktop_pools.py`
-  - `proxmox_admin.py`
-  - `sessions.py`
-  - `monitoring.py`
-  - `users.py`
-  - `settings.py`
-  - `schema_health.py`
-- `app/api/routes_legacy.py` currently preserves existing endpoints while logic is incrementally migrated.
+## Request boundary
 
-## Service layer
-- `services/rbac.py`: centralized role normalization + guards.
-- `services/placement.py`: placement strategy selection (`fixed_node`, `any_enabled_node`, `least_running_vms`, `least_memory_usage`, `round_robin`).
-- `services/schema_health.py`: required table/column checks.
-- `services/protocols.py`: protocol registry placeholders (`novnc`, `guacamole`, `rdp`, `spice`, `web_terminal`).
+Authentication accepts a bearer token for API tooling or the HttpOnly
+`plp_session` cookie used by the web application. The token must map to a live
+`auth_sessions` record and the current user token version. Organization context
+is resolved independently and fails closed for unknown roles or inactive
+memberships.
 
-## RBAC strategy
-- Source of truth: `users.role_id` -> `roles` table.
-- Legacy `users.role` is compatibility-only fallback.
+Routers validate policy and create desired state. They do not own long-running
+Proxmox mutations. VM mutation routes commit `durable_operations` and return
+HTTP `202` with an operation identifier.
 
-## Safety policy
-- No destructive Proxmox operations during Codex runs.
-- Safe checks only:
-  - `python3 -m compileall backend/app`
-  - `cd frontend && npm run build`
+## Service boundary
 
+- `services/proxmox.py` is the backend-only Proxmox adapter.
+- `services/operation_service.py` allocates VMIDs, queues, leases, executes,
+  retries, and verifies infrastructure operations.
+- `services/classroom_access.py` evaluates enrollment, assignment, schedule,
+  ownership, and lab access flags.
+- `services/organization_access.py` resolves tenant scope and role rank.
+- `services/asset_sync.py` manages restart-safe asset jobs with JSON metadata.
+- `services/console_ws_service.py` brokers noVNC and key-based SSH without
+  disclosing control-plane credentials.
 
-## Remote access priority
-1. Guacamole (primary browser broker)
-2. RDP via Guacamole
-3. VNC via Guacamole
-4. SSH via Guacamole
-5. Direct noVNC/SPICE as future optional fallback placeholders
+## Background work
+
+APScheduler currently runs inside the API process. Durable operations use
+PostgreSQL row leases, while worker overlap and reconnect-token replay use
+Redis in Compose. Asset jobs are claimed from PostgreSQL. This is safe for the
+single-API pilot; separating worker and scheduler processes remains required
+before horizontal API scaling.
+
+## Persistence and contracts
+
+SQLAlchemy models live in `app/models/models.py`; all schema changes use the
+single linear Alembic history. OpenAPI is exported to `frontend/openapi.json`
+and produces `frontend/src/generated/api-schema.d.ts`. CI rejects contract
+drift.
+
+## Remote access
+
+The current supported browser paths are same-origin noVNC and SSH WebSockets.
+RDP downloads a credential-prompting file. SPICE remains a native-client path.
+Guacamole is the longer-term broker but is not part of the current Compose
+deployment.

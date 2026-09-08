@@ -1,8 +1,8 @@
-from app.api.routes import router
+from app.main import app
 
 
 def test_asset_routes_registered():
-    paths = {r.path for r in router.routes}
+    paths = set(app.openapi()['paths'])
     assert '/api/admin/proxmox/assets/inventory' in paths
     assert '/api/admin/proxmox/assets/readiness' in paths
     assert '/api/admin/proxmox/assets/sync/iso' in paths

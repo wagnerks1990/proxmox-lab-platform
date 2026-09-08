@@ -1,4 +1,4 @@
-from sqlalchemy import CheckConstraint, Column, Integer, String, ForeignKey, DateTime, func, Boolean, UniqueConstraint
+from sqlalchemy import CheckConstraint, Column, Integer, String, ForeignKey, DateTime, func, Boolean, UniqueConstraint, Text
 from sqlalchemy.orm import relationship
 from app.db.session import Base
 
@@ -59,8 +59,45 @@ class DeploymentUpdateRun(Base):
     to_version = Column(String(64), nullable=True)
     backup_path = Column(String(512), nullable=True)
     details = Column(String(2048), nullable=True)
+    agent_operation_id = Column(String(128), nullable=True, index=True)
     started_at = Column(DateTime, server_default=func.now(), nullable=False)
     finished_at = Column(DateTime, nullable=True)
+
+
+class VmidAllocator(Base):
+    __tablename__ = 'vmid_allocators'
+    id = Column(Integer, primary_key=True)
+    scope = Column(String(64), nullable=False, unique=True, index=True)
+    next_value = Column(Integer, nullable=False, default=200000)
+    updated_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class DurableOperation(Base):
+    __tablename__ = 'durable_operations'
+    __table_args__ = (
+        UniqueConstraint('idempotency_key', name='uq_durable_operations_idempotency_key'),
+        CheckConstraint("state IN ('queued', 'running', 'succeeded', 'failed', 'cancelled')", name='ck_durable_operations_state'),
+    )
+    id = Column(Integer, primary_key=True)
+    organization_id = Column(Integer, ForeignKey('organizations.id'), nullable=True, index=True)
+    requested_by = Column(Integer, ForeignKey('users.id'), nullable=True, index=True)
+    operation_type = Column(String(64), nullable=False, index=True)
+    target_type = Column(String(64), nullable=False)
+    target_id = Column(String(128), nullable=True)
+    idempotency_key = Column(String(128), nullable=False)
+    state = Column(String(32), nullable=False, default='queued', index=True)
+    payload_json = Column(Text, nullable=False, default='{}')
+    result_json = Column(Text, nullable=True)
+    proxmox_upid = Column(String(255), nullable=True)
+    attempts = Column(Integer, nullable=False, default=0)
+    lease_owner = Column(String(128), nullable=True, index=True)
+    lease_expires_at = Column(DateTime, nullable=True, index=True)
+    run_after = Column(DateTime, nullable=True, index=True)
+    error = Column(String(2048), nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False, index=True)
+    started_at = Column(DateTime, nullable=True)
+    finished_at = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime, server_default=func.now(), nullable=False)
 
 
 class User(Base):
@@ -128,6 +165,7 @@ class Permission(Base):
 
 class StudentVM(Base):
     __tablename__ = 'student_vms'
+    __table_args__ = (UniqueConstraint('vmid', name='uq_student_vms_vmid'),)
     id = Column(Integer, primary_key=True)
     organization_id = Column(Integer, ForeignKey('organizations.id'), nullable=False, index=True)
     owner_id = Column(Integer, ForeignKey('users.id'), nullable=False)

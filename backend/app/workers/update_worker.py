@@ -20,6 +20,6 @@ def run_once() -> None:
                 return
         result = service.run('check', None)
         if result.get('ok') and result.get('update_available') and now.hour == configured.maintenance_hour_utc:
-            service.run('apply', None)
+            service.run('apply', None, result.get('to_version'))
     finally:
         db.close()

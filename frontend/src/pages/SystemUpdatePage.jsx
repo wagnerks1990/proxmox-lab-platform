@@ -41,9 +41,10 @@ export default function SystemUpdatePage({ setMessage }) {
       <p><b>Current version:</b> {data.agent?.current_version || 'Updater unavailable'}</p>
       <p><b>Previous version:</b> {data.agent?.previous_version || 'No rollback point'}</p>
       {!data.agent?.available && <p className='error'>Host update agent unavailable: {data.agent?.message}</p>}
+      {data.agent?.operation && <p><b>Host operation:</b> {data.agent.operation.status}</p>}
       <div className='actions'>
         <button disabled={busy || !data.agent?.available} onClick={() => perform('Check for updates', checkForUpdate)}>Check</button>
-        <button disabled={busy || !data.agent?.available} onClick={() => perform('Apply update', () => applyUpdate())}>Update now</button>
+        <button disabled={busy || !data.agent?.available || !data.latest_run?.to_version} onClick={() => perform('Apply checked commit', () => applyUpdate(data.latest_run.to_version))}>Update checked commit</button>
         <button disabled={busy || !data.agent?.previous_version} onClick={() => perform('Roll back application and database', rollbackUpdate)}>Rollback</button>
       </div>
     </div>

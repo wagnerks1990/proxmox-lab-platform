@@ -1,4 +1,4 @@
-from app.api.routes import router
+from app.main import app
 
 
 def _has(paths, suffix):
@@ -6,7 +6,7 @@ def _has(paths, suffix):
 
 
 def test_key_routes_registered():
-    paths = {r.path for r in router.routes}
+    paths = set(app.openapi()['paths'])
     required_suffixes = [
         '/auth/login', '/auth/me', '/vms', '/vms/{id}/console/terminal-url',
         '/admin/session-activity', '/admin/telemetry/summary', '/admin/runtime/summary',

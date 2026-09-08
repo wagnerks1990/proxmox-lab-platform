@@ -48,8 +48,18 @@ jobs:
             backend/requirements-dev.txt
       - run: pip install -r backend/requirements.txt -r backend/requirements-dev.txt
       - run: python -m compileall -q backend/app backend/tests
+      - run: ruff check --select E9,F63,F7,F82 backend/app backend/tests deploy scripts
+      - run: bandit -r backend/app deploy -lll -q
+      - run: pip-audit -r backend/requirements.txt
       - run: alembic -c backend/alembic.ini upgrade head
       - run: pytest -q --disable-warnings backend/tests
+      - name: Verify generated OpenAPI contract
+        run: |
+          python scripts/export_openapi.py frontend/openapi.json
+          cd frontend
+          npx openapi-typescript openapi.json -o src/generated/api-schema.d.ts
+          cd ..
+          git diff --exit-code -- frontend/openapi.json frontend/src/generated/api-schema.d.ts
 
   frontend:
     runs-on: ubuntu-latest
@@ -64,6 +74,7 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
+      - run: npm test
       - run: npm run build
       - run: npm audit --omit=dev --audit-level=high
 
@@ -84,6 +95,7 @@ jobs:
       JWT_SECRET_KEY: ci-only-jwt-secret-that-is-never-used-in-production
       CONFIG_ENCRYPTION_KEY: ci-only-encryption-secret-that-is-never-used-in-production
       UPDATER_TOKEN: ci-only-updater-token
+      BOOTSTRAP_ADMIN_TOKEN: ci-only-bootstrap-token
       UPDATER_GID: '0'
       HTTP_PORT: '8080'
     steps:

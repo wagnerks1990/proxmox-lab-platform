@@ -11,15 +11,19 @@ discovery, template import, basic VM lifecycle operations, administrative CRUD,
 and operational views exist. The application is not yet approved for
 unsupervised student or production use.
 
-The release blockers are:
+Implemented pilot foundations now include first-admin enrollment, tenant-scoped
+classroom assignments, atomic VMIDs, leased durable VM operations, expiration
+cleanup, server-brokered noVNC/SSH, immutable-SHA updates, and database rollback.
+
+The remaining release blockers are:
 
 - complete migration to canonical, default-deny authorization;
-- durable and idempotent Proxmox jobs;
-- truthful VM deletion and host-setup behavior;
-- a supported end-to-end browser console;
-- class, lab, enrollment, and VM-assignment integration;
-- reproducible deployment, backup, upgrade, and rollback;
-- green integration and browser tests.
+- live Proxmox lifecycle and browser-console acceptance testing;
+- per-assignment SSH credentials and rotation;
+- isolated-network and multi-VM blueprint execution;
+- tested off-host backup/restore and TLS deployment;
+- separate worker/scheduler scaling and failure drills;
+- CSV roster import, extensions, snapshots, reset, and rebuild workflows.
 
 See the [V2 rebuild roadmap](roadmap/v2-rebuild.md) for implementation order.
 

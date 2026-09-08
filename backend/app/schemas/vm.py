@@ -60,7 +60,16 @@ class VMResponse(BaseModel):
 
 
 class VMCreateResponse(VMResponse):
+    operation_id: int | None = None
+    operation_state: str | None = None
     message: str | None = None
+
+
+class VMOperationResponse(BaseModel):
+    operation_id: int
+    state: str
+    vm_id: int
+    message: str
 
 
 class AuditLogResponse(BaseModel):

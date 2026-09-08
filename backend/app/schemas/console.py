@@ -8,7 +8,6 @@ class ConsoleLaunchResponse(BaseModel):
     rdp_file: str | None = None
     novnc_url: str | None = None
     port: int | None = None
-    ticket: str | None = None
     vmid: int | None = None
     node: str | None = None
     launch_url: str | None = None

@@ -23,17 +23,18 @@ The primary design goals are:
 |---|---|
 | Web | React/TypeScript application and role-aware user experience |
 | API | Authentication, policy, validation, query APIs, and job submission |
-| Worker | Proxmox mutations, discovery, reconciliation, cleanup, and retries |
-| Scheduler | Creates periodic reconciliation, expiration, and health jobs |
+| Worker | Leased Proxmox mutations, asset sync, reconciliation, cleanup, and retries; currently hosted in the API process |
+| Scheduler | Creates periodic reconciliation, expiration, and health work; currently hosted in the API process |
 | PostgreSQL | Authoritative configuration, desired state, jobs, and audit history |
 | Redis | Queue transport, distributed locks, rate limits, and short-lived events |
-| Guacamole/guacd | Supported RDP, SSH, and VNC browser access |
+| Console broker | Current same-origin noVNC and key-based SSH WebSocket proxy; Guacamole remains planned |
 | Reverse proxy | TLS termination and routing for web, API, WebSocket, and Guacamole traffic |
 | Documentation | Version-matched MkDocs wiki |
-| AI gateway | Optional provider abstraction with redaction, budgets, and audit controls |
+| AI gateway | Planned optional provider abstraction; current AI behavior is documentation-only and read-only |
 
-The API and scheduler are separate processes. Running multiple API instances
-must not create duplicate scheduled work.
+The current scheduler is embedded in the API process. Redis locks and database
+leases prevent overlapping work, but separating and independently scaling the
+worker/scheduler is still required before multi-API deployment.
 
 ## Domain boundaries
 

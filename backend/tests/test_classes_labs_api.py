@@ -1,8 +1,8 @@
 import pytest
 
-from app.api.routes import router
+from app.main import app
 from app.api.routers import classes_labs
-from app.models.models import Class, Enrollment, Lab, OrganizationMembership, User, DesktopPool
+from app.models.models import Class, Enrollment, Lab, OrganizationMembership, User
 from app.schemas.classes_labs import ClassCreate, EnrollmentCreate, LabCreate
 from app.services.organization_access import OrganizationContext
 
@@ -48,7 +48,7 @@ class FakeDB:
 
 
 def test_class_and_lab_routes_registered():
-    paths = {r.path for r in router.routes}
+    paths = set(app.openapi()['paths'])
     assert '/api/admin/classes' in paths
     assert '/api/admin/labs' in paths
 

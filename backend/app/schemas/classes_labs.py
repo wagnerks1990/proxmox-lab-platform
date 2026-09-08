@@ -110,6 +110,7 @@ class LabRunOut(LabRunCreate):
 
 class LabRunStateChange(BaseModel):
     action: str
+    confirmation: str | None = None
 
 
 class LabAssignmentCreate(BaseModel):

@@ -1,5 +1,4 @@
 from sqlalchemy.orm import Session
-from app.models.models import DesktopPool
 from app.architecture.events import bus, DomainEvent
 
 ALLOWED_PROTOCOLS = {'SSH_WS', 'NOVNC', 'SPICE', 'RDP'}

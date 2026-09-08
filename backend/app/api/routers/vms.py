@@ -1,5 +1,4 @@
-import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -14,13 +13,13 @@ from app.models.models import (
     User,
     VMTemplate,
 )
-from app.schemas.vm import VMResponse, VMCreateResponse, CreateVMRequest
+from app.schemas.vm import VMResponse, VMCreateResponse, VMOperationResponse, CreateVMRequest
 from app.services.proxmox import ProxmoxClient
 from app.services.placement import choose_cluster_node, PlacementError
 from app.services.proxmox_bootstrap import ProxmoxBootstrapService
-from app.architecture.events import bus, DomainEvent, VM_STARTED
 from app.services.organization_access import OrganizationContext, enforce_organization_role, get_current_organization, organization_role_at_least
 from app.services.classroom_access import active_assignment_for_vm, assignment_for_provisioning, enforce_student_vm_operation
+from app.services.operation_service import allocate_vmid, enqueue_operation, safe_vm_name
 
 router = APIRouter()
 
@@ -74,7 +73,7 @@ async def list_vms(user: User = Depends(get_current_user), db: Session = Depends
     return rows
 
 
-@router.post('/vms', response_model=VMCreateResponse)
+@router.post('/vms', response_model=VMCreateResponse, status_code=status.HTTP_202_ACCEPTED)
 async def create_vm(payload: CreateVMRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
     template = db.query(VMTemplate).filter(VMTemplate.id == payload.template_id, VMTemplate.organization_id == organization.id).first()
     if not template:
@@ -140,86 +139,60 @@ async def create_vm(payload: CreateVMRequest, user: User = Depends(get_current_u
         selected_node = decision.selected_node
         placement_reason = decision.reason
 
-    vmid = 200000 + user.id * 100 + db.query(StudentVM).count() + 1
-    vm_name = f"{user.username}-{vmid}"
+    vmid = allocate_vmid(db)
+    vm_name = safe_vm_name(user.username, payload.lab_name, vmid)
 
     vm = StudentVM(organization_id=organization.id, owner_id=user.id, template_id=template.id, vm_name=vm_name, vmid=vmid, proxmox_node=selected_node, status='provisioning', operating_system='linux', access_protocols='novnc,ssh,spice')
     db.add(vm)
     db.flush()
 
-    proxmox = ProxmoxClient()
-    message = f'VM created. Placement: {placement_reason} ({selected_node})'
-    try:
-        # source template can be on one node while target placement can be another eligible node
-        resp = await proxmox.clone_vm(selected_node, template.source_vmid, vmid, vm_name)
-        upid = resp.get('data')
-        if upid:
-            task = await proxmox.wait_for_task(template.proxmox_node, upid)
-            if task.get('exitstatus') not in ['OK', None]:
-                vm.status = 'error'
-                db.commit()
-                raise HTTPException(status_code=502, detail={'success': False, 'error': 'Clone task failed', 'exitstatus': task.get('exitstatus'), 'proxmox_node': selected_node, 'requested_vmid': vmid, 'selected_template': template.source_vmid, 'placement_reason': placement_reason})
-
-        try:
-            live = await proxmox.get_vm_status(selected_node, vmid)
-            vm.status = live.get('status', 'stopped')
-        except Exception:
-            vm.status = 'missing'
-            db.commit()
-            raise HTTPException(status_code=502, detail={'success': False, 'error': 'Clone completed but VM not found on selected node', 'proxmox_node': selected_node, 'requested_vmid': vmid, 'selected_template': template.source_vmid, 'placement_reason': placement_reason})
-
-        if payload.auto_start and vm.status != 'running':
-            try:
-                await proxmox.start_vm(selected_node, vmid)
-                live = await proxmox.get_vm_status(selected_node, vmid)
-                vm.status = live.get('status', vm.status)
-            except Exception as start_exc:
-                message = f'VM cloned successfully but auto-start failed: {start_exc}'
-
-    except HTTPException:
-        raise
-    except Exception as exc:
-        vm.status = 'error'
-        db.commit()
-        raise HTTPException(status_code=502, detail={'success': False, 'error': str(exc), 'proxmox_node': selected_node, 'requested_vmid': vmid, 'selected_template': template.source_vmid, 'placement_reason': placement_reason})
-
     db.add(AuditLog(organization_id=organization.id, actor_id=user.id, action='vm.create.placement', target_type='student_vm', target_id=str(vm.id)))
     if assignment:
         assignment.student_vm_id = vm.id
-        assignment.status = 'ready'
+    operation = enqueue_operation(
+        db,
+        organization_id=organization.id,
+        requested_by=user.id,
+        operation_type='vm.create',
+        target_type='student_vm',
+        target_id=str(vm.id),
+        payload={'auto_start': payload.auto_start, 'placement_reason': placement_reason},
+        idempotency_key=f'vm.create:{vm.id}',
+    )
     db.commit(); db.refresh(vm)
-    return VMCreateResponse(**vm.__dict__, message=message)
+    return VMCreateResponse(**vm.__dict__, operation_id=operation.id, operation_state=operation.state, message=f'Provisioning queued. Placement: {placement_reason} ({selected_node})')
 
 
-@router.post('/vms/{id}/start', response_model=VMResponse)
+def _queue_vm_action(db: Session, vm: StudentVM, user: User, organization: OrganizationContext, action: str) -> VMOperationResponse:
+    operation = enqueue_operation(
+        db,
+        organization_id=organization.id,
+        requested_by=user.id,
+        operation_type=f'vm.{action}',
+        target_type='student_vm',
+        target_id=str(vm.id),
+        payload={},
+    )
+    db.commit()
+    return VMOperationResponse(operation_id=operation.id, state=operation.state, vm_id=vm.id, message=f'{action.capitalize()} queued')
+
+
+@router.post('/vms/{id}/start', response_model=VMOperationResponse, status_code=status.HTTP_202_ACCEPTED)
 async def start_vm(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
     vm = _get_vm_for_user(db, user, id, organization, 'start')
-    await ProxmoxClient().start_vm(vm.proxmox_node, vm.vmid)
-    vm.status = (await ProxmoxClient().get_vm_status(vm.proxmox_node, vm.vmid)).get('status', vm.status)
-    db.add(AuditLog(organization_id=organization.id, actor_id=user.id, action='vm.start', target_type='student_vm', target_id=str(vm.id)))
-    db.commit(); db.refresh(vm)
-    bus.publish(DomainEvent(name=VM_STARTED, payload={'organization_id': organization.id, 'vm_id': vm.id, 'actor_id': user.id}))
-    return vm
+    return _queue_vm_action(db, vm, user, organization, 'start')
 
 
-@router.post('/vms/{id}/stop', response_model=VMResponse)
+@router.post('/vms/{id}/stop', response_model=VMOperationResponse, status_code=status.HTTP_202_ACCEPTED)
 async def stop_vm(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
     vm = _get_vm_for_user(db, user, id, organization, 'stop')
-    await ProxmoxClient().stop_vm(vm.proxmox_node, vm.vmid)
-    vm.status = (await ProxmoxClient().get_vm_status(vm.proxmox_node, vm.vmid)).get('status', vm.status)
-    db.add(AuditLog(organization_id=organization.id, actor_id=user.id, action='vm.stop', target_type='student_vm', target_id=str(vm.id)))
-    db.commit(); db.refresh(vm)
-    return vm
+    return _queue_vm_action(db, vm, user, organization, 'stop')
 
 
-@router.post('/vms/{id}/reboot', response_model=VMResponse)
+@router.post('/vms/{id}/reboot', response_model=VMOperationResponse, status_code=status.HTTP_202_ACCEPTED)
 async def reboot_vm(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
     vm = _get_vm_for_user(db, user, id, organization, 'reboot')
-    await ProxmoxClient().reboot_vm(vm.proxmox_node, vm.vmid)
-    vm.status = (await ProxmoxClient().get_vm_status(vm.proxmox_node, vm.vmid)).get('status', vm.status)
-    db.add(AuditLog(organization_id=organization.id, actor_id=user.id, action='vm.reboot', target_type='student_vm', target_id=str(vm.id)))
-    db.commit(); db.refresh(vm)
-    return vm
+    return _queue_vm_action(db, vm, user, organization, 'reboot')
 
 
 @router.get('/vms/{id}/status', response_model=VMResponse)
@@ -233,17 +206,25 @@ async def refresh_vm_status(id: int, user: User = Depends(get_current_user), db:
     return vm
 
 
-@router.delete('/vms/{id}', response_model=dict)
-async def delete_vm_record(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
+@router.get('/vms/{id}/delete-preview')
+def delete_vm_preview(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
     vm = _get_vm_for_user(db, user, id, organization, 'delete')
-    assignment = db.query(LabAssignment).filter(LabAssignment.student_vm_id == vm.id).first()
-    if assignment:
-        assignment.student_vm_id = None
-        if assignment.status == 'ready':
-            assignment.status = 'assigned'
-    db.delete(vm)
-    db.commit()
-    return {'ok': True, 'message': 'App VM record removed.'}
+    return {
+        'vm_id': vm.id,
+        'vmid': vm.vmid,
+        'vm_name': vm.vm_name,
+        'proxmox_node': vm.proxmox_node,
+        'effects': ['Stop the VM if it is running', 'Delete the VM from Proxmox', 'Verify it is absent', 'Remove its application record'],
+        'confirmation': f'DELETE {vm.vmid}',
+    }
+
+
+@router.delete('/vms/{id}', response_model=VMOperationResponse, status_code=status.HTTP_202_ACCEPTED)
+async def delete_vm_record(id: int, confirmation: str, user: User = Depends(get_current_user), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
+    vm = _get_vm_for_user(db, user, id, organization, 'delete')
+    if confirmation != f'DELETE {vm.vmid}':
+        raise HTTPException(status_code=422, detail=f'confirmation must equal DELETE {vm.vmid}')
+    return _queue_vm_action(db, vm, user, organization, 'delete')
 
 
 @router.delete('/admin/lab-vms/{id}/app-record', response_model=dict)
