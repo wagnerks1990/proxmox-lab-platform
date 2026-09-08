@@ -6,7 +6,6 @@ from app.db.session import get_db
 from app.models.models import User
 from app.schemas.session import SessionActivityResponse, SessionHeartbeatRequest, SessionHeartbeatResponse
 from app.services.session_service import SessionService
-from app.schemas.common import ApiEnvelope
 from app.architecture.state_machines import SessionState
 from app.services.organization_access import OrganizationContext, get_current_organization, require_organization_role
 

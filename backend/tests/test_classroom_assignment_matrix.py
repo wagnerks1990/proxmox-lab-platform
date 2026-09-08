@@ -23,13 +23,22 @@ from app.models.models import (
 )
 from app.services.auth_service import issue_session
 from app.services.classroom_access import assignment_effectively_open, run_effectively_open
+from app.services import operation_service
+from app.models.models import DurableOperation
+import asyncio
 
 
 class _FakeProxmox:
+    def __init__(self):
+        self.exists = False
+
     async def clone_vm(self, _node, _source_vmid, _vmid, _name):
+        self.exists = True
         return {'data': None}
 
     async def get_vm_status(self, _node, _vmid):
+        if not self.exists:
+            raise RuntimeError('404 not found')
         return {'status': 'stopped'}
 
     async def start_vm(self, _node, _vmid):
@@ -85,6 +94,7 @@ def test_assignment_gates_student_vm_lifecycle(monkeypatch):
 
     app.dependency_overrides[get_db] = override_get_db
     monkeypatch.setattr(vms, 'ProxmoxClient', _FakeProxmox)
+    monkeypatch.setattr(operation_service, 'ProxmoxClient', _FakeProxmox)
     client = TestClient(app)
     instructor_headers = _headers(db, instructor, organization)
     student_headers = _headers(db, student, organization)
@@ -123,8 +133,10 @@ def test_assignment_gates_student_vm_lifecycle(monkeypatch):
             'lab_name': 'routing',
             'auto_start': False,
         })
-        assert provisioned.status_code == 200, provisioned.text
+        assert provisioned.status_code == 202, provisioned.text
         vm_id = provisioned.json()['id']
+        operation = db.query(DurableOperation).filter(DurableOperation.id == provisioned.json()['operation_id']).one()
+        asyncio.run(operation_service.execute_operation(db, operation))
         assignment = db.query(LabAssignment).filter(LabAssignment.id == assignment_id).one()
         assert assignment.status == 'ready'
         assert assignment.student_vm_id == vm_id
@@ -135,7 +147,7 @@ def test_assignment_gates_student_vm_lifecycle(monkeypatch):
         assert visible_vm['allowed_delete'] is False
         assert visible_vm['allowed_terminal'] is True
         assert client.post(f'/api/vms/{vm_id}/stop', headers=student_headers).status_code == 403
-        ended = client.patch(f'/api/admin/lab-runs/{run_id}/state', headers=instructor_headers, json={'action': 'end'})
+        ended = client.patch(f'/api/admin/lab-runs/{run_id}/state', headers=instructor_headers, json={'action': 'end', 'confirmation': f'END {run_id}'})
         assert ended.status_code == 200
         assert client.get('/api/vms', headers=student_headers).json() == []
         assert client.get(f'/api/vms/{vm_id}/status', headers=student_headers).status_code == 403

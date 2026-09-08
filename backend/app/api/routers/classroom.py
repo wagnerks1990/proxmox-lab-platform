@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.api.routers.classes_labs import _class_or_404
 from app.db.session import get_db
-from app.models.models import DesktopPool, Enrollment, Lab, LabAssignment, LabRun, OrganizationMembership, User, VMTemplate
+from app.models.models import DesktopPool, Enrollment, Lab, LabAssignment, LabRun, OrganizationMembership, StudentVM, User, VMTemplate
 from app.schemas.classes_labs import (
     LabAssignmentBulkCreate,
     LabAssignmentCreate,
@@ -17,6 +17,7 @@ from app.schemas.common import ApiEnvelope
 from app.services.audit_service import record_audit_event
 from app.services.classroom_access import as_utc_naive, assignment_effectively_open, run_effectively_open, utcnow
 from app.services.organization_access import OrganizationContext, get_current_organization, require_organization_role
+from app.services.operation_service import enqueue_operation
 
 router = APIRouter()
 
@@ -140,6 +141,8 @@ def change_lab_run_state(run_id: int, payload: LabRunStateChange, user: User = D
     next_state = RUN_TRANSITIONS.get(run.state, {}).get(action)
     if not next_state:
         raise HTTPException(status_code=409, detail=f'Cannot {action or "change"} a {run.state} lab run')
+    if action in {'end', 'cancel'} and payload.confirmation != f'{action.upper()} {run.id}':
+        raise HTTPException(status_code=422, detail=f'confirmation must equal {action.upper()} {run.id}')
     now = utcnow()
     if next_state == 'scheduled' and not run.starts_at:
         raise HTTPException(status_code=409, detail='A scheduled lab run requires a start time')
@@ -153,10 +156,38 @@ def change_lab_run_state(run_id: int, payload: LabRunStateChange, user: User = D
         run.ended_at = now
         for assignment in db.query(LabAssignment).filter(LabAssignment.lab_run_id == run.id, LabAssignment.status.in_(['assigned', 'ready'])).all():
             assignment.status = 'expired' if next_state == 'ended' else 'revoked'
+            if assignment.student_vm_id:
+                enqueue_operation(
+                    db,
+                    organization_id=organization.id,
+                    requested_by=user.id,
+                    operation_type='vm.delete',
+                    target_type='student_vm',
+                    target_id=str(assignment.student_vm_id),
+                    payload={'expiration_cleanup': True, 'lab_run_id': run.id},
+                    idempotency_key=f'lab-run-close:{run.id}:vm:{assignment.student_vm_id}',
+                )
     run.state = next_state
     record_audit_event(db, actor_id=user.id, organization_id=organization.id, action=f'classroom.run_{next_state}', target_type='lab_run', target_id=str(run.id))
     db.commit(); db.refresh(run)
     return ApiEnvelope(success=True, data=_run_out(db, run))
+
+
+@router.get('/admin/lab-runs/{run_id}/close-preview', response_model=ApiEnvelope[dict])
+def close_lab_run_preview(run_id: int, action: str = 'end', user: User = Depends(get_current_user), db: Session = Depends(get_db), organization: OrganizationContext = Depends(require_organization_role('instructor'))):
+    run, _lab = _run_for_user(db, run_id, organization, user)
+    if action not in {'end', 'cancel'}:
+        raise HTTPException(status_code=422, detail='action must be end or cancel')
+    assignments = db.query(LabAssignment).filter(LabAssignment.lab_run_id == run.id).all()
+    vm_ids = [row.student_vm_id for row in assignments if row.student_vm_id]
+    return ApiEnvelope(success=True, data={
+        'run_id': run.id,
+        'current_state': run.state,
+        'assignments_affected': len(assignments),
+        'vm_deletions_to_queue': len(vm_ids),
+        'student_vm_ids': vm_ids,
+        'confirmation': f'{action.upper()} {run.id}',
+    })
 
 
 def _create_assignment(db: Session, run: LabRun, lab: Lab, payload: LabAssignmentCreate) -> tuple[LabAssignment, bool]:
@@ -250,6 +281,36 @@ def bulk_create_run_assignments(run_id: int, payload: LabAssignmentBulkCreate, u
     record_audit_event(db, actor_id=user.id, organization_id=organization.id, action='classroom.assignments_bulk_created', target_type='lab_run', target_id=str(run.id), metadata={'created': created, 'enrollments': len(enrollments)})
     db.commit()
     return ApiEnvelope(success=True, data={'created': created, 'enrollments': len(enrollments), 'slots_per_student': payload.slots_per_student})
+
+
+@router.post('/admin/lab-runs/{run_id}/vms/{action}', response_model=ApiEnvelope[dict], status_code=status.HTTP_202_ACCEPTED)
+def bulk_vm_action(run_id: int, action: str, user: User = Depends(get_current_user), db: Session = Depends(get_db), organization: OrganizationContext = Depends(require_organization_role('instructor'))):
+    _run_for_user(db, run_id, organization, user)
+    if action not in {'start', 'stop', 'reboot', 'delete'}:
+        raise HTTPException(status_code=422, detail='Action must be start, stop, reboot, or delete')
+    assignments = db.query(LabAssignment).filter(
+        LabAssignment.lab_run_id == run_id,
+        LabAssignment.organization_id == organization.id,
+        LabAssignment.student_vm_id.is_not(None),
+    ).all()
+    operation_ids = []
+    for assignment in assignments:
+        vm = db.query(StudentVM).filter(StudentVM.id == assignment.student_vm_id).first()
+        if not vm:
+            continue
+        operation = enqueue_operation(
+            db,
+            organization_id=organization.id,
+            requested_by=user.id,
+            operation_type=f'vm.{action}',
+            target_type='student_vm',
+            target_id=str(vm.id),
+            payload={'lab_run_id': run_id, 'expiration_cleanup': action == 'delete'},
+        )
+        operation_ids.append(operation.id)
+    record_audit_event(db, actor_id=user.id, organization_id=organization.id, action=f'classroom.bulk_{action}', target_type='lab_run', target_id=str(run_id), metadata={'operation_ids': operation_ids})
+    db.commit()
+    return ApiEnvelope(success=True, data={'queued': len(operation_ids), 'operation_ids': operation_ids, 'action': action})
 
 
 @router.delete('/admin/lab-runs/{run_id}/assignments/{assignment_id}', response_model=ApiEnvelope[dict])

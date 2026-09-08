@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.db.session import get_db
-from app.models.models import Class, Enrollment, Lab, LabRun, OrganizationMembership, User, DesktopPool
+from app.models.models import Class, Enrollment, Lab, LabRun, OrganizationMembership, DesktopPool
 from app.schemas.common import ApiEnvelope
 from app.schemas.classes_labs import (
     ClassCreate, ClassOut, ClassPatch, EnrollmentCreate, EnrollmentOut,

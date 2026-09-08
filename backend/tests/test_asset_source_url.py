@@ -1,10 +1,10 @@
 import pytest
-from app.api.routes import router
+from app.main import app
 from app.api.routers import proxmox_assets
 
 
 def test_source_url_route_registered():
-    paths = {r.path for r in router.routes}
+    paths = set(app.openapi()['paths'])
     assert '/api/admin/proxmox/assets/source-url' in paths
 
 

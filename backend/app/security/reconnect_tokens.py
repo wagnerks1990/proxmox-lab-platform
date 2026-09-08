@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from uuid import uuid4
 from datetime import datetime, timedelta, timezone
-from jose import JWTError, jwt
+import jwt
+from jwt import InvalidTokenError
 
 
 def create_reconnect_token(*, secret: str, session_id: int, user_id: int, protocol: str, ttl_seconds: int, fingerprint: str | None = None) -> str:
@@ -24,7 +25,7 @@ def create_reconnect_token(*, secret: str, session_id: int, user_id: int, protoc
 def verify_reconnect_token(*, token: str, secret: str, session_id: int, user_id: int, protocol: str, fingerprint: str | None = None) -> dict:
     try:
         payload = jwt.decode(token, secret, algorithms=['HS256'])
-    except JWTError as exc:
+    except InvalidTokenError as exc:
         raise ValueError(f'invalid reconnect token: {exc}')
     if payload.get('sid') != session_id:
         raise ValueError('wrong session')

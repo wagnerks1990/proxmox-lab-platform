@@ -1,6 +1,6 @@
 import pytest
 
-from app.api.routes import router
+from app.main import app
 from app.api.routers import pools
 from app.models.models import DesktopPool, VMTemplate, ProxmoxCluster, ProxmoxNode, ProxmoxClusterDefault
 from app.schemas.pools import PoolCreate
@@ -53,7 +53,7 @@ class FakeDB:
 
 
 def test_admin_pool_routes_registered():
-    paths = {r.path for r in router.routes}
+    paths = set(app.openapi()['paths'])
     assert '/api/admin/pools' in paths
     assert '/api/admin/pools/{id}' in paths
 

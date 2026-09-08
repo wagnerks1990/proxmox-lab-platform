@@ -1,14 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 
-function parseJwtExp(token) {
-  try {
-    const payload = JSON.parse(atob((token || '').split('.')[1] || ''))
-    return typeof payload.exp === 'number' ? payload.exp : null
-  } catch {
-    return null
-  }
-}
-
 const DEBUG = typeof window !== 'undefined' && window.localStorage?.getItem('debug_sse') === '1'
 const dlog = (...args) => { if (DEBUG) console.debug('[SSE]', ...args) }
 
@@ -44,23 +35,19 @@ export default function useEventStream(url = '/api/admin/events/stream') {
     }
 
     const tokenState = () => {
-      const token = localStorage.getItem('token') || ''
-      const exp = parseJwtExp(token)
-      setTokenExpiry(exp)
-      const state = !token ? 'auth_missing' : (exp && exp <= Math.floor(Date.now() / 1000) ? 'auth_expired' : 'ok')
-      dlog('token state', state, exp)
-      return { token, state }
+      setTokenExpiry(null)
+      return { state: 'ok' }
     }
 
-    const buildUrl = (token) => {
+    const buildUrl = () => {
       const separator = url.includes('?') ? '&' : '?'
       const organizationId = localStorage.getItem('organization_id') || ''
-      return `${url}${separator}token=${encodeURIComponent(token || '')}&organization_id=${encodeURIComponent(organizationId)}`
+      return `${url}${separator}organization_id=${encodeURIComponent(organizationId)}`
     }
 
     const connect = () => {
       if (stopped) return
-      const { token, state } = tokenState()
+      const { state } = tokenState()
       if (state !== 'ok') {
         transition(state)
         setStatus(state)
@@ -75,7 +62,7 @@ export default function useEventStream(url = '/api/admin/events/stream') {
       setConnected(false)
       setError(null)
 
-      const es = new EventSource(buildUrl(token))
+      const es = new EventSource(buildUrl(), { withCredentials: true })
       esRef.current = es
       setReadyState(es.readyState)
 

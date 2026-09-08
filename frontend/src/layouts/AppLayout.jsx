@@ -10,7 +10,7 @@ export default function AppLayout({ children, setUser, user }) {
   const [organizationReady, setOrganizationReady] = useState(false)
   const [organizationError, setOrganizationError] = useState('')
   const [organizationId, setOrganizationId] = useState(localStorage.getItem('organization_id') || '')
-  const logout = async () => { try { await logoutSession() } catch {} localStorage.removeItem('token'); localStorage.removeItem('organization_id'); setUser(false); nav('/') }
+  const logout = async () => { try { await logoutSession() } catch {} localStorage.removeItem('organization_id'); setUser(false); nav('/') }
   useEffect(() => {
     let active = true
     listOrganizations().then((rows) => {

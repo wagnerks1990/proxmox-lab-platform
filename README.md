@@ -31,7 +31,7 @@ not work for private repositories.
 - Frontend: React + Vite (Tailwind-ready)
 - Backend: FastAPI + SQLAlchemy
 - DB: PostgreSQL
-- Auth: revocable JWT sessions + bcrypt password hashing
+- Auth: revocable JWT sessions in HttpOnly same-site cookies + bcrypt password hashing
 
 ## Project structure
 - `backend/app/main.py` – FastAPI entrypoint
@@ -76,10 +76,11 @@ npm install
 npm run dev
 ```
 
-## Seed users
-All seeded users use password: `Password123!`
-- `teacher1` (Teacher)
-- `admin1` (Admin)
+## First administrator
+
+A fresh appliance has no default password. The installer prints a random,
+one-time bootstrap token used by the first-run page to create the initial
+administrator. See [`docs/operations/first-run.md`](docs/operations/first-run.md).
 
 ## Proxmox configuration
 Set in `backend/.env`:

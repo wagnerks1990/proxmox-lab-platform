@@ -43,4 +43,3 @@ export default function EventsPage() {
     </tbody></table> : null}
   </section>
 }
-

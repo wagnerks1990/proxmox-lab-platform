@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_role
@@ -25,14 +25,14 @@ def check_update(user=Depends(require_role('Admin')), db: Session = Depends(get_
     return DeploymentUpdateService(db).run('check', user.id)
 
 
-@router.post('/admin/system/update/apply')
+@router.post('/admin/system/update/apply', status_code=status.HTTP_202_ACCEPTED)
 def apply_update(payload: dict, user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
     if payload.get('confirmation') != 'APPLY':
         raise HTTPException(status_code=422, detail='confirmation must equal APPLY')
     return DeploymentUpdateService(db).run('apply', user.id, payload.get('target_ref'))
 
 
-@router.post('/admin/system/update/rollback')
+@router.post('/admin/system/update/rollback', status_code=status.HTTP_202_ACCEPTED)
 def rollback_update(payload: dict, user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
     if payload.get('confirmation') != 'ROLLBACK':
         raise HTTPException(status_code=422, detail='confirmation must equal ROLLBACK')

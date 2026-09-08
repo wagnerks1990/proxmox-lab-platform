@@ -40,6 +40,11 @@ and platform-admin isolation.
 
 ## Phase 2: Proxmox vertical slice
 
+Status: implemented in code for the single-VM pilot. Durable leased operations,
+atomic VMIDs, persisted UPIDs, bounded retries, status reconciliation, and
+verified deletion are present. Live restart/failure injection against the lab
+cluster remains the exit test.
+
 - cluster configuration and least-privilege token validation;
 - typed Proxmox adapter and deterministic fake server;
 - inventory import and managed-resource tags;
@@ -55,8 +60,9 @@ and an end-to-end test completes the lifecycle against the lab cluster.
 
 Status: in progress. Class, roster, blueprint, scheduled run, explicit
 assignment, per-student slot quota, student assignment view, and server-side
-schedule/access enforcement are implemented. CSV roster import, bulk durable
-VM operations, extension, reset, and verified cleanup remain.
+schedule/access enforcement are implemented. Bulk power operations and verified
+expiration cleanup are implemented. CSV roster import, extension, snapshot,
+reset, and rebuild remain.
 
 - class, enrollment, lab blueprint, lab run, and assignment models (implemented);
 - teacher-scoped class and roster management (implemented in the Classroom GUI);
@@ -69,6 +75,10 @@ Exit criteria: one teacher can conduct a complete lab while another teacher and
 all students remain correctly isolated.
 
 ## Phase 4: console and sessions
+
+Status: partial. Same-origin server-brokered noVNC and key-based SSH terminal
+routes are implemented without tickets or JWTs in URLs. Per-assignment keys,
+Guacamole, rotation, reconnect testing, and live browser acceptance remain.
 
 - Compose-managed Guacamole and guacd;
 - short-lived server-side launch grants;
@@ -106,6 +116,11 @@ Exit criteria: AI can be disabled with no loss of core functionality, and no AI
 path can bypass normal authorization or durable job execution.
 
 ## Phase 7: release engineering
+
+Status: partial. The installer now completes first-admin enrollment and the
+updater uses exact checked SHAs, asynchronous host work, PostgreSQL backup,
+readiness gating, and rollback. TLS, signed release defaults, off-host backup,
+restore drills, compatibility manifests, and workflow probes remain.
 
 - complete Docker Compose installer;
 - first-run wizard;

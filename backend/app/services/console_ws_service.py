@@ -40,10 +40,9 @@ class ConsoleWsService:
             await websocket.accept(); await websocket.send_text('ERROR: No VM IP address found. Install/enable QEMU guest agent or manually set assigned_ip.'); await websocket.close(code=1000); return
 
         username = vm.ssh_username or settings.lab_vm_ssh_username or vm.default_username or 'student'
-        password = settings.lab_vm_ssh_password
         port = vm.ssh_port or 22
-        if not password:
-            await websocket.accept(); await websocket.send_text('ERROR: LAB_VM_SSH_PASSWORD is not configured on backend.'); await websocket.close(code=1000); return
+        if not settings.lab_vm_ssh_private_key_path or not settings.lab_vm_ssh_known_hosts:
+            await websocket.accept(); await websocket.send_text('ERROR: SSH requires LAB_VM_SSH_PRIVATE_KEY_PATH and LAB_VM_SSH_KNOWN_HOSTS.'); await websocket.close(code=1000); return
 
         await websocket.accept()
         self.db.add(AuditLog(organization_id=vm.organization_id, actor_id=user.id, action='ssh_ws_launch', target_type='student_vm', target_id=str(vm.vmid))); safe_commit(self.db)
@@ -56,7 +55,7 @@ class ConsoleWsService:
         svc.heartbeat(session.id)
 
         try:
-            async with asyncssh.connect(host, port=port, username=username, password=password, known_hosts=None) as conn:
+            async with asyncssh.connect(host, port=port, username=username, client_keys=[settings.lab_vm_ssh_private_key_path], known_hosts=settings.lab_vm_ssh_known_hosts) as conn:
                 process = await conn.create_process(term_type='xterm', term_size=(24, 120))
                 async def to_ws():
                     while not process.stdout.at_eof():
@@ -100,15 +99,24 @@ class ConsoleWsService:
         svc.mark_active(session.id)
         svc.heartbeat(session.id)
         path = f"/api2/json/nodes/{vm.proxmox_node}/qemu/{vm.vmid}/vncwebsocket?port={port}&vncticket={ticket}"
-        base = settings.proxmox_base_url.replace('/api2/json', '')
+        base = self.proxmox.base_url.replace('/api2/json', '')
         ws_url = base.replace('https://', 'wss://').replace('http://', 'ws://') + path
         try:
-            async with websockets.connect(ws_url, ssl=settings.proxmox_verify_ssl) as pmx:
+            async with websockets.connect(ws_url, ssl=self.proxmox.verify_ssl) as pmx:
                 async def c2p():
-                    while True: await pmx.send(await websocket.receive_text())
+                    while True:
+                        message = await websocket.receive()
+                        if message.get('bytes') is not None:
+                            await pmx.send(message['bytes'])
+                        elif message.get('text') is not None:
+                            await pmx.send(message['text'])
                 async def p2c():
                     while True:
-                        data = await pmx.recv(); await websocket.send_text(data if isinstance(data, str) else data.decode('utf-8', 'ignore'))
+                        data = await pmx.recv()
+                        if isinstance(data, str):
+                            await websocket.send_text(data)
+                        else:
+                            await websocket.send_bytes(data)
                 t1 = asyncio.create_task(c2p()); t2 = asyncio.create_task(p2c())
                 done, pending = await asyncio.wait({t1, t2}, return_when=asyncio.FIRST_COMPLETED)
                 for t in pending: t.cancel()

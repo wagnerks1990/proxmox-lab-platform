@@ -1,28 +1,62 @@
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.orm import Session
 
 from app.services.rbac import get_role_name
 from app.db.session import get_db
 from app.models.models import AuthSession
-from app.schemas.auth import LoginRequest, PasswordChangeRequest, SessionResponse, TokenResponse, UserResponse
+from app.schemas.auth import BootstrapAdminRequest, LoginRequest, PasswordChangeRequest, SessionResponse, TokenResponse, UserResponse
 from app.api.deps import get_authenticated_user, get_current_auth_session
 from app.services.audit_service import record_audit_event
 from app.services.auth_service import change_password, login_user, revoke_session
+from app.services.bootstrap_service import bootstrap_required, create_first_admin
+from app.core.config import settings
 
 router = APIRouter()
 
 
+@router.get('/bootstrap/status')
+def bootstrap_status(db: Session = Depends(get_db)):
+    return {'bootstrap_required': bootstrap_required(db), 'token_configured': bool(settings.bootstrap_admin_token)}
+
+
+def _set_session_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        settings.auth_cookie_name,
+        token,
+        max_age=settings.access_token_expire_minutes * 60,
+        httponly=True,
+        secure=settings.auth_cookie_secure,
+        samesite='strict',
+        path='/',
+    )
+
+
+@router.post('/bootstrap/admin', response_model=TokenResponse)
+def bootstrap_admin(data: BootstrapAdminRequest, response: Response, request: Request, db: Session = Depends(get_db)):
+    _user, access_token = create_first_admin(
+        db,
+        token=data.token,
+        username=data.username,
+        email=data.email,
+        password=data.password,
+    )
+    _set_session_cookie(response, access_token)
+    return TokenResponse(access_token=access_token)
+
+
 @router.post('/auth/login', response_model=TokenResponse)
-def login(data: LoginRequest, request: Request, db: Session = Depends(get_db)):
+def login(data: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
     client_ip = request.client.host if request.client else None
-    return TokenResponse(access_token=login_user(
+    token = login_user(
         db,
         data.username,
         data.password,
         client_ip=client_ip,
         user_agent=request.headers.get('user-agent'),
         request_id=getattr(request.state, 'request_id', None),
-    ))
+    )
+    _set_session_cookie(response, token)
+    return TokenResponse(access_token=token)
 
 
 @router.get('/auth/me', response_model=UserResponse)
@@ -39,15 +73,18 @@ def me(user=Depends(get_authenticated_user)):
 
 
 @router.post('/auth/change-password', response_model=TokenResponse)
-def update_password(data: PasswordChangeRequest, user=Depends(get_authenticated_user), db: Session = Depends(get_db)):
-    return TokenResponse(access_token=change_password(db, user, data.current_password, data.new_password))
+def update_password(data: PasswordChangeRequest, response: Response, user=Depends(get_authenticated_user), db: Session = Depends(get_db)):
+    token = change_password(db, user, data.current_password, data.new_password)
+    _set_session_cookie(response, token)
+    return TokenResponse(access_token=token)
 
 
 @router.post('/auth/logout', status_code=204)
-def logout(session: AuthSession = Depends(get_current_auth_session), db: Session = Depends(get_db)):
+def logout(response: Response, session: AuthSession = Depends(get_current_auth_session), db: Session = Depends(get_db)):
     revoke_session(db, session, reason='logout')
     record_audit_event(db, actor_id=session.user_id, action='identity.logout', target_type='auth_session', target_id=str(session.id))
     db.commit()
+    response.delete_cookie(settings.auth_cookie_name, path='/', samesite='strict')
 
 
 @router.get('/auth/sessions', response_model=list[SessionResponse])

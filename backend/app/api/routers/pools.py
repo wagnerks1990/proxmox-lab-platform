@@ -198,7 +198,22 @@ def pool_members(id: int, _user=Depends(get_current_user), db: Session = Depends
     row = db.query(DesktopPool).filter(DesktopPool.id == id, DesktopPool.organization_id == organization.id).first()
     if not row:
         raise HTTPException(status_code=404, detail='Pool not found')
-    return ApiEnvelope(success=True, data=[])
+    template = db.query(VMTemplate).filter(
+        VMTemplate.organization_id == organization.id,
+        VMTemplate.source_vmid == row.template_vmid,
+    ).first() if row.template_vmid else None
+    members = [] if not template else db.query(StudentVM).filter(
+        StudentVM.organization_id == organization.id,
+        StudentVM.template_id == template.id,
+    ).order_by(StudentVM.id).all()
+    return ApiEnvelope(success=True, data=[{
+        'id': vm.id,
+        'vmid': vm.vmid,
+        'vm_name': vm.vm_name,
+        'status': vm.status,
+        'proxmox_node': vm.proxmox_node,
+        'owner_id': vm.owner_id,
+    } for vm in members])
 
 
 @router.get('/pools/{id}/readiness', response_model=ApiEnvelope[dict])

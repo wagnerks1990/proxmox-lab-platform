@@ -1,4 +1,3 @@
-import asyncio
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -119,16 +118,12 @@ async def assets_readiness(_user=Depends(require_role('Teacher', 'Admin')), db: 
 @router.post('/admin/proxmox/assets/sync/iso')
 async def sync_iso(payload: SyncIsoRequest, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
     jobs = await AssetSyncService(db).enqueue_iso(payload.filename, payload.storage_id, payload.source_url, payload.target_nodes)
-    for j in jobs:
-        asyncio.create_task(AssetSyncService.process_job(j.id))
     return {'jobs': [{'job_id': j.id, 'state': j.state, 'method': j.method, 'target_node': j.target_node, 'proxmox_upid': j.proxmox_upid} for j in jobs]}
 
 
 @router.post('/admin/proxmox/assets/sync/ct-template')
 async def sync_ct_template(payload: SyncCtTemplateRequest, _user=Depends(require_role('Admin')), db: Session = Depends(get_db)):
     jobs = await AssetSyncService(db).enqueue_ct_template(payload.filename, payload.storage_id, payload.source_url, payload.target_nodes)
-    for j in jobs:
-        asyncio.create_task(AssetSyncService.process_job(j.id))
     return {'jobs': [{'job_id': j.id, 'state': j.state, 'method': j.method, 'target_node': j.target_node, 'proxmox_upid': j.proxmox_upid} for j in jobs]}
 
 

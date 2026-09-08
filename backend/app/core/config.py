@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     login_max_failures: int = 5
     login_failure_window_seconds: int = 300
     login_lockout_seconds: int = 900
+    bootstrap_admin_token: str | None = None
+    auth_cookie_name: str = 'plp_session'
+    auth_cookie_secure: bool = False
+    cors_allowed_origins: str = ''
 
     proxmox_base_url: str
     proxmox_token_id: str
@@ -22,6 +26,8 @@ class Settings(BaseSettings):
 
     lab_vm_ssh_username: str | None = None
     lab_vm_ssh_password: str | None = None
+    lab_vm_ssh_known_hosts: str | None = None
+    lab_vm_ssh_private_key_path: str | None = None
 
     guacamole_internal_url: str | None = None
     guacamole_base_url: str = '/guacamole'
@@ -41,9 +47,13 @@ class Settings(BaseSettings):
     session_cleanup_interval_seconds: int = 60
     health_poll_interval_seconds: int = 60
     reconciliation_interval_seconds: int = 300
+    operation_poll_interval_seconds: int = 2
+    operation_lease_seconds: int = 180
+    operation_max_attempts: int = 3
 
     replay_store_backend: str = 'memory'
     worker_lock_backend: str = 'memory'
+    redis_url: str = 'redis://redis:6379/0'
     asset_source_node: str | None = None
     asset_source_iso_base_url: str | None = None
     asset_source_ct_base_url: str | None = None
@@ -57,6 +67,8 @@ class Settings(BaseSettings):
     updater_token: str | None = None
     updater_repository: str = 'https://github.com/wagnerks1990/proxmox-lab-platform.git'
     updater_poll_interval_seconds: int = 900
+    updater_allow_automatic: bool = False
+    updater_require_signed_commits: bool = False
 
 
 settings = Settings()

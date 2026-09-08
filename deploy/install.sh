@@ -59,6 +59,7 @@ POSTGRES_PASSWORD=$(openssl rand -hex 32)
 JWT_SECRET_KEY=$(openssl rand -hex 48)
 CONFIG_ENCRYPTION_KEY=$(openssl rand -hex 48)
 UPDATER_TOKEN=$(openssl rand -hex 48)
+BOOTSTRAP_ADMIN_TOKEN=$(openssl rand -hex 32)
 cat > .env <<EOF
 POSTGRES_DB=proxmox_lab
 POSTGRES_USER=proxmox_lab
@@ -66,10 +67,15 @@ POSTGRES_PASSWORD=$POSTGRES_PASSWORD
 JWT_SECRET_KEY=$JWT_SECRET_KEY
 CONFIG_ENCRYPTION_KEY=$CONFIG_ENCRYPTION_KEY
 UPDATER_TOKEN=$UPDATER_TOKEN
+BOOTSTRAP_ADMIN_TOKEN=$BOOTSTRAP_ADMIN_TOKEN
 UPDATER_REPOSITORY=$REPOSITORY
 UPDATER_GID=$UPDATER_GID
 HTTP_PORT=8080
 PROXMOX_VERIFY_SSL=true
+AUTH_COOKIE_SECURE=false
+CORS_ALLOWED_ORIGINS=
+UPDATER_ALLOW_AUTOMATIC=false
+UPDATER_REQUIRE_SIGNED_COMMITS=false
 EOF
 chmod 0600 .env
 
@@ -91,4 +97,7 @@ until curl -fsS http://127.0.0.1:8080/api/ready >/dev/null; do
 done
 
 echo "Proxmox Lab Platform is available at http://$(hostname -I | awk '{print $1}'):8080"
-echo "Configure Proxmox credentials in the web administration interface."
+echo "Open the site and create the first administrator with this one-time bootstrap token:"
+echo "$BOOTSTRAP_ADMIN_TOKEN"
+echo "The token is also stored in $INSTALL_ROOT/app/.env (mode 0600). Remove it after enrollment."
+echo "Then configure Proxmox credentials in the web administration interface."

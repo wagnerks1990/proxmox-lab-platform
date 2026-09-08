@@ -7,7 +7,7 @@
 
 ## Backend refactor policy
 - Keep API paths backward-compatible during route splitting.
-- Move logic from `routes_legacy.py` into modular route files incrementally.
+- Keep route logic in feature routers under `backend/app/api/routers`; the legacy router has been removed.
 - Use service-layer modules to avoid route bloat.
 
 ## Proxmox-only scope
