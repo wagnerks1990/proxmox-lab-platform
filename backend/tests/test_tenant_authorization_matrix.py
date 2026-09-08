@@ -7,7 +7,7 @@ from app.api.routers import vms
 from app.db.session import Base, get_db
 from app.main import app
 from app.models.models import Class, Group, Organization, OrganizationMembership, Role, StudentVM, User, VMTemplate
-from app.services.security import create_access_token
+from app.services.auth_service import issue_session
 
 
 class _FakeProxmox:
@@ -15,15 +15,22 @@ class _FakeProxmox:
         return {'status': 'stopped'}
 
 
-def _headers(username: str, organization_id: int) -> dict[str, str]:
+def _token(db, username: str) -> str:
+    user = db.query(User).filter(User.username == username).first()
+    token = issue_session(db, user)
+    db.commit()
+    return token
+
+
+def _headers(db, username: str, organization_id: int) -> dict[str, str]:
     return {
-        'Authorization': f'Bearer {create_access_token(username)}',
+        'Authorization': f'Bearer {_token(db, username)}',
         'X-Organization-ID': str(organization_id),
     }
 
 
-def _auth_headers(username: str) -> dict[str, str]:
-    return {'Authorization': f'Bearer {create_access_token(username)}'}
+def _auth_headers(db, username: str) -> dict[str, str]:
+    return {'Authorization': f'Bearer {_token(db, username)}'}
 
 
 def test_two_organization_http_authorization_matrix(monkeypatch):
@@ -80,29 +87,29 @@ def test_two_organization_http_authorization_matrix(monkeypatch):
     monkeypatch.setattr(vms, 'ProxmoxClient', _FakeProxmox)
     client = TestClient(app)
     try:
-        own_vms = client.get('/api/vms', headers=_headers('student-a', organization_a.id))
+        own_vms = client.get('/api/vms', headers=_headers(db, 'student-a', organization_a.id))
         assert own_vms.status_code == 200
         assert [row['vm_name'] for row in own_vms.json()] == ['a-own']
 
-        instructor_vms = client.get('/api/vms', headers=_headers('student-a', organization_b.id))
+        instructor_vms = client.get('/api/vms', headers=_headers(db, 'student-a', organization_b.id))
         assert instructor_vms.status_code == 200
         assert [row['vm_name'] for row in instructor_vms.json()] == ['b-visible-to-instructor']
 
-        assert client.get('/api/vms', headers=_headers('student-a', organization_c.id)).status_code == 403
-        assert client.get('/api/admin/templates', headers=_headers('student-a', organization_a.id)).status_code == 403
-        assert client.get('/api/admin/templates', headers=_headers('student-a', organization_b.id)).status_code == 200
+        assert client.get('/api/vms', headers=_headers(db, 'student-a', organization_c.id)).status_code == 403
+        assert client.get('/api/admin/templates', headers=_headers(db, 'student-a', organization_a.id)).status_code == 403
+        assert client.get('/api/admin/templates', headers=_headers(db, 'student-a', organization_b.id)).status_code == 200
 
-        own_classes = client.get('/api/admin/classes', headers=_headers('student-a', organization_b.id))
+        own_classes = client.get('/api/admin/classes', headers=_headers(db, 'student-a', organization_b.id))
         assert own_classes.status_code == 200
         assert [row['name'] for row in own_classes.json()['data']] == ['A instructor class']
 
-        assert client.get('/api/admin/groups', headers=_headers('student-a', organization_b.id)).status_code == 403
-        assert client.get('/api/admin/groups', headers=_headers('owner', organization_b.id)).status_code == 200
+        assert client.get('/api/admin/groups', headers=_headers(db, 'student-a', organization_b.id)).status_code == 403
+        assert client.get('/api/admin/groups', headers=_headers(db, 'owner', organization_b.id)).status_code == 200
 
-        created = client.post('/api/admin/organizations', headers=_auth_headers('platform-admin'), json={'name': 'New School', 'slug': 'new-school'})
+        created = client.post('/api/admin/organizations', headers=_auth_headers(db, 'platform-admin'), json={'name': 'New School', 'slug': 'new-school'})
         assert created.status_code == 201
         new_organization_id = created.json()['id']
-        members = client.get(f'/api/admin/organizations/{new_organization_id}/members', headers=_auth_headers('platform-admin'))
+        members = client.get(f'/api/admin/organizations/{new_organization_id}/members', headers=_auth_headers(db, 'platform-admin'))
         assert members.status_code == 200
         assert members.json() == [{
             'id': members.json()[0]['id'],
@@ -113,7 +120,7 @@ def test_two_organization_http_authorization_matrix(monkeypatch):
         }]
         last_owner_delete = client.delete(
             f'/api/admin/organizations/{new_organization_id}/members/{platform_admin.id}',
-            headers=_auth_headers('platform-admin'),
+            headers=_auth_headers(db, 'platform-admin'),
         )
         assert last_owner_delete.status_code == 409
     finally:

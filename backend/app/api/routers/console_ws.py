@@ -1,10 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, WebSocket
-from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
-from app.services.rbac import get_role_name
+from app.api.deps import get_user_from_token
 from app.db.session import get_db
-from app.core.config import settings
 from app.models.models import StudentVM, User
 from app.services.console_ws_service import ConsoleWsService
 from app.services.organization_access import OrganizationContext, organization_role_at_least, resolve_organization_context
@@ -16,12 +14,10 @@ def _get_user_from_ws_token(db: Session, token: str | None):
     if not token:
         return None
     try:
-        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
-        username = payload.get('sub')
-    except JWTError:
+        user = get_user_from_token(token, db)
+    except HTTPException:
         return None
-    user = db.query(User).filter(User.username == username).first()
-    if not user or not getattr(user, 'is_active', True) or not get_role_name(user):
+    if getattr(user, 'force_password_change', False):
         return None
     return user
 

@@ -50,7 +50,16 @@ guest or the control plane.
 - Root credentials are never persisted.
 - VM access uses per-assignment or short-lived credentials, never one shared password.
 - Browser clients never receive Proxmox API credentials.
-- JWTs, console tickets, reconnect grants, and provider keys are not placed in query strings.
+- Long-term JWTs, console tickets, reconnect grants, and provider keys must not
+  be placed in query strings. The current SSE and WebSocket compatibility paths
+  still carry a revocable access token in the query string; replacing those
+  paths with short-lived, audience-bound grants is required before production.
+- Access JWTs are bound to revocable database sessions and a per-user token
+  version. Logout, password reset, username change, and account disablement
+  invalidate affected sessions immediately.
+- Accounts awaiting a forced password change cannot access non-identity APIs.
+- Failed login counters are persistent and keyed by a hash of username plus
+  source address; attempted passwords are never retained.
 - Secrets are redacted from structured logs, job payloads, audit details, and AI prompts.
 - The encryption key is backed up separately from, but consistently with, the database.
 

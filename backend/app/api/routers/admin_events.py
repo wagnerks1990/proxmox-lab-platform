@@ -77,6 +77,8 @@ async def events_stream(request: Request, db: Session = Depends(get_db)):
     if not token:
         raise HTTPException(status_code=401, detail='Unauthorized')
     user = get_user_from_token(token, db)
+    if getattr(user, 'force_password_change', False):
+        raise HTTPException(status_code=403, detail='Password change required')
     requested = request.headers.get('x-organization-id') or request.query_params.get('organization_id')
     try:
         organization = resolve_organization_context(db, user, int(requested) if requested else None)

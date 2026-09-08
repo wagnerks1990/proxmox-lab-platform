@@ -11,6 +11,20 @@ class TokenResponse(BaseModel):
     token_type: str = 'bearer'
 
 
+class PasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class SessionResponse(BaseModel):
+    id: int
+    current: bool = False
+    client_ip: str | None = None
+    user_agent: str | None = None
+    created_at: str | None = None
+    expires_at: str | None = None
+
+
 class UserResponse(BaseModel):
     id: int
     username: str
@@ -18,3 +32,4 @@ class UserResponse(BaseModel):
     role: str
     role_id: int | None = None
     is_active: bool = True
+    force_password_change: bool = False

@@ -11,7 +11,8 @@ from app.db.session import get_db
 from app.models.models import User, VMTemplate, Permission, StudentVM, AuditLog, ConnectionLaunch, VMConsoleConnection, VMPool, LabGroup, LabGroupMember, ProtocolSettings, ProxmoxCluster, ProxmoxNode, DesktopPool, UserGroup, UserGroupMember, AuditEvent, Role
 from app.schemas.auth import LoginRequest, TokenResponse, UserResponse
 from app.schemas.vm import TemplateResponse, CreateVMRequest, VMResponse, VMCreateResponse, AuditLogResponse, TemplateCreateRequest, TemplateUpdateRequest, ConnectionLaunchResponse, PoolBase, PoolResponse, GroupResponse, GroupCreateRequest, GroupUpdateRequest, GroupMemberRequest, ProtocolSettingsResponse, ProxmoxClusterBase, ProxmoxClusterResponse, ProxmoxNodeBase, ProxmoxNodeResponse, DesktopPoolBase, DesktopPoolResponse
-from app.services.security import verify_password, create_access_token, hash_password
+from app.services.security import hash_password
+from app.services.auth_service import login_user
 from app.services.proxmox import ProxmoxClient
 from app.services.protocol import ProtocolService
 from app.services.guacamole import check_guacamole_reachable, guacamole_configured, build_launch_payload, GuacamoleError
@@ -133,12 +134,7 @@ async def health(db: Session = Depends(get_db)):
 
 @router.post('/auth/login', response_model=TokenResponse)
 def login(data: LoginRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == data.username).first()
-    if not user or not verify_password(data.password, user.password_hash):
-        raise HTTPException(status_code=401, detail='Invalid credentials')
-    if not user.is_active:
-        raise HTTPException(status_code=403, detail='User account is disabled')
-    return TokenResponse(access_token=create_access_token(user.username))
+    return TokenResponse(access_token=login_user(db, data.username, data.password))
 
 @router.get('/auth/me', response_model=UserResponse)
 def me(user: User = Depends(get_current_user)):

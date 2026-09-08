@@ -73,12 +73,39 @@ class User(Base):
     display_name = Column(String(120), nullable=True)
     is_active = Column(Boolean, default=True)
     force_password_change = Column(Boolean, default=False)
+    token_version = Column(Integer, nullable=False, default=1)
+    password_changed_at = Column(DateTime, nullable=True)
     last_login_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     role = Column(String(50), nullable=True)  # deprecated: compatibility only
 
     role_rel = relationship('Role', foreign_keys=[role_id])
+
+
+class AuthSession(Base):
+    __tablename__ = 'auth_sessions'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    token_id = Column(String(64), unique=True, nullable=False, index=True)
+    user_agent = Column(String(255), nullable=True)
+    client_ip = Column(String(64), nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    last_seen_at = Column(DateTime, server_default=func.now(), nullable=False)
+    expires_at = Column(DateTime, nullable=False, index=True)
+    revoked_at = Column(DateTime, nullable=True, index=True)
+    revoke_reason = Column(String(64), nullable=True)
+
+    user = relationship('User', foreign_keys=[user_id])
+
+
+class AuthLoginAttempt(Base):
+    __tablename__ = 'auth_login_attempts'
+    key_hash = Column(String(64), primary_key=True)
+    failures = Column(Integer, nullable=False, default=0)
+    first_failure_at = Column(DateTime, nullable=False)
+    blocked_until = Column(DateTime, nullable=True, index=True)
+    updated_at = Column(DateTime, server_default=func.now(), nullable=False)
 
 
 class VMTemplate(Base):
@@ -128,10 +155,15 @@ class AuditLog(Base):
     __tablename__ = 'audit_logs'
     id = Column(Integer, primary_key=True)
     organization_id = Column(Integer, ForeignKey('organizations.id'), nullable=True, index=True)
-    actor_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    actor_id = Column(Integer, ForeignKey('users.id'), nullable=True)
     action = Column(String(100), nullable=False)
     target_type = Column(String(50), nullable=False)
     target_id = Column(String(100), nullable=False)
+    outcome = Column(String(32), nullable=False, default='success')
+    message = Column(String(512), nullable=True)
+    request_id = Column(String(100), nullable=True, index=True)
+    source_ip = Column(String(64), nullable=True)
+    metadata_json = Column(String, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
 

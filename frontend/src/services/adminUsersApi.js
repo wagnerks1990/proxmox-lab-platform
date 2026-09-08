@@ -9,3 +9,4 @@ export const deleteUser = (id, force=false) => api.delete(`/admin/users/${id}`, 
 export const getUserPermissions = (id) => api.get(`/admin/users/${id}/permissions`).then(r => r.data)
 export const patchUserPermissions = (id, template_ids) => api.patch(`/admin/users/${id}/permissions`, { template_ids }).then(r => r.data)
 export const getUserActivity = (id) => api.get(`/admin/users/${id}/activity`).then(r => r.data)
+export const revokeUserSessions = (id) => api.post(`/admin/users/${id}/revoke-sessions`).then(r => r.data)

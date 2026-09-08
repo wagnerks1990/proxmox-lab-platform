@@ -50,6 +50,12 @@
 - Global platform roles do not replace tenant membership. Global `Admin` is the
   explicit break-glass exception and must still select an organization.
 - Enforce RBAC on backend endpoints.
+- Access tokens must remain bound to a live `auth_sessions` row and the current
+  user `token_version`; do not add stateless-token bypasses for tests or tools.
+- Password, username, activation, and credential-recovery changes must preserve
+  the documented session-revocation behavior.
+- Identity audit metadata must never contain plaintext usernames from failed
+  unknown-user logins, passwords, hashes, tokens, or other credentials.
 
 ## VM/API rules
 - VM route identity should use the app database VM id unless explicitly documented otherwise.
