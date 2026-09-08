@@ -53,11 +53,16 @@ and an end-to-end test completes the lifecycle against the lab cluster.
 
 ## Phase 3: classroom vertical slice
 
-- class, enrollment, lab blueprint, lab run, and assignment models;
-- teacher-scoped class and roster management;
+Status: in progress. Class, roster, blueprint, scheduled run, explicit
+assignment, per-student slot quota, student assignment view, and server-side
+schedule/access enforcement are implemented. CSV roster import, bulk durable
+VM operations, extension, reset, and verified cleanup remain.
+
+- class, enrollment, lab blueprint, lab run, and assignment models (implemented);
+- teacher-scoped class and roster management (implemented in the Classroom GUI);
 - CSV import and optional join codes;
-- student active-lab and assigned-resource views;
-- quotas, schedules, access flags, and expiration;
+- student active-lab and assigned-resource views (implemented for VM assignments);
+- quotas, schedules, access flags, and expiration (authorization enforcement implemented);
 - bulk provision, start, stop, extend, reset, and end-lab actions.
 
 Exit criteria: one teacher can conduct a complete lab while another teacher and

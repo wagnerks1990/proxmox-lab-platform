@@ -6,9 +6,7 @@ from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.models import (
     AuditLog,
-    GroupMembership,
-    GroupTemplatePermission,
-    Permission,
+    LabAssignment,
     ProxmoxCluster,
     ProxmoxClusterDefault,
     ProxmoxNode,
@@ -22,11 +20,12 @@ from app.services.placement import choose_cluster_node, PlacementError
 from app.services.proxmox_bootstrap import ProxmoxBootstrapService
 from app.architecture.events import bus, DomainEvent, VM_STARTED
 from app.services.organization_access import OrganizationContext, enforce_organization_role, get_current_organization, organization_role_at_least
+from app.services.classroom_access import active_assignment_for_vm, assignment_for_provisioning, enforce_student_vm_operation
 
 router = APIRouter()
 
 
-def _get_vm_for_user(db: Session, user: User, vm_id: int, organization: OrganizationContext):
+def _get_vm_for_user(db: Session, user: User, vm_id: int, organization: OrganizationContext, operation: str = 'view'):
     q = db.query(StudentVM).filter(StudentVM.id == vm_id, StudentVM.organization_id == organization.id)
     if organization.role == 'student':
         q = q.filter(StudentVM.owner_id == user.id)
@@ -35,6 +34,8 @@ def _get_vm_for_user(db: Session, user: User, vm_id: int, organization: Organiza
     vm = q.first()
     if not vm:
         raise HTTPException(status_code=404, detail='VM not found')
+    if organization.role == 'student':
+        enforce_student_vm_operation(db, user_id=user.id, organization_id=organization.id, vm=vm, operation=operation)
     return vm
 
 
@@ -46,6 +47,22 @@ async def list_vms(user: User = Depends(get_current_user), db: Session = Depends
     elif not organization_role_at_least(organization, 'instructor'):
         raise HTTPException(status_code=403, detail='A valid role is required')
     rows = q.all()
+    if organization.role == 'student':
+        visible = []
+        for vm in rows:
+            access = active_assignment_for_vm(db, user_id=user.id, organization_id=organization.id, vm_id=vm.id)
+            if not access:
+                continue
+            assignment, _run, lab = access
+            vm.allowed_stop = lab.student_can_power_off
+            vm.allowed_delete = False
+            vm.allowed_terminal = lab.terminal_enabled
+            vm.allowed_console = lab.console_enabled
+            vm.allowed_rdp = lab.rdp_enabled
+            vm.allowed_spice = lab.console_enabled
+            vm.assignment_expires_at = assignment.expires_at
+            visible.append(vm)
+        rows = visible
     proxmox = ProxmoxClient()
     for vm in rows:
         try:
@@ -65,20 +82,15 @@ async def create_vm(payload: CreateVMRequest, user: User = Depends(get_current_u
     if not template.enabled:
         raise HTTPException(status_code=409, detail='Template is disabled')
 
+    assignment = None
     if organization.role == 'student':
-        direct = db.query(Permission).filter(
-            Permission.user_id == user.id,
-            Permission.template_id == template.id,
-        ).first()
-        group = db.query(GroupTemplatePermission).join(
-            GroupMembership,
-            GroupMembership.group_id == GroupTemplatePermission.group_id,
-        ).filter(
-            GroupMembership.user_id == user.id,
-            GroupTemplatePermission.template_id == template.id,
-        ).first()
-        if not direct and not group:
-            raise HTTPException(status_code=403, detail='Template is not assigned to this user')
+        assignment, _run = assignment_for_provisioning(
+            db,
+            assignment_id=payload.assignment_id,
+            user_id=user.id,
+            organization_id=organization.id,
+            template_id=template.id,
+        )
     elif not organization_role_at_least(organization, 'instructor'):
         raise HTTPException(status_code=403, detail='A valid role is required')
 
@@ -172,13 +184,16 @@ async def create_vm(payload: CreateVMRequest, user: User = Depends(get_current_u
         raise HTTPException(status_code=502, detail={'success': False, 'error': str(exc), 'proxmox_node': selected_node, 'requested_vmid': vmid, 'selected_template': template.source_vmid, 'placement_reason': placement_reason})
 
     db.add(AuditLog(organization_id=organization.id, actor_id=user.id, action='vm.create.placement', target_type='student_vm', target_id=str(vm.id)))
+    if assignment:
+        assignment.student_vm_id = vm.id
+        assignment.status = 'ready'
     db.commit(); db.refresh(vm)
     return VMCreateResponse(**vm.__dict__, message=message)
 
 
 @router.post('/vms/{id}/start', response_model=VMResponse)
 async def start_vm(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
-    vm = _get_vm_for_user(db, user, id, organization)
+    vm = _get_vm_for_user(db, user, id, organization, 'start')
     await ProxmoxClient().start_vm(vm.proxmox_node, vm.vmid)
     vm.status = (await ProxmoxClient().get_vm_status(vm.proxmox_node, vm.vmid)).get('status', vm.status)
     db.add(AuditLog(organization_id=organization.id, actor_id=user.id, action='vm.start', target_type='student_vm', target_id=str(vm.id)))
@@ -189,7 +204,7 @@ async def start_vm(id: int, user: User = Depends(get_current_user), db: Session 
 
 @router.post('/vms/{id}/stop', response_model=VMResponse)
 async def stop_vm(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
-    vm = _get_vm_for_user(db, user, id, organization)
+    vm = _get_vm_for_user(db, user, id, organization, 'stop')
     await ProxmoxClient().stop_vm(vm.proxmox_node, vm.vmid)
     vm.status = (await ProxmoxClient().get_vm_status(vm.proxmox_node, vm.vmid)).get('status', vm.status)
     db.add(AuditLog(organization_id=organization.id, actor_id=user.id, action='vm.stop', target_type='student_vm', target_id=str(vm.id)))
@@ -199,7 +214,7 @@ async def stop_vm(id: int, user: User = Depends(get_current_user), db: Session =
 
 @router.post('/vms/{id}/reboot', response_model=VMResponse)
 async def reboot_vm(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
-    vm = _get_vm_for_user(db, user, id, organization)
+    vm = _get_vm_for_user(db, user, id, organization, 'reboot')
     await ProxmoxClient().reboot_vm(vm.proxmox_node, vm.vmid)
     vm.status = (await ProxmoxClient().get_vm_status(vm.proxmox_node, vm.vmid)).get('status', vm.status)
     db.add(AuditLog(organization_id=organization.id, actor_id=user.id, action='vm.reboot', target_type='student_vm', target_id=str(vm.id)))
@@ -209,7 +224,7 @@ async def reboot_vm(id: int, user: User = Depends(get_current_user), db: Session
 
 @router.get('/vms/{id}/status', response_model=VMResponse)
 async def refresh_vm_status(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
-    vm = _get_vm_for_user(db, user, id, organization)
+    vm = _get_vm_for_user(db, user, id, organization, 'view')
     try:
         vm.status = (await ProxmoxClient().get_vm_status(vm.proxmox_node, vm.vmid)).get('status', vm.status)
     except Exception:
@@ -220,7 +235,12 @@ async def refresh_vm_status(id: int, user: User = Depends(get_current_user), db:
 
 @router.delete('/vms/{id}', response_model=dict)
 async def delete_vm_record(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db), organization: OrganizationContext = Depends(get_current_organization)):
-    vm = _get_vm_for_user(db, user, id, organization)
+    vm = _get_vm_for_user(db, user, id, organization, 'delete')
+    assignment = db.query(LabAssignment).filter(LabAssignment.student_vm_id == vm.id).first()
+    if assignment:
+        assignment.student_vm_id = None
+        if assignment.status == 'ready':
+            assignment.status = 'assigned'
     db.delete(vm)
     db.commit()
     return {'ok': True, 'message': 'App VM record removed.'}
@@ -247,6 +267,11 @@ async def delete_app_record_admin(id: int, force: bool = False, _user: User = De
                 raise HTTPException(status_code=502, detail='Unable to verify Proxmox VM state; refusing app-record delete until Proxmox check succeeds')
 
     db.add(AuditLog(organization_id=organization.id, actor_id=_user.id, action='vm.app_record.delete', target_type='student_vm', target_id=str(vm.id)))
+    assignment = db.query(LabAssignment).filter(LabAssignment.student_vm_id == vm.id).first()
+    if assignment:
+        assignment.student_vm_id = None
+        if assignment.status == 'ready':
+            assignment.status = 'assigned'
     db.delete(vm)
     db.commit()
     return {

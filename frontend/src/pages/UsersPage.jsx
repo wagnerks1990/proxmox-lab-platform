@@ -1,21 +1,17 @@
 import { useEffect, useState } from 'react'
-import api from '../services/api'
-import { listUsers, createUser, patchUser, patchUserPassword, patchUserActivate, deleteUser, getUserPermissions, patchUserPermissions, getUserActivity, revokeUserSessions } from '../services/adminUsersApi'
+import { listUsers, createUser, patchUser, patchUserPassword, patchUserActivate, deleteUser, getUserActivity, revokeUserSessions } from '../services/adminUsersApi'
 
 const empty = { username:'', email:'', display_name:'', role:'Student', password:'', is_active:true, force_password_change:true }
 
 export default function UsersPage(){
   const [rows,setRows]=useState([])
-  const [templates,setTemplates]=useState([])
   const [form,setForm]=useState(empty)
   const [editing,setEditing]=useState(null)
   const [msg,setMsg]=useState('')
-  const [permUser,setPermUser]=useState(null)
-  const [permIds,setPermIds]=useState([])
   const [activity,setActivity]=useState(null)
 
   const load = ()=> listUsers().then(setRows).catch(()=>setRows([]))
-  useEffect(()=>{ load(); api.get('/admin/templates').then(r=>setTemplates(Array.isArray(r.data)?r.data:[])).catch(()=>setTemplates([])) },[])
+  useEffect(()=>{ load() },[])
 
   const save = async ()=> {
     try{
@@ -27,7 +23,7 @@ export default function UsersPage(){
 
   return <section>
     <h2>Users</h2>
-    <p className='muted'>Admin user, role, password, and template permission management.</p>
+    <p className='muted'>Platform account, role, password, and session management. Student VM access is assigned from Classroom.</p>
     {msg?<p className='muted'>{msg}</p>:null}
     <div className='panel'><h3>{editing?'Edit User':'Create User'}</h3><div className='group'>
       <input className='input' placeholder='Username' value={form.username} onChange={e=>setForm({...form,username:e.target.value})}/>
@@ -46,12 +42,10 @@ export default function UsersPage(){
         <button onClick={async()=>{const np=prompt('New password'); if(!np) return; await patchUserPassword(u.id,{password:np, force_password_change:true}); setMsg('Password reset.')}}>Reset Password</button>
         <button onClick={async()=>{const result=await revokeUserSessions(u.id); setMsg(`${result.sessions_revoked} session(s) revoked.`)}}>Revoke Sessions</button>
         <button onClick={async()=>{await patchUserActivate(u.id,!u.is_active); await load()}}>{u.is_active?'Deactivate':'Activate'}</button>
-        <button onClick={async()=>{const p=await getUserPermissions(u.id); setPermUser(u); setPermIds(p.direct_template_ids||[])}}>Permissions</button>
         <button onClick={async()=>{setActivity(await getUserActivity(u.id))}}>Activity</button>
         <button className='btn-danger' onClick={async()=>{if(!confirm('Delete user? If dependencies exist, backend may deactivate instead.')) return; const r=await deleteUser(u.id); setMsg(r.message||'Delete/deactivate completed.'); await load()}}>Delete/Deactivate</button>
       </div></td></tr>)}
     </tbody></table>
-    {permUser?<div className='panel'><h3>Permissions: {permUser.username}</h3>{templates.length===0?<p className='muted'>Import Proxmox templates before assigning template permissions.</p>:null}<div className='group'>{templates.map(t=><label key={t.id}><input type='checkbox' checked={permIds.includes(t.id)} onChange={e=>setPermIds(e.target.checked?[...permIds,t.id]:permIds.filter(x=>x!==t.id))}/>{t.name} (VMID {t.source_vmid})</label>)}</div><button onClick={async()=>{await patchUserPermissions(permUser.id,permIds); setMsg('Permissions saved.')}}>Save Permissions</button></div>:null}
     {activity?<div className='panel'><h3>User Activity</h3><p className='muted'>VMs: {activity.vm_count} | Sessions: {activity.session_count} | Audit logs: {activity.audit_log_count} | Last login: {activity.last_login_at||'-'}</p></div>:null}
   </section>
 }

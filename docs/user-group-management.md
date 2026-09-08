@@ -33,5 +33,8 @@ Development default may use `admin/admin` only for local/dev. Never use that in 
 
 ## Security
 - `password_hash` is never exposed by admin APIs.
+- Direct and group template-permission endpoints remain available for alpha
+  data migration, but they do not authorize V2 student provisioning. Use the
+  Classroom lab-run assignment workflow for student VM access.
 - Passwords are never logged or returned.
 - No Proxmox credentials/secrets are exposed in user/group management endpoints.
