@@ -31,7 +31,7 @@ not work for private repositories.
 - Frontend: React + Vite (Tailwind-ready)
 - Backend: FastAPI + SQLAlchemy
 - DB: PostgreSQL
-- Auth: JWT + bcrypt password hashing
+- Auth: revocable JWT sessions + bcrypt password hashing
 
 ## Project structure
 - `backend/app/main.py` – FastAPI entrypoint
@@ -41,25 +41,20 @@ not work for private repositories.
 - `backend/init.sql` – seed data
 - `frontend/src/main.jsx` – login + role dashboard + template list + VM create UI
 
-## First working features implemented
-- Login endpoint and JWT auth
-- Role loading (`Student`, `Teacher`, `Admin`)
-- Student-scoped template listing
-- VM list endpoint (student sees own; teacher/admin sees all)
-- VM provisioning endpoint via Proxmox clone/start API
-- Audit log write on VM creation
-- Frontend pages: Login, Dashboard, My VMs, Create VM
+## Working development features
 
-## API design (v1)
-- `POST /api/auth/login`
-- `GET /api/auth/me`
-- `GET /api/templates`
-- `GET /api/vms`
-- `POST /api/vms`
+- organization membership and tenant roles;
+- revocable login sessions, password lifecycle, and persistent login throttling;
+- instructor-scoped classes, rosters, lab blueprints, scheduled runs, and assignments;
+- student VM access gated by membership, enrollment, assignment, run window, and ownership;
+- template discovery/import, placement-aware VM provisioning, lifecycle controls, and reconciliation;
+- Docker Compose installation, health-gated GitHub updates, and rollback;
+- structured identity and classroom audit events;
+- source-controlled MkDocs wiki and CI validation.
 
-Planned next endpoints (not fully implemented yet):
-- start/stop/reboot/delete/status
-- admin user/class/permission/audit CRUD
+The current API is mounted at `/api` and `/v1/api` during the versioned
+transition. Interactive OpenAPI documentation is available at `/docs` on a
+running development installation.
 
 ## Setup
 1. Backend
@@ -98,7 +93,8 @@ The token is used only by backend service (`app/services/proxmox.py`) and never 
 ## Security notes
 - Passwords stored as bcrypt hashes.
 - All VM actions require JWT auth.
-- Student template access enforced with `permissions` table.
+- Student provisioning requires an active classroom assignment; legacy direct
+  and group template permissions are not sufficient.
 - VM create action logs to `audit_logs`.
 - Secret values sourced from environment variables.
 

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.db.session import get_db
-from app.models.models import Class, Enrollment, Lab, OrganizationMembership, User, DesktopPool
+from app.models.models import Class, Enrollment, Lab, LabRun, OrganizationMembership, User, DesktopPool
 from app.schemas.common import ApiEnvelope
 from app.schemas.classes_labs import (
     ClassCreate, ClassOut, ClassPatch, EnrollmentCreate, EnrollmentOut,
@@ -196,5 +196,7 @@ def delete_lab(id: int, _user=Depends(get_current_user), db: Session = Depends(g
     if not row:
         raise HTTPException(status_code=404, detail='Lab not found')
     _class_or_404(db, row.class_id, organization, _user)
+    if db.query(LabRun).filter(LabRun.lab_id == row.id).first():
+        raise HTTPException(status_code=409, detail='Cannot delete a lab with run history')
     db.delete(row); db.commit()
     return ApiEnvelope(success=True, data={'deleted': True, 'id': id})

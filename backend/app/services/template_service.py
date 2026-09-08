@@ -1,17 +1,22 @@
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
-from app.models.models import GroupMembership, GroupTemplatePermission, VMTemplate, Permission
+from app.models.models import LabAssignment, LabRun, VMTemplate
+from app.services.classroom_access import assignment_effectively_open
 
 
 def list_templates(db: Session, user, organization_id: int, organization_role: str):
     if organization_role in {'instructor', 'admin', 'owner'}:
         return db.query(VMTemplate).filter(VMTemplate.organization_id == organization_id).all()
-    direct_ids = [row.template_id for row in db.query(Permission).filter(Permission.user_id == user.id).all()]
-    group_ids = [row.template_id for row in db.query(GroupTemplatePermission).join(
-        GroupMembership,
-        GroupMembership.group_id == GroupTemplatePermission.group_id,
-    ).filter(GroupMembership.user_id == user.id).all()]
-    assigned_ids = set(direct_ids + group_ids)
+    assignments = db.query(LabAssignment).filter(
+        LabAssignment.organization_id == organization_id,
+        LabAssignment.user_id == user.id,
+        LabAssignment.status.in_(['assigned', 'ready']),
+    ).all()
+    assigned_ids = set()
+    for assignment in assignments:
+        run = db.query(LabRun).filter(LabRun.id == assignment.lab_run_id, LabRun.organization_id == organization_id).first()
+        if run and assignment_effectively_open(assignment, run):
+            assigned_ids.add(assignment.template_id)
     if not assigned_ids:
         return []
     return db.query(VMTemplate).filter(

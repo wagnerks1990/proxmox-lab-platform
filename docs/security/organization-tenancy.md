@@ -59,7 +59,7 @@ Tenant roles are ordered by authority:
 
 | Role | Current authority |
 |---|---|
-| `student` | List and operate only owned VMs; use only assigned, enabled templates |
+| `student` | Use only owned VMs linked to an active enrollment, lab run, and assignment |
 | `instructor` | Student authority plus templates, pools, sessions, events, and assigned-class/lab management |
 | `admin` | Instructor authority plus organization groups and all classes in the organization |
 | `owner` | Full tenant authority and protection from removing the organization's last active owner |

@@ -73,6 +73,8 @@ The release suite must prove that:
 - inactive users cannot log in or retain REST/WebSocket access;
 - changing a role changes effective authority immediately;
 - disabled or unassigned templates cannot be provisioned;
+- student VM creation and subsequent access require active organization
+  membership, enrollment, lab run, assignment, and ownership;
 - console flags and lab policy are enforced server-side;
 - duplicate requests cannot create duplicate VMs;
 - SSRF validation blocks unapproved infrastructure and asset destinations;

@@ -13,6 +13,7 @@ nav:
   - Architecture: architecture/overview.md
   - Organization tenancy: security/organization-tenancy.md
   - Identity lifecycle: security/identity-lifecycle.md
+  - Classroom runs and assignments: classroom/lab-runs-and-assignments.md
   - Security: security/threat-model.md
   - AI: ai/ai-safety.md
   - Operations: operations/deployment.md

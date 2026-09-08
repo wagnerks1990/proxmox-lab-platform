@@ -100,6 +100,11 @@
 - V2 work belongs on `codex/rebuild-v2-*` or another focused branch, never directly on `main`.
 - Unknown or missing roles are denied. Authorization must positively identify an allowed role.
 - Student access is always scoped by organization, enrollment, assignment, and resource ownership.
+- Do not restore legacy permission-only student provisioning. A student VM must
+  be linked to an effective lab assignment, and every lifecycle or console path
+  must re-check the run window and blueprint access flags.
+- Expiring a lab run closes student authorization immediately. Do not claim a
+  Proxmox VM was stopped, reset, or deleted until a durable job verifies it.
 - A template must be enabled and assigned before a student can provision it.
 - Proxmox mutations are durable jobs with idempotency keys and persisted task identifiers.
 - Database record removal and Proxmox resource deletion are separate, explicitly named operations.

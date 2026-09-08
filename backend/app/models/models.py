@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, func, Boolean, UniqueConstraint
+from sqlalchemy import CheckConstraint, Column, Integer, String, ForeignKey, DateTime, func, Boolean, UniqueConstraint
 from sqlalchemy.orm import relationship
 from app.db.session import Base
 
@@ -413,10 +413,12 @@ class Class(Base):
 
 class Enrollment(Base):
     __tablename__ = 'enrollments'
+    __table_args__ = (UniqueConstraint('class_id', 'user_id', name='uq_enrollments_class_user'),)
     id = Column(Integer, primary_key=True)
     class_id = Column(Integer, ForeignKey('classes.id'), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
     role = Column(String(32), nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
 
 
@@ -435,6 +437,45 @@ class Lab(Base):
     terminal_enabled = Column(Boolean, nullable=False, default=False)
     console_enabled = Column(Boolean, nullable=False, default=False)
     rdp_enabled = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class LabRun(Base):
+    __tablename__ = 'lab_runs'
+    __table_args__ = (
+        CheckConstraint("state IN ('draft', 'scheduled', 'active', 'ended', 'cancelled')", name='ck_lab_runs_state'),
+    )
+    id = Column(Integer, primary_key=True)
+    organization_id = Column(Integer, ForeignKey('organizations.id'), nullable=False, index=True)
+    lab_id = Column(Integer, ForeignKey('labs.id'), nullable=False, index=True)
+    name = Column(String(120), nullable=False)
+    state = Column(String(32), nullable=False, default='draft', index=True)
+    starts_at = Column(DateTime, nullable=True)
+    ends_at = Column(DateTime, nullable=True)
+    max_vms_per_student = Column(Integer, nullable=False, default=1)
+    created_by = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    activated_at = Column(DateTime, nullable=True)
+    ended_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+
+class LabAssignment(Base):
+    __tablename__ = 'lab_assignments'
+    __table_args__ = (
+        UniqueConstraint('lab_run_id', 'user_id', 'slot_index', name='uq_lab_assignments_run_user_slot'),
+        CheckConstraint("status IN ('assigned', 'ready', 'expired', 'revoked')", name='ck_lab_assignments_status'),
+    )
+    id = Column(Integer, primary_key=True)
+    organization_id = Column(Integer, ForeignKey('organizations.id'), nullable=False, index=True)
+    lab_run_id = Column(Integer, ForeignKey('lab_runs.id'), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    template_id = Column(Integer, ForeignKey('vm_templates.id'), nullable=False, index=True)
+    slot_index = Column(Integer, nullable=False, default=1)
+    status = Column(String(32), nullable=False, default='assigned', index=True)
+    student_vm_id = Column(Integer, ForeignKey('student_vms.id'), nullable=True, unique=True, index=True)
+    expires_at = Column(DateTime, nullable=True, index=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), nullable=False)
 

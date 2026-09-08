@@ -36,6 +36,7 @@ class EnrollmentOut(BaseModel):
     class_id: int
     user_id: int
     role: str | None = None
+    is_active: bool = True
     created_at: datetime
 
 
@@ -84,3 +85,57 @@ class LabOut(LabBase):
     vm_template_vmid_by_node: dict | None = None
     recommended_next_steps: list[str] | None = None
     assets_page_hint: str | None = None
+
+
+class LabRunCreate(BaseModel):
+    lab_id: int
+    name: str
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    max_vms_per_student: int = 1
+
+
+class LabRunOut(LabRunCreate):
+    id: int
+    organization_id: int
+    state: str
+    created_by: int
+    activated_at: datetime | None = None
+    ended_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+    effective_open: bool = False
+    assignment_count: int = 0
+
+
+class LabRunStateChange(BaseModel):
+    action: str
+
+
+class LabAssignmentCreate(BaseModel):
+    user_id: int
+    template_id: int | None = None
+    slot_index: int | None = None
+
+
+class LabAssignmentBulkCreate(BaseModel):
+    slots_per_student: int = 1
+
+
+class LabAssignmentOut(BaseModel):
+    id: int
+    organization_id: int
+    lab_run_id: int
+    user_id: int
+    template_id: int
+    slot_index: int
+    status: str
+    student_vm_id: int | None = None
+    expires_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+    run_name: str | None = None
+    lab_name: str | None = None
+    template_name: str | None = None
+    username: str | None = None
+    can_provision: bool = False

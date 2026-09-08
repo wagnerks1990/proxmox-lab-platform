@@ -6,7 +6,7 @@ from sqlalchemy.pool import StaticPool
 from app.api.routers import vms
 from app.db.session import Base, get_db
 from app.main import app
-from app.models.models import Class, Group, Organization, OrganizationMembership, Role, StudentVM, User, VMTemplate
+from app.models.models import Class, DesktopPool, Enrollment, Group, Lab, LabAssignment, LabRun, Organization, OrganizationMembership, Role, StudentVM, User, VMTemplate
 from app.services.auth_service import issue_session
 
 
@@ -68,8 +68,9 @@ def test_two_organization_http_authorization_matrix(monkeypatch):
     template_b = VMTemplate(organization_id=organization_b.id, name='B template', proxmox_node='pve-b', source_vmid=200)
     db.add_all([template_a, template_b])
     db.flush()
+    own_vm = StudentVM(organization_id=organization_a.id, owner_id=student_a.id, template_id=template_a.id, vm_name='a-own', vmid=1001, proxmox_node='pve-a')
     db.add_all([
-        StudentVM(organization_id=organization_a.id, owner_id=student_a.id, template_id=template_a.id, vm_name='a-own', vmid=1001, proxmox_node='pve-a'),
+        own_vm,
         StudentVM(organization_id=organization_a.id, owner_id=student_b.id, template_id=template_a.id, vm_name='a-other', vmid=1002, proxmox_node='pve-a'),
         StudentVM(organization_id=organization_b.id, owner_id=instructor_b.id, template_id=template_b.id, vm_name='b-visible-to-instructor', vmid=2001, proxmox_node='pve-b'),
     ])
@@ -78,6 +79,16 @@ def test_two_organization_http_authorization_matrix(monkeypatch):
         Class(organization_id=organization_b.id, name='B instructor class', instructor_id=instructor_b.id),
         Group(organization_id=organization_b.id, name='B administrators group'),
     ])
+    db.flush()
+    class_a = Class(organization_id=organization_a.id, name='Organization A class')
+    pool_a = DesktopPool(organization_id=organization_a.id, name='Organization A pool', pool_type='lab', template_vmid=template_a.source_vmid, default_protocol='novnc', enabled=True, maintenance_mode=False)
+    db.add_all([class_a, pool_a]); db.flush()
+    enrollment_a = Enrollment(class_id=class_a.id, user_id=student_a.id, role='student', is_active=True)
+    lab_a = Lab(organization_id=organization_a.id, class_id=class_a.id, name='Organization A lab', default_pool_id=pool_a.id, console_enabled=True, terminal_enabled=True)
+    db.add_all([enrollment_a, lab_a]); db.flush()
+    run_a = LabRun(organization_id=organization_a.id, lab_id=lab_a.id, name='Active run', state='active', max_vms_per_student=1, created_by=owner.id)
+    db.add(run_a); db.flush()
+    db.add(LabAssignment(organization_id=organization_a.id, lab_run_id=run_a.id, user_id=student_a.id, template_id=template_a.id, slot_index=1, status='ready', student_vm_id=own_vm.id))
     db.commit()
 
     def override_get_db():

@@ -27,6 +27,7 @@ from app.api.routers.classes_labs import router as classes_labs_router
 from app.api.routers.admin_organizations import router as admin_organizations_router
 from app.api.routers.admin_updates import router as admin_updates_router
 from app.api.routers.organizations import router as organizations_router
+from app.api.routers.classroom import router as classroom_router
 
 router = APIRouter(prefix='/api')
 
@@ -58,3 +59,4 @@ router.include_router(classes_labs_router)
 router.include_router(admin_organizations_router)
 router.include_router(admin_updates_router)
 router.include_router(organizations_router)
+router.include_router(classroom_router)

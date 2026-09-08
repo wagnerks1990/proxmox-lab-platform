@@ -28,6 +28,7 @@ class CreateVMRequest(BaseModel):
     template_id: int
     lab_name: str
     auto_start: bool = True
+    assignment_id: int | None = None
 
 
 class VMResponse(BaseModel):
@@ -49,6 +50,13 @@ class VMResponse(BaseModel):
     ssh_username: str | None = None
     ssh_auth_method: str | None = None
     ssh_port: int | None = 22
+    allowed_stop: bool | None = None
+    allowed_delete: bool | None = None
+    allowed_terminal: bool | None = None
+    allowed_console: bool | None = None
+    allowed_rdp: bool | None = None
+    allowed_spice: bool | None = None
+    assignment_expires_at: datetime | None = None
 
 
 class VMCreateResponse(VMResponse):
