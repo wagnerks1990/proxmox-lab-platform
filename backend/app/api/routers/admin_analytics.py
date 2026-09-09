@@ -10,6 +10,8 @@ from app.services.analytics_service import AnalyticsService
 router = APIRouter()
 
 
-@router.get('/admin/analytics/summary', response_model=ApiEnvelope[AnalyticsSummary])
-def analytics_summary(_user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+@router.get("/admin/analytics/summary", response_model=ApiEnvelope[AnalyticsSummary])
+def analytics_summary(
+    _user=Depends(require_role("Admin")), db: Session = Depends(get_db)
+):
     return ApiEnvelope(success=True, data=AnalyticsService(db).summary())

@@ -9,6 +9,8 @@ from app.services.runtime_supervisor_service import RuntimeSupervisorService
 router = APIRouter()
 
 
-@router.get('/admin/runtime/summary', response_model=ApiEnvelope[RuntimeSummary])
-def runtime_summary(_user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+@router.get("/admin/runtime/summary", response_model=ApiEnvelope[RuntimeSummary])
+def runtime_summary(
+    _user=Depends(require_role("Teacher", "Admin")), db: Session = Depends(get_db)
+):
     return ApiEnvelope(success=True, data=RuntimeSupervisorService(db).summary())

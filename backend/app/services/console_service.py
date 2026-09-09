@@ -1,10 +1,7 @@
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from app.models.models import StudentVM, User, AuditLog
-from app.services.proxmox import ProxmoxClient
-from app.services.session_service import SessionService
 from app.db.tx import safe_commit
-from app.architecture.state_machines import SessionState
 from app.architecture.idempotency import store as idempotency_store
 from app.architecture.policies import can_launch_vm, PolicyError
 
@@ -12,37 +9,52 @@ from app.architecture.policies import can_launch_vm, PolicyError
 class ConsoleService:
     def __init__(self, db: Session):
         self.db = db
-        self.proxmox = ProxmoxClient()
-        self.sessions = SessionService(db)
 
     def _ensure_running_or_stopped(self, vm: StudentVM):
-        if vm.status not in {'running', 'stopped', 'provisioning', 'error'}:
-            raise HTTPException(status_code=400, detail={'error': 'VM state not launchable.'})
+        if vm.status not in {"running", "stopped", "provisioning", "error"}:
+            raise HTTPException(
+                status_code=400, detail={"error": "VM state not launchable."}
+            )
 
     async def terminal_url(self, user: User, vm: StudentVM):
         try:
             can_launch_vm(user, vm)
         except PolicyError as exc:
-            raise HTTPException(status_code=403, detail={'error': str(exc)})
-        key = f'launch:{user.id}:{vm.id}:web_terminal'
+            raise HTTPException(status_code=403, detail={"error": str(exc)})
+        key = f"launch:{user.id}:{vm.id}:web_terminal"
         if not idempotency_store.reserve(key):
-            raise HTTPException(status_code=409, detail={'error': 'Duplicate launch request in progress.'})
+            raise HTTPException(
+                status_code=409,
+                detail={"error": "Duplicate launch request in progress."},
+            )
         try:
             if not vm.ssh_enabled:
-                launch = self.sessions.create_launch(user, vm, 'WEB_TERMINAL', 'failed', 'web terminal disabled', session_state=SessionState.FAILED)
-                session = self.sessions.create_launching_session(user, vm, 'WEB_TERMINAL', connection_launch_id=launch.id)
-                self.sessions.mark_failed(session.id, 'web terminal disabled')
-                raise HTTPException(status_code=400, detail={'error': 'WEB TERMINAL is not enabled for this VM.'})
+                raise HTTPException(
+                    status_code=400,
+                    detail={"error": "WEB TERMINAL is not enabled for this VM."},
+                )
             if not vm.assigned_ip:
-                launch = self.sessions.create_launch(user, vm, 'WEB_TERMINAL', 'failed', 'missing assigned IP', session_state=SessionState.FAILED)
-                session = self.sessions.create_launching_session(user, vm, 'WEB_TERMINAL', connection_launch_id=launch.id)
-                self.sessions.mark_failed(session.id, 'missing assigned IP')
-                raise HTTPException(status_code=400, detail={'error': 'No IP address found for WEB TERMINAL.'})
-            self.db.add(AuditLog(organization_id=vm.organization_id, actor_id=user.id, action='console_web_terminal', target_type='student_vm', target_id=str(vm.vmid)))
-            launch = self.sessions.create_launch(user, vm, 'WEB_TERMINAL', 'success', vm.assigned_ip, session_state=SessionState.LAUNCHING)
-            session = self.sessions.create_launching_session(user, vm, 'WEB_TERMINAL', connection_launch_id=launch.id)
+                raise HTTPException(
+                    status_code=400,
+                    detail={"error": "No IP address found for WEB TERMINAL."},
+                )
+            self.db.add(
+                AuditLog(
+                    organization_id=vm.organization_id,
+                    actor_id=user.id,
+                    action="console_web_terminal",
+                    target_type="student_vm",
+                    target_id=str(vm.vmid),
+                )
+            )
             safe_commit(self.db)
-            self.sessions.mark_active(session.id)
-            return {'type': 'web_terminal', 'launch_url': f'/terminal/{vm.id}', 'session_id': session.id, 'protocol': 'WEB_TERMINAL', 'state': 'active', 'heartbeat_interval_seconds': 30, 'expires_at': None}
+            return {
+                "type": "web_terminal",
+                "launch_url": f"/terminal/{vm.id}",
+                "protocol": "WEB_TERMINAL",
+                "state": "launching",
+                "heartbeat_interval_seconds": 30,
+                "expires_at": None,
+            }
         finally:
             idempotency_store.release(key)

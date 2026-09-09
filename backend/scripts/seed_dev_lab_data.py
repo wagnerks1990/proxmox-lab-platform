@@ -15,7 +15,9 @@ def parse_int(value: str, env_name: str):
     try:
         return int(value)
     except ValueError:
-        print(f"WARN: {env_name} must be an integer, got {value!r}; skipping related records.")
+        print(
+            f"WARN: {env_name} must be an integer, got {value!r}; skipping related records."
+        )
         return None
 
 
@@ -26,7 +28,9 @@ def seed_template(db: Session) -> None:
     _template_os = env("DEV_TEMPLATE_OS", "Linux")
 
     if not template_name or template_vmid is None or not template_node:
-        print("WARN: Skipping vm_templates seed (set DEV_TEMPLATE_NAME, DEV_TEMPLATE_VMID, DEV_TEMPLATE_NODE).")
+        print(
+            "WARN: Skipping vm_templates seed (set DEV_TEMPLATE_NAME, DEV_TEMPLATE_VMID, DEV_TEMPLATE_NODE)."
+        )
         return
 
     row = db.query(VMTemplate).filter(VMTemplate.name == template_name).first()
@@ -79,7 +83,9 @@ def seed_desktop_pool(db: Session) -> None:
 
 def main() -> int:
     print("INFO: Optional dev lab seed started (no Proxmox API calls, no VM creation).")
-    print(f"WARN: DEV_RESOURCE_POOL_NAME={env('DEV_RESOURCE_POOL_NAME')!r} provided; resource_pools model is not present in current ORM and is skipped.")
+    print(
+        f"WARN: DEV_RESOURCE_POOL_NAME={env('DEV_RESOURCE_POOL_NAME')!r} provided; resource_pools model is not present in current ORM and is skipped."
+    )
 
     db = SessionLocal()
     try:

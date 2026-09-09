@@ -1,2 +1,3 @@
 from fastapi import APIRouter
-router = APIRouter(tags=['settings'])
+
+router = APIRouter(tags=["settings"])

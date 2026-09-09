@@ -25,6 +25,10 @@ class SessionHeartbeatRequest(BaseModel):
     state: str | None = None
 
 
+class SessionReconnectRequest(BaseModel):
+    token: str
+
+
 class SessionHeartbeatResponse(BaseModel):
     id: int
     state: str

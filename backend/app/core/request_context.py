@@ -1,6 +1,6 @@
 from contextvars import ContextVar
 
-request_id_ctx: ContextVar[str] = ContextVar('request_id', default='')
+request_id_ctx: ContextVar[str] = ContextVar("request_id", default="")
 
 
 def set_request_id(request_id: str) -> None:
@@ -8,4 +8,4 @@ def set_request_id(request_id: str) -> None:
 
 
 def get_request_id() -> str:
-    return request_id_ctx.get('')
+    return request_id_ctx.get("")

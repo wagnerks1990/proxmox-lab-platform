@@ -1,2 +1,3 @@
 from fastapi import APIRouter
-router = APIRouter(tags=['templates'])
+
+router = APIRouter(tags=["templates"])

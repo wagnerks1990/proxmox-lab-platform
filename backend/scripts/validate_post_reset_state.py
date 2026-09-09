@@ -51,7 +51,9 @@ def main() -> int:
     finally:
         db.close()
 
-    table_checks = [(name, True) for name in REQUIRED_TABLES] + [(name, False) for name in OPTIONAL_TABLES]
+    table_checks = [(name, True) for name in REQUIRED_TABLES] + [
+        (name, False) for name in OPTIONAL_TABLES
+    ]
     for table, required in table_checks:
         table_db = SessionLocal()
         try:
@@ -63,14 +65,20 @@ def main() -> int:
         except Exception as exc:
             table_db.rollback()
             if required:
-                log("FAIL", f"Missing required table or query failure for {table}: {exc}")
+                log(
+                    "FAIL",
+                    f"Missing required table or query failure for {table}: {exc}",
+                )
                 failures += 1
             else:
                 log("WARN", f"Optional table {table} missing or not queryable: {exc}")
         finally:
             table_db.close()
 
-    log("PASS", "Alembic head/current checks remain covered by scripts/validate_deploy.py")
+    log(
+        "PASS",
+        "Alembic head/current checks remain covered by scripts/validate_deploy.py",
+    )
     return 1 if failures else 0
 
 

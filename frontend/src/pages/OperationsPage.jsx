@@ -1,26 +1,18 @@
 import { useEffect, useState } from 'react'
-import { getOperationsHealth, listOperations } from '../services/operationsApi'
-import { getWorkerRuns } from '../services/workersApi'
-import { useOperationalStore } from '../state/operationalStore'
-import useOperationalEvents from '../hooks/useOperationalEvents'
-import HealthBadge from '../components/operational/HealthBadge'
-import { getReconciliationSummary } from '../services/reconciliationApi'
-import StatCard from '../components/operational/StatCard'
+import { listOperations } from '../services/operationsApi'
 
-export default function OperationsPage(){
-  const [h,setH]=useState({})
-  const [runs,setRuns]=useState([])
-  const [rec,setRec]=useState({})
-  const [operations,setOperations]=useState([])
-  const live=useOperationalStore()
-  useOperationalEvents()
+const activeStates = new Set(['queued', 'running'])
 
-  useEffect(()=>{
-    getOperationsHealth().then(setH).catch(()=>setH({}))
-    getWorkerRuns().then((rows)=>setRuns(Array.isArray(rows)?rows:[])).catch(()=>setRuns([]))
-    getReconciliationSummary().then(setRec).catch(()=>setRec({}))
-    listOperations().then(setOperations).catch(()=>setOperations([]))
-  },[])
+export default function OperationsPage() {
+  const [operations, setOperations] = useState([])
+  const load = () => listOperations().then(setOperations).catch(() => setOperations([]))
 
-  return <section><h2>Operations</h2><p className='muted'>Backend, database, Proxmox, and worker runtime visibility.</p><div>Live stream: <HealthBadge value={live.connected?'ok':'error'}/> ({live.status})</div><div className='group'><StatCard label='Pools' value={rec.pools_total}/><StatCard label='Stale Sessions' value={rec.stale_sessions}/><StatCard label='Reconciliation Warnings' value={rec.warnings}/></div><div>Database: <HealthBadge value={h.database||h.db_status}/></div><div>Scheduler Running: {String(Boolean(h.scheduler_running))}</div><h3>Durable operations</h3>{operations.length===0?<p className='muted'>No durable operations recorded yet.</p>:null}<table className='vm-table'><thead><tr><th>ID</th><th>Operation</th><th>Target</th><th>State</th><th>Attempts</th><th>Error</th></tr></thead><tbody>{operations.map(row=><tr key={row.id}><td>{row.id}</td><td>{row.operation_type}</td><td>{row.target_type}:{row.target_id}</td><td>{row.state}</td><td>{row.attempts}</td><td>{row.error||'-'}</td></tr>)}</tbody></table><h3>Worker history</h3>{runs.length===0?<p className='muted'>No worker runs recorded yet.</p>:null}<table className='vm-table'><thead><tr><th>Worker</th><th>Status</th><th>Started</th></tr></thead><tbody>{runs.map(r=><tr key={r.id}><td>{r.worker_name}</td><td>{r.status}</td><td>{r.started_at}</td></tr>)}</tbody></table></section>
+  useEffect(() => { load() }, [])
+  useEffect(() => {
+    if (!operations.some(operation => activeStates.has(String(operation.state).toLowerCase()))) return
+    const timer = setInterval(load, 2000)
+    return () => clearInterval(timer)
+  }, [operations])
+
+  return <section><h2>Operations</h2><p className='muted'>Durable VM operation progress and history for the selected classroom organization.</p>{operations.length === 0 ? <p className='muted'>No durable operations recorded yet.</p> : null}<table className='vm-table'><thead><tr><th>ID</th><th>Operation</th><th>Target</th><th>State</th><th>Attempts</th><th>Error</th></tr></thead><tbody>{operations.map(row => <tr key={row.id}><td>{row.id}</td><td>{row.operation_type}</td><td>{row.target_type}:{row.target_id}</td><td>{row.state}</td><td>{row.attempts}</td><td>{row.error || '-'}</td></tr>)}</tbody></table></section>
 }

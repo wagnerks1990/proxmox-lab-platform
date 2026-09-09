@@ -5,7 +5,13 @@ from app.models.models import AuditLog
 
 
 def recent_audit_logs(db: Session, organization_id: int, limit: int = 200):
-    return db.query(AuditLog).filter(AuditLog.organization_id == organization_id).order_by(AuditLog.created_at.desc()).limit(limit).all()
+    return (
+        db.query(AuditLog)
+        .filter(AuditLog.organization_id == organization_id)
+        .order_by(AuditLog.created_at.desc())
+        .limit(limit)
+        .all()
+    )
 
 
 def record_audit_event(
@@ -16,7 +22,7 @@ def record_audit_event(
     target_id: str,
     actor_id: int | None = None,
     organization_id: int | None = None,
-    outcome: str = 'success',
+    outcome: str = "success",
     message: str | None = None,
     request_id: str | None = None,
     source_ip: str | None = None,

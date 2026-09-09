@@ -6,16 +6,28 @@ from app.services.session_service import SessionService
 
 
 class Q:
-    def __init__(self, rows): self.rows = rows
-    def filter(self, *args, **kwargs): return self
-    def all(self): return self.rows
+    def __init__(self, rows):
+        self.rows = rows
+
+    def filter(self, *args, **kwargs):
+        return self
+
+    def all(self):
+        return self.rows
 
 
 class DB:
-    def __init__(self, rows): self.rows = rows
-    def query(self, *_args, **_kwargs): return Q(self.rows)
-    def commit(self): return None
-    def rollback(self): return None
+    def __init__(self, rows):
+        self.rows = rows
+
+    def query(self, *_args, **_kwargs):
+        return Q(self.rows)
+
+    def commit(self):
+        return None
+
+    def rollback(self):
+        return None
 
 
 def test_expire_stale_sessions_marks_count():

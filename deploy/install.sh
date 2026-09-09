@@ -79,7 +79,7 @@ UPDATER_REQUIRE_SIGNED_COMMITS=false
 EOF
 chmod 0600 .env
 
-install -m 0755 deploy/updater_agent.py /usr/local/lib/proxmox-lab-updater.py
+install -o root -g root -m 0700 deploy/updater_agent.py /usr/local/lib/proxmox-lab-updater.py
 install -m 0644 deploy/proxmox-lab-updater.service /etc/systemd/system/proxmox-lab-updater.service
 systemctl daemon-reload
 systemctl enable --now proxmox-lab-updater.service

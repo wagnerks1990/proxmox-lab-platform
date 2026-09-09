@@ -1,5 +1,18 @@
 # AI integration and safety
 
+## Repository guidance for AI assistants
+
+AI-assisted changes must follow `AGENTS.md`, preserve the OpenAPI contract, and
+ship tests and documentation with behavior changes. An AI-generated statement
+that a deployment is "live tested" is valid only when the disposable Compose
+harness completes or the exact checks performed on real infrastructure are
+listed. The mock test never proves compatibility with a real Proxmox cluster,
+TLS certificates, storage, networking, consoles, or production systemd/nginx.
+
+AI assistants must not bypass the live-test script's loopback and destructive
+action guards. They must not point the harness at a shared, classroom, staging,
+or production database.
+
 ## Goals
 
 AI support is optional. The platform remains fully functional when AI is

@@ -5,18 +5,21 @@ Requires=docker.service
 
 [Service]
 Type=simple
+Group=proxmox-lab-updater
 EnvironmentFile=/opt/proxmox-lab-platform/app/.env
 Environment=PLATFORM_APP_DIR=/opt/proxmox-lab-platform/app
 Environment=PLATFORM_STATE_DIR=/var/lib/proxmox-lab-platform
-ExecStart=/usr/bin/python3 /opt/proxmox-lab-platform/app/deploy/updater_agent.py
+ExecStart=/usr/bin/python3 /usr/local/lib/proxmox-lab-updater.py
 Restart=on-failure
 RestartSec=5
+RuntimeDirectory=proxmox-lab-updater
+RuntimeDirectoryMode=0750
 UMask=0007
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
-ReadWritePaths=/opt/proxmox-lab-platform /var/lib/proxmox-lab-platform /run/proxmox-lab-updater /var/run/docker.sock
+ReadWritePaths=/opt/proxmox-lab-platform /var/lib/proxmox-lab-platform /run/proxmox-lab-updater /var/run/docker.sock /usr/local/lib/proxmox-lab-updater.py /etc/systemd/system/proxmox-lab-updater.service
 
 [Install]
 WantedBy=multi-user.target

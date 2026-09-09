@@ -42,26 +42,30 @@ class _Session:
 def test_get_user_from_token_valid(monkeypatch):
     from app.api import deps
 
-    monkeypatch.setattr(deps.settings, 'jwt_secret_key', 'test-secret')
-    monkeypatch.setattr(deps.settings, 'jwt_algorithm', 'HS256')
+    monkeypatch.setattr(deps.settings, "jwt_secret_key", "test-secret")
+    monkeypatch.setattr(deps.settings, "jwt_algorithm", "HS256")
 
-    token = jwt.encode({'sub': 'alice', 'jti': 'session-1', 'ver': 1, 'typ': 'access'}, deps.settings.jwt_secret_key, algorithm=deps.settings.jwt_algorithm)
-    user = get_user_from_token(token, _DB(_User('alice'), _Session()))
+    token = jwt.encode(
+        {"sub": "alice", "jti": "session-1", "ver": 1, "typ": "access"},
+        deps.settings.jwt_secret_key,
+        algorithm=deps.settings.jwt_algorithm,
+    )
+    user = get_user_from_token(token, _DB(_User("alice"), _Session()))
 
-    assert user.username == 'alice'
+    assert user.username == "alice"
 
 
 def test_get_user_from_token_invalid_returns_401(monkeypatch):
     from app.api import deps
 
-    monkeypatch.setattr(deps.settings, 'jwt_secret_key', 'test-secret')
-    monkeypatch.setattr(deps.settings, 'jwt_algorithm', 'HS256')
+    monkeypatch.setattr(deps.settings, "jwt_secret_key", "test-secret")
+    monkeypatch.setattr(deps.settings, "jwt_algorithm", "HS256")
 
-    bad_token = jwt.encode({'sub': 'alice'}, 'other-secret', algorithm='HS256')
+    bad_token = jwt.encode({"sub": "alice"}, "other-secret", algorithm="HS256")
 
     try:
-        get_user_from_token(bad_token, _DB(_User('alice')))
-        assert False, 'expected HTTPException for invalid token'
+        get_user_from_token(bad_token, _DB(_User("alice")))
+        assert False, "expected HTTPException for invalid token"
     except HTTPException as exc:
         assert exc.status_code == 401
-        assert exc.detail == 'Invalid token'
+        assert exc.detail == "Invalid token"

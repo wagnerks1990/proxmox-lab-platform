@@ -1,2 +1,3 @@
 from fastapi import APIRouter
-router = APIRouter(tags=['monitoring'])
+
+router = APIRouter(tags=["monitoring"])

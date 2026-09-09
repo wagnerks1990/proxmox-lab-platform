@@ -1,4 +1,7 @@
-from app.services.asset_server_control import AssetServerControl, HostRunnerNotConfiguredError
+from app.services.asset_server_control import (
+    AssetServerControl,
+    HostRunnerNotConfiguredError,
+)
 
 
 class Obj:
@@ -31,7 +34,7 @@ def mkdb(host_access_rows=None):
     return DB(
         {
             ProxmoxCluster: [Obj(id=1, is_active=True)],
-            ProxmoxNode: [Obj(cluster_id=1, node_name='pve-lab-01', status='online')],
+            ProxmoxNode: [Obj(cluster_id=1, node_name="pve-lab-01", status="online")],
             ProxmoxHostAccess: host_access_rows or [],
         }
     )
@@ -40,7 +43,7 @@ def mkdb(host_access_rows=None):
 def test_kind_validation():
     s = AssetServerControl(mkdb())
     try:
-        s.status('bad')
+        s.status("bad")
         assert False
     except ValueError:
         assert True
@@ -49,22 +52,22 @@ def test_kind_validation():
 def test_action_rejects_when_runner_disabled(monkeypatch):
     from app.services import asset_server_control as m
 
-    monkeypatch.setattr(m.settings, 'host_runner_enabled', False)
+    monkeypatch.setattr(m.settings, "host_runner_enabled", False)
     s = AssetServerControl(mkdb())
     try:
-        s.action('install', 'iso')
+        s.action("install", "iso")
         assert False
     except HostRunnerNotConfiguredError as e:
-        assert 'Host runner is not configured' in str(e)
+        assert "Host runner is not configured" in str(e)
 
 
 def test_action_rejects_without_host_access_row(monkeypatch):
     from app.services import asset_server_control as m
 
-    monkeypatch.setattr(m.settings, 'host_runner_enabled', True)
+    monkeypatch.setattr(m.settings, "host_runner_enabled", True)
     s = AssetServerControl(mkdb(host_access_rows=[]))
     try:
-        s.action('start', 'iso')
+        s.action("start", "iso")
         assert False
     except HostRunnerNotConfiguredError:
         assert True
@@ -73,10 +76,21 @@ def test_action_rejects_without_host_access_row(monkeypatch):
 def test_action_rejects_without_validated_status(monkeypatch):
     from app.services import asset_server_control as m
 
-    monkeypatch.setattr(m.settings, 'host_runner_enabled', True)
-    s = AssetServerControl(mkdb(host_access_rows=[Obj(cluster_id=1, node_name='pve-lab-01', status='not_configured', encrypted_private_key='x')]))
+    monkeypatch.setattr(m.settings, "host_runner_enabled", True)
+    s = AssetServerControl(
+        mkdb(
+            host_access_rows=[
+                Obj(
+                    cluster_id=1,
+                    node_name="pve-lab-01",
+                    status="not_configured",
+                    encrypted_private_key="x",
+                )
+            ]
+        )
+    )
     try:
-        s.action('start', 'iso')
+        s.action("start", "iso")
         assert False
     except HostRunnerNotConfiguredError:
         assert True
@@ -85,10 +99,22 @@ def test_action_rejects_without_validated_status(monkeypatch):
 def test_action_rejects_without_key_material(monkeypatch):
     from app.services import asset_server_control as m
 
-    monkeypatch.setattr(m.settings, 'host_runner_enabled', True)
-    s = AssetServerControl(mkdb(host_access_rows=[Obj(cluster_id=1, node_name='pve-lab-01', status='host_runner', encrypted_private_key=None, key_ref=None)]))
+    monkeypatch.setattr(m.settings, "host_runner_enabled", True)
+    s = AssetServerControl(
+        mkdb(
+            host_access_rows=[
+                Obj(
+                    cluster_id=1,
+                    node_name="pve-lab-01",
+                    status="host_runner",
+                    encrypted_private_key=None,
+                    key_ref=None,
+                )
+            ]
+        )
+    )
     try:
-        s.action('start', 'iso')
+        s.action("start", "iso")
         assert False
     except HostRunnerNotConfiguredError:
         assert True
@@ -97,10 +123,21 @@ def test_action_rejects_without_key_material(monkeypatch):
 def test_invalid_port_rejected(monkeypatch):
     from app.services import asset_server_control as m
 
-    monkeypatch.setattr(m.settings, 'host_runner_enabled', True)
-    s = AssetServerControl(mkdb(host_access_rows=[Obj(cluster_id=1, node_name='pve-lab-01', status='host_runner', encrypted_private_key='x')]))
+    monkeypatch.setattr(m.settings, "host_runner_enabled", True)
+    s = AssetServerControl(
+        mkdb(
+            host_access_rows=[
+                Obj(
+                    cluster_id=1,
+                    node_name="pve-lab-01",
+                    status="host_runner",
+                    encrypted_private_key="x",
+                )
+            ]
+        )
+    )
     try:
-        s.action('install', 'iso', port=9999)
+        s.action("install", "iso", port=9999)
         assert False
     except ValueError as e:
-        assert 'port must be 8088' in str(e)
+        assert "port must be 8088" in str(e)

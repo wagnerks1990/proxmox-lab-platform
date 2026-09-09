@@ -18,13 +18,14 @@ export default function AppLayout({ children, setUser, user }) {
       const available = Array.isArray(rows) ? rows : []
       setOrganizations(available)
       const stored = localStorage.getItem('organization_id')
-      const selected = available.find((item) => String(item.id) === stored) || available[0]
+      const platformAdmin = String(user?.role || '').toLowerCase() === 'admin'
+      const selected = available.find((item) => String(item.id) === stored) || (!platformAdmin ? available[0] : null)
       if (selected) {
         localStorage.setItem('organization_id', String(selected.id))
         setOrganizationId(String(selected.id))
       } else {
         localStorage.removeItem('organization_id')
-        setOrganizationError('No active organization membership is available for this account.')
+        if (available.length === 0) setOrganizationError('No active organization membership is available for this account.')
       }
       setOrganizationReady(true)
     }).catch((error) => {
@@ -33,7 +34,7 @@ export default function AppLayout({ children, setUser, user }) {
       setOrganizationReady(true)
     })
     return () => { active = false }
-  }, [])
+  }, [user?.role])
   const changeOrganization = (event) => {
     localStorage.setItem('organization_id', event.target.value)
     setOrganizationId(event.target.value)
@@ -43,8 +44,7 @@ export default function AppLayout({ children, setUser, user }) {
   const normalizedRole = (role || '').toLowerCase()
   const activeOrganization = organizations.find(organization => String(organization.id) === organizationId)
   const tenantRole = activeOrganization?.role
-  const isPlatformAdmin = normalizedRole === 'admin' || user?.role_id === 3
-  const isPlatformTeacher = normalizedRole === 'teacher' || user?.role_id === 2
+  const isPlatformAdmin = normalizedRole === 'admin'
   const isTenantInstructor = ['instructor', 'admin', 'owner'].includes(tenantRole) || isPlatformAdmin
   const isTenantAdmin = ['admin', 'owner'].includes(tenantRole) || isPlatformAdmin
   return <div className='app-shell'>
@@ -52,6 +52,7 @@ export default function AppLayout({ children, setUser, user }) {
       <div className='brand'>Proxmox Lab Control Plane</div>
       {organizations.length > 0 && <label className='muted'>Organization
         <select className='input' value={organizationId} onChange={changeOrganization} style={{marginTop: 6}}>
+          <option value='' disabled>Select an organization</option>
           {organizations.map((organization) => <option key={organization.id} value={organization.id}>{organization.name}</option>)}
         </select>
       </label>}
@@ -60,7 +61,8 @@ export default function AppLayout({ children, setUser, user }) {
       <Link className='nav-link' to='/create'>Create VM</Link>
       <Link className='nav-link' to='/account/security'>Account Security</Link>
       {isTenantInstructor && <><Link className='nav-link' to='/classroom'>Classroom</Link><Link className='nav-link' to='/admin/sessions'>Sessions</Link><Link className='nav-link' to='/pools'>Pools</Link><Link className='nav-link' to='/events'>Events / Tasks</Link></>}
-      {(isPlatformTeacher || isPlatformAdmin) && <><Link className='nav-link' to='/telemetry'>Telemetry</Link><Link className='nav-link' to='/operations'>Operations</Link><Link className='nav-link' to='/troubleshooting'>Troubleshooting</Link></>}
+      <Link className='nav-link' to='/operations'>Operations</Link>
+      {isPlatformAdmin && <><Link className='nav-link' to='/telemetry'>Telemetry</Link><Link className='nav-link' to='/troubleshooting'>Troubleshooting</Link></>}
       {isPlatformAdmin && <Link className='nav-link' to='/admin/proxmox-setup'>Proxmox Setup</Link>}
       {isPlatformAdmin && <Link className='nav-link' to='/admin/proxmox-inventory'>Proxmox Inventory</Link>}
       {isPlatformAdmin && <Link className='nav-link' to='/admin/proxmox-assets'>Proxmox Assets</Link>}
@@ -71,6 +73,6 @@ export default function AppLayout({ children, setUser, user }) {
       <button onClick={logout} style={{marginTop: 10, width: '100%'}}>Logout</button>
       <div style={{marginTop:14, color:'#a7b0d6', fontSize:12}}>Current: {loc.pathname}</div>
     </aside>
-    <main className='content'>{!organizationReady ? <section className='panel'>Selecting organization…</section> : organizationError ? <section className='panel error'>{organizationError}</section> : children}</main>
+    <main className='content'>{!organizationReady ? <section className='panel'>Selecting organization…</section> : organizationError ? <section className='panel error'>{organizationError}</section> : organizations.length > 0 && !organizationId ? <section className='panel'>Select an organization to continue.</section> : children}</main>
   </div>
 }

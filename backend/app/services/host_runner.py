@@ -15,7 +15,7 @@ class HostRunnerResult:
 
 
 class HostRunnerService:
-    HELPER = '/usr/local/sbin/proxmox-lab-asset-server'
+    HELPER = "/usr/local/sbin/proxmox-lab-asset-server"
 
     def __init__(self):
         self.user = settings.host_runner_user
@@ -23,26 +23,26 @@ class HostRunnerService:
 
     def ensure_ready(self):
         if not settings.host_runner_enabled:
-            raise ValueError('Host runner is disabled.')
+            raise ValueError("Host runner is disabled.")
         if not self.key_path:
-            raise ValueError('HOST_RUNNER_PRIVATE_KEY_PATH is not configured.')
+            raise ValueError("HOST_RUNNER_PRIVATE_KEY_PATH is not configured.")
 
     def run_helper(self, node: str, kind: str, action: str) -> HostRunnerResult:
-        if kind not in {'iso', 'ct_template'}:
-            raise ValueError('kind must be iso or ct_template')
-        if action not in {'status', 'install', 'start', 'stop'}:
-            raise ValueError('unsupported action')
+        if kind not in {"iso", "ct_template"}:
+            raise ValueError("kind must be iso or ct_template")
+        if action not in {"status", "install", "start", "stop"}:
+            raise ValueError("unsupported action")
         self.ensure_ready()
         cmd = [
-            'ssh',
-            '-i',
+            "ssh",
+            "-i",
             self.key_path,
-            '-o',
-            'BatchMode=yes',
-            '-o',
-            'StrictHostKeyChecking=accept-new',
-            f'{self.user}@{node}',
-            'sudo',
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "StrictHostKeyChecking=accept-new",
+            f"{self.user}@{node}",
+            "sudo",
             self.HELPER,
             kind,
             action,
@@ -51,6 +51,6 @@ class HostRunnerService:
         return HostRunnerResult(
             ok=proc.returncode == 0,
             returncode=proc.returncode,
-            stdout=proc.stdout or '',
-            stderr=proc.stderr or '',
+            stdout=proc.stdout or "",
+            stderr=proc.stderr or "",
         )

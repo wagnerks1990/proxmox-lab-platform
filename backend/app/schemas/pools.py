@@ -26,8 +26,19 @@ class PoolCreate(PoolBase):
 
 
 class PoolPatch(BaseModel):
+    name: str | None = None
     description: str | None = None
+    pool_type: str | None = None
+    template_vmid: int | None = None
+    template_node: str | None = None
     default_protocol: str | None = None
+    target_node: str | None = None
+    storage: str | None = None
+    bridge: str | None = None
+    vlan_tag: int | None = None
+    vmid_start: int | None = None
+    vmid_end: int | None = None
+    naming_pattern: str | None = None
     desired_size: int | None = None
     maintenance_mode: bool | None = None
     enabled: bool | None = None
