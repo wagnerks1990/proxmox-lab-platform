@@ -89,7 +89,7 @@ def run(base_url: str, bootstrap_token: str, timeout: float) -> None:
         {
             "token": bootstrap_token,
             "username": "live-admin",
-            "email": "live-admin@example.invalid",
+            "email": "live-admin@example.com",
             "password": ADMIN_PASSWORD,
         },
         expected={204},
@@ -134,7 +134,7 @@ def run(base_url: str, bootstrap_token: str, timeout: float) -> None:
         "/api/admin/users",
         {
             "username": "live-student",
-            "email": "live-student@example.invalid",
+            "email": "live-student@example.com",
             "password": STUDENT_PASSWORD,
             "role": "Student",
             "force_password_change": False,

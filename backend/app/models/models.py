@@ -24,9 +24,13 @@ class Role(Base):
 
 class Organization(Base):
     __tablename__ = "organizations"
+    __table_args__ = (
+        UniqueConstraint("slug", name="organizations_slug_key"),
+        Index("ix_organizations_slug", "slug", unique=True),
+    )
     id = Column(Integer, primary_key=True)
     name = Column(String(120), nullable=False)
-    slug = Column(String(80), unique=True, nullable=False, index=True)
+    slug = Column(String(80), nullable=False)
     enabled = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), nullable=False)
@@ -83,8 +87,12 @@ class DeploymentUpdateRun(Base):
 
 class VmidAllocator(Base):
     __tablename__ = "vmid_allocators"
+    __table_args__ = (
+        UniqueConstraint("scope", name="vmid_allocators_scope_key"),
+        Index("ix_vmid_allocators_scope", "scope", unique=True),
+    )
     id = Column(Integer, primary_key=True)
-    scope = Column(String(64), nullable=False, unique=True, index=True)
+    scope = Column(String(64), nullable=False)
     next_value = Column(Integer, nullable=False, default=200000)
     updated_at = Column(DateTime, server_default=func.now(), nullable=False)
 
@@ -146,9 +154,13 @@ class User(Base):
 
 class AuthSession(Base):
     __tablename__ = "auth_sessions"
+    __table_args__ = (
+        UniqueConstraint("token_id", name="auth_sessions_token_id_key"),
+        Index("ix_auth_sessions_token_id", "token_id", unique=True),
+    )
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    token_id = Column(String(64), unique=True, nullable=False, index=True)
+    token_id = Column(String(64), nullable=False)
     user_agent = Column(String(255), nullable=True)
     client_ip = Column(String(64), nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
@@ -297,7 +309,7 @@ class TelemetryEvent(Base):
     vm_id = Column(Integer, nullable=True, index=True)
     session_id = Column(Integer, nullable=True, index=True)
     request_id = Column(String(100), nullable=True, index=True)
-    metadata_json = Column(String, nullable=True)
+    metadata_json = Column(Text, nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False, index=True)
 
 
@@ -340,7 +352,7 @@ class WorkerRun(Base):
     started_at = Column(DateTime, server_default=func.now(), nullable=False, index=True)
     finished_at = Column(DateTime, nullable=True)
     duration_ms = Column(Integer, nullable=True)
-    summary_json = Column(String, nullable=True)
+    summary_json = Column(Text, nullable=True)
     error = Column(String(255), nullable=True)
     request_id = Column(String(100), nullable=True)
 
@@ -363,7 +375,7 @@ class ProxmoxCluster(Base):
     root_username = Column(String(120), nullable=True)
     token_user = Column(String(120), nullable=True)
     token_id = Column(String(120), nullable=True)
-    encrypted_token_secret = Column(String, nullable=True)
+    encrypted_token_secret = Column(Text, nullable=True)
     token_created_by_app = Column(Boolean, nullable=False, default=False)
     is_active = Column(Boolean, nullable=False, default=False)
     last_validated_at = Column(DateTime, nullable=True)
@@ -386,17 +398,19 @@ class ProxmoxNode(Base):
     memory_total = Column(Integer, nullable=True)
     memory_used = Column(Integer, nullable=True)
     last_seen_at = Column(DateTime, nullable=True)
-    raw_summary_json = Column(String, nullable=True)
+    raw_summary_json = Column(Text, nullable=True)
 
 
 class ProxmoxClusterDefault(Base):
     __tablename__ = "proxmox_cluster_defaults"
+    __table_args__ = (
+        UniqueConstraint("cluster_id", name="uq_proxmox_cluster_defaults_cluster_id"),
+    )
     id = Column(Integer, primary_key=True)
     cluster_id = Column(
         Integer,
         ForeignKey("proxmox_clusters.id"),
         nullable=False,
-        unique=True,
         index=True,
     )
     default_node = Column(String(120), nullable=True)
@@ -426,6 +440,9 @@ class Group(Base):
 
 class GroupMembership(Base):
     __tablename__ = "group_memberships"
+    __table_args__ = (
+        UniqueConstraint("group_id", "user_id", name="uq_group_memberships_group_user"),
+    )
     id = Column(Integer, primary_key=True)
     group_id = Column(Integer, ForeignKey("groups.id"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
@@ -435,6 +452,13 @@ class GroupMembership(Base):
 
 class GroupTemplatePermission(Base):
     __tablename__ = "group_template_permissions"
+    __table_args__ = (
+        UniqueConstraint(
+            "group_id",
+            "template_id",
+            name="uq_group_template_permissions_group_template",
+        ),
+    )
     id = Column(Integer, primary_key=True)
     group_id = Column(Integer, ForeignKey("groups.id"), nullable=False, index=True)
     template_id = Column(
@@ -460,19 +484,24 @@ class AssetCatalog(Base):
     sha256 = Column(String(128), nullable=True)
     is_required = Column(Boolean, nullable=False, default=True)
     sync_method = Column(String(64), nullable=False, default="download-url")
-    metadata_json = Column(String, nullable=True)
+    metadata_json = Column(Text, nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), nullable=False)
 
 
 class AssetNodeState(Base):
     __tablename__ = "asset_node_state"
+    __table_args__ = (
+        UniqueConstraint(
+            "asset_id", "node_name", name="uq_asset_node_state_asset_node"
+        ),
+    )
     id = Column(Integer, primary_key=True)
     asset_id = Column(
         Integer, ForeignKey("asset_catalog.id"), nullable=False, index=True
     )
     node_name = Column(String(120), nullable=False, index=True)
-    state = Column(String(32), nullable=False, default="missing", index=True)
+    state = Column(String(32), nullable=False, default="missing")
     target_vmid = Column(Integer, nullable=True)
     target_volid = Column(String(255), nullable=True)
     size_bytes = Column(Integer, nullable=True)
@@ -480,7 +509,7 @@ class AssetNodeState(Base):
     last_checked_at = Column(DateTime, nullable=True)
     last_synced_at = Column(DateTime, nullable=True)
     last_error = Column(String(1024), nullable=True)
-    metadata_json = Column(String, nullable=True)
+    metadata_json = Column(Text, nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), nullable=False)
 
@@ -488,11 +517,9 @@ class AssetNodeState(Base):
 class AssetSyncJob(Base):
     __tablename__ = "asset_sync_jobs"
     id = Column(Integer, primary_key=True)
-    asset_id = Column(
-        Integer, ForeignKey("asset_catalog.id"), nullable=True, index=True
-    )
-    target_node = Column(String(120), nullable=False, index=True)
-    state = Column(String(32), nullable=False, default="queued", index=True)
+    asset_id = Column(Integer, ForeignKey("asset_catalog.id"), nullable=True)
+    target_node = Column(String(120), nullable=False)
+    state = Column(String(32), nullable=False, default="queued")
     method = Column(String(64), nullable=False)
     source_node = Column(String(120), nullable=True)
     source_vmid = Column(Integer, nullable=True)
@@ -503,19 +530,17 @@ class AssetSyncJob(Base):
     started_at = Column(DateTime, nullable=True)
     finished_at = Column(DateTime, nullable=True)
     error = Column(String(2048), nullable=True)
-    metadata_json = Column(String, nullable=True)
+    metadata_json = Column(Text, nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
 
 
 class AssetSyncJobEvent(Base):
     __tablename__ = "asset_sync_job_events"
     id = Column(Integer, primary_key=True)
-    job_id = Column(
-        Integer, ForeignKey("asset_sync_jobs.id"), nullable=False, index=True
-    )
+    job_id = Column(Integer, ForeignKey("asset_sync_jobs.id"), nullable=False)
     level = Column(String(16), nullable=False, default="info")
     message = Column(String(2048), nullable=False)
-    metadata_json = Column(String, nullable=True)
+    metadata_json = Column(Text, nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
 
 
@@ -544,7 +569,12 @@ class Enrollment(Base):
         UniqueConstraint("class_id", "user_id", name="uq_enrollments_class_user"),
     )
     id = Column(Integer, primary_key=True)
-    class_id = Column(Integer, ForeignKey("classes.id"), nullable=False, index=True)
+    class_id = Column(
+        Integer,
+        ForeignKey("classes.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     role = Column(String(32), nullable=True)
     is_active = Column(Boolean, nullable=False, default=True)
@@ -557,7 +587,12 @@ class Lab(Base):
     organization_id = Column(
         Integer, ForeignKey("organizations.id"), nullable=False, index=True
     )
-    class_id = Column(Integer, ForeignKey("classes.id"), nullable=False, index=True)
+    class_id = Column(
+        Integer,
+        ForeignKey("classes.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     name = Column(String(120), nullable=False)
     description = Column(String(255), nullable=True)
     starts_at = Column(DateTime, nullable=True)
@@ -608,6 +643,8 @@ class LabAssignment(Base):
             "slot_index",
             name="uq_lab_assignments_run_user_slot",
         ),
+        UniqueConstraint("student_vm_id", name="lab_assignments_student_vm_id_key"),
+        Index("ix_lab_assignments_student_vm_id", "student_vm_id", unique=True),
         CheckConstraint(
             "status IN ('assigned', 'ready', 'expired', 'revoked')",
             name="ck_lab_assignments_status",
@@ -624,9 +661,7 @@ class LabAssignment(Base):
     )
     slot_index = Column(Integer, nullable=False, default=1)
     status = Column(String(32), nullable=False, default="assigned", index=True)
-    student_vm_id = Column(
-        Integer, ForeignKey("student_vms.id"), nullable=True, unique=True, index=True
-    )
+    student_vm_id = Column(Integer, ForeignKey("student_vms.id"), nullable=True)
     expires_at = Column(DateTime, nullable=True, index=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), nullable=False)
@@ -634,11 +669,16 @@ class LabAssignment(Base):
 
 class ProxmoxHostAccess(Base):
     __tablename__ = "proxmox_host_access"
+    __table_args__ = (
+        UniqueConstraint("cluster_id", "node_name", name="uq_host_access_cluster_node"),
+    )
     id = Column(Integer, primary_key=True)
     cluster_id = Column(
-        Integer, ForeignKey("proxmox_clusters.id"), nullable=False, index=True
+        Integer,
+        ForeignKey("proxmox_clusters.id", ondelete="CASCADE"),
+        nullable=False,
     )
-    node_name = Column(String(120), nullable=False, index=True)
+    node_name = Column(String(120), nullable=False)
     runner_user = Column(String(120), nullable=False, default="proxmox-lab-runner")
     auth_method = Column(String(32), nullable=False, default="ssh_key")
     encrypted_private_key = Column(String, nullable=True)
