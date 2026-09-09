@@ -26,7 +26,10 @@ APP_DIR = Path(
 ).resolve()
 STATE_DIR = Path(os.environ.get("PLATFORM_STATE_DIR", "/var/lib/proxmox-lab-platform"))
 SOCKET_PATH = Path(
-    os.environ.get("UPDATER_SOCKET_PATH", "/run/proxmox-lab-updater/updater.sock")
+    os.environ.get(
+        "UPDATER_SOCKET_PATH",
+        "/var/lib/proxmox-lab-platform/updater/updater.sock",
+    )
 )
 TOKEN = os.environ.get("UPDATER_TOKEN", "")
 UPDATER_GID = int(os.environ.get("UPDATER_GID", "0"))
