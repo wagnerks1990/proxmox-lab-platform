@@ -43,9 +43,10 @@ if ! getent group proxmox-lab-updater >/dev/null; then
   groupadd --system proxmox-lab-updater
 fi
 UPDATER_GID=$(getent group proxmox-lab-updater | cut -d: -f3)
-mkdir -p "$INSTALL_ROOT" /var/lib/proxmox-lab-platform/backups /var/lib/proxmox-lab-platform/updater
+mkdir -p "$INSTALL_ROOT" /var/lib/proxmox-lab-platform/backups /var/lib/proxmox-lab-platform/updater /var/lib/proxmox-lab-platform/docker
 chown root:proxmox-lab-updater /var/lib/proxmox-lab-platform/updater
 chmod 0750 /var/lib/proxmox-lab-platform/updater
+chmod 0700 /var/lib/proxmox-lab-platform/docker
 mkdir -p /run/proxmox-lab-updater
 chown root:proxmox-lab-updater /run/proxmox-lab-updater
 chmod 0750 /run/proxmox-lab-updater
