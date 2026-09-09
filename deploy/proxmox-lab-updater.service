@@ -9,6 +9,9 @@ Group=proxmox-lab-updater
 EnvironmentFile=/opt/proxmox-lab-platform/app/.env
 Environment=PLATFORM_APP_DIR=/opt/proxmox-lab-platform/app
 Environment=PLATFORM_STATE_DIR=/var/lib/proxmox-lab-platform
+# Keep Docker's client state outside /root, which is intentionally hidden by
+# ProtectHome=true. This permits Compose builds without weakening that sandbox.
+Environment=DOCKER_CONFIG=/var/lib/proxmox-lab-platform/docker
 ExecStart=/usr/bin/python3 /usr/local/lib/proxmox-lab-updater.py
 Restart=on-failure
 RestartSec=5
