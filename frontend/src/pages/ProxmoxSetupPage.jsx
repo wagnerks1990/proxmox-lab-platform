@@ -69,6 +69,16 @@ export default function ProxmoxSetupPage(){
     const hs = await api.get(`/admin/proxmox/host-access/status?cluster_id=${id}`)
     setHostAccess(hs.data)
   })
+
+  // A saved connection remains active after navigation, but its discovery data is
+  // intentionally kept only in client state. Reload it for the active cluster so
+  // the Defaults editor is available immediately after returning to this page.
+  useEffect(()=>{
+    if (activeCluster?.id && selectedId !== activeCluster.id) {
+      refreshDiscovery(activeCluster.id)
+    }
+  }, [activeCluster?.id])
+
   const bootstrapHostAccess = ()=>run(async ()=>{
     if (!selectedId) return
     const payload = { cluster_id: selectedId, ...hostAccessForm }
