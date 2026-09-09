@@ -5,7 +5,7 @@ import random
 from dataclasses import dataclass
 from typing import Awaitable, Callable, TypeVar
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 @dataclass
@@ -36,4 +36,6 @@ async def async_retry_with_backoff(
             delay = min(max_delay, base_delay * (2 ** (attempt - 1)))
             delay += random.uniform(0, jitter)
             await asyncio.sleep(delay)
-    return AsyncRetryResult(ok=False, attempts=attempt, error='retry attempts exhausted')
+    return AsyncRetryResult(
+        ok=False, attempts=attempt, error="retry attempts exhausted"
+    )

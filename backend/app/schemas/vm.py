@@ -78,7 +78,7 @@ class AuditLogResponse(BaseModel):
     action: str
     target_type: str
     target_id: str
-    outcome: str = 'success'
+    outcome: str = "success"
     message: str | None = None
     request_id: str | None = None
     source_ip: str | None = None

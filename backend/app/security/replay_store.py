@@ -21,7 +21,9 @@ class InMemoryReplayStore(ReplayStore):
     def mark_used(self, token_id: str, expires_at: int) -> bool:
         now_ts = int(datetime.now(timezone.utc).timestamp())
         with self._lock:
-            self._used_until = {k: exp for k, exp in self._used_until.items() if exp >= now_ts}
+            self._used_until = {
+                k: exp for k, exp in self._used_until.items() if exp >= now_ts
+            }
             if token_id in self._used_until:
                 return False
             self._used_until[token_id] = expires_at
@@ -35,13 +37,14 @@ class RedisReplayStore(ReplayStore):
     def mark_used(self, token_id: str, expires_at: int) -> bool:
         now_ts = int(datetime.now(timezone.utc).timestamp())
         ttl = max(1, expires_at - now_ts)
-        return bool(self.client.set(f'plp:replay:{token_id}', 'used', nx=True, ex=ttl))
+        return bool(self.client.set(f"plp:replay:{token_id}", "used", nx=True, ex=ttl))
 
 
 def build_replay_store(backend: str) -> ReplayStore:
-    if backend == 'memory':
+    if backend == "memory":
         return InMemoryReplayStore()
-    if backend == 'redis':
+    if backend == "redis":
         from app.core.config import settings
+
         return RedisReplayStore(settings.redis_url)
-    raise ValueError(f'Unsupported replay store backend: {backend}')
+    raise ValueError(f"Unsupported replay store backend: {backend}")

@@ -9,8 +9,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = '20260907_0008'
-down_revision = '20260524_0007'
+revision = "20260907_0008"
+down_revision = "20260524_0007"
 branch_labels = None
 depends_on = None
 
@@ -27,8 +27,8 @@ def upgrade() -> None:
         """
     )
     op.alter_column(
-        'proxmox_clusters',
-        'verify_ssl',
+        "proxmox_clusters",
+        "verify_ssl",
         existing_type=sa.Boolean(),
         server_default=sa.true(),
         existing_nullable=False,
@@ -37,8 +37,8 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.alter_column(
-        'proxmox_clusters',
-        'verify_ssl',
+        "proxmox_clusters",
+        "verify_ssl",
         existing_type=sa.Boolean(),
         server_default=sa.false(),
         existing_nullable=False,

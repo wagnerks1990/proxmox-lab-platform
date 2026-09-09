@@ -21,7 +21,7 @@ from alembic.script import ScriptDirectory
 from sqlalchemy import text
 
 ROOT = Path(__file__).resolve().parents[2]
-BACKEND_DIR = ROOT / 'backend'
+BACKEND_DIR = ROOT / "backend"
 
 
 class CheckFailure(RuntimeError):
@@ -29,14 +29,14 @@ class CheckFailure(RuntimeError):
 
 
 def _load_dotenv_if_present() -> None:
-    env_path = BACKEND_DIR / '.env'
+    env_path = BACKEND_DIR / ".env"
     if not env_path.exists():
         return
     for raw in env_path.read_text().splitlines():
         line = raw.strip()
-        if not line or line.startswith('#') or '=' not in line:
+        if not line or line.startswith("#") or "=" not in line:
             continue
-        key, value = line.split('=', 1)
+        key, value = line.split("=", 1)
         key = key.strip()
         value = value.strip().strip('"').strip("'")
         os.environ.setdefault(key, value)
@@ -44,28 +44,30 @@ def _load_dotenv_if_present() -> None:
 
 def check_required_settings_present() -> None:
     required = [
-        'DATABASE_URL',
-        'JWT_SECRET_KEY',
-        'PROXMOX_BASE_URL',
-        'PROXMOX_TOKEN_ID',
-        'PROXMOX_TOKEN_SECRET',
+        "DATABASE_URL",
+        "JWT_SECRET_KEY",
+        "PROXMOX_BASE_URL",
+        "PROXMOX_TOKEN_ID",
+        "PROXMOX_TOKEN_SECRET",
     ]
     missing = [name for name in required if not os.getenv(name)]
     if missing:
-        fail('environment settings', f'missing required settings: {", ".join(missing)}')
-    ok('environment settings', 'required settings are present')
+        fail("environment settings", f"missing required settings: {', '.join(missing)}")
+    ok("environment settings", "required settings are present")
 
 
 def check_encryption_key_presence() -> None:
-    has_config_key = bool(os.getenv('CONFIG_ENCRYPTION_KEY'))
-    has_app_secret = bool(os.getenv('APP_SECRET_KEY'))
+    has_config_key = bool(os.getenv("CONFIG_ENCRYPTION_KEY"))
+    has_app_secret = bool(os.getenv("APP_SECRET_KEY"))
     if has_config_key:
-        ok('encryption key', 'CONFIG_ENCRYPTION_KEY is present')
+        ok("encryption key", "CONFIG_ENCRYPTION_KEY is present")
         return
     if has_app_secret:
-        print('[WARN] encryption key: CONFIG_ENCRYPTION_KEY not set; APP_SECRET_KEY fallback is present')
+        print(
+            "[WARN] encryption key: CONFIG_ENCRYPTION_KEY not set; APP_SECRET_KEY fallback is present"
+        )
         return
-    fail('encryption key', 'missing CONFIG_ENCRYPTION_KEY and APP_SECRET_KEY')
+    fail("encryption key", "missing CONFIG_ENCRYPTION_KEY and APP_SECRET_KEY")
 
 
 def ok(name: str, detail: str) -> None:
@@ -78,38 +80,41 @@ def fail(name: str, detail: str) -> None:
 
 def check_imports_compile() -> None:
     failed: list[str] = []
-    for file_path in (BACKEND_DIR / 'app').rglob('*.py'):
+    for file_path in (BACKEND_DIR / "app").rglob("*.py"):
         try:
             py_compile.compile(str(file_path), doraise=True)
         except py_compile.PyCompileError as exc:
             failed.append(f"{file_path.relative_to(ROOT)} -> {exc.msg}")
     if failed:
-        fail('python compile', '; '.join(failed[:3]))
-    ok('python compile', 'all backend app modules compile')
+        fail("python compile", "; ".join(failed[:3]))
+    ok("python compile", "all backend app modules compile")
 
 
 def check_session_expired_symbol() -> None:
     from app.architecture import events
 
-    value = getattr(events, 'SESSION_EXPIRED', None)
-    if value != 'SESSION_EXPIRED':
-        fail('SESSION_EXPIRED symbol', f"expected 'SESSION_EXPIRED', got {value!r}")
-    ok('SESSION_EXPIRED symbol', "present in app.architecture.events")
+    value = getattr(events, "SESSION_EXPIRED", None)
+    if value != "SESSION_EXPIRED":
+        fail("SESSION_EXPIRED symbol", f"expected 'SESSION_EXPIRED', got {value!r}")
+    ok("SESSION_EXPIRED symbol", "present in app.architecture.events")
 
 
 def check_alembic_single_head() -> None:
-    cfg = Config(str(BACKEND_DIR / 'alembic.ini'))
-    cfg.set_main_option('script_location', str(BACKEND_DIR / 'alembic'))
+    cfg = Config(str(BACKEND_DIR / "alembic.ini"))
+    cfg.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
     script = ScriptDirectory.from_config(cfg)
     heads = script.get_heads()
     if len(heads) != 1:
-        fail('alembic heads', f'expected one head, found {heads}')
+        fail("alembic heads", f"expected one head, found {heads}")
 
-    cmd = ['alembic', '-c', str(BACKEND_DIR / 'alembic.ini'), 'heads']
+    cmd = ["alembic", "-c", str(BACKEND_DIR / "alembic.ini"), "heads"]
     result = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, check=False)
     if result.returncode != 0:
-        fail('alembic cli', result.stderr.strip() or result.stdout.strip() or 'unknown error')
-    ok('alembic heads', result.stdout.strip())
+        fail(
+            "alembic cli",
+            result.stderr.strip() or result.stdout.strip() or "unknown error",
+        )
+    ok("alembic heads", result.stdout.strip())
 
 
 def check_database_connectivity() -> None:
@@ -117,40 +122,42 @@ def check_database_connectivity() -> None:
 
     db = SessionLocal()
     try:
-        db.execute(text('SELECT 1'))
+        db.execute(text("SELECT 1"))
     except Exception as exc:  # noqa: BLE001
-        fail('database connectivity', str(exc))
+        fail("database connectivity", str(exc))
     finally:
         db.close()
-    ok('database connectivity', 'SELECT 1 succeeded')
+    ok("database connectivity", "SELECT 1 succeeded")
 
 
 async def check_health_endpoint() -> None:
-    url = 'http://127.0.0.1:8000/api/health'
+    url = "http://127.0.0.1:8000/api/health"
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.get(url)
     except Exception as exc:  # noqa: BLE001
-        fail('/api/health', f'request failed: {exc}')
+        fail("/api/health", f"request failed: {exc}")
 
     if response.status_code != 200:
-        fail('/api/health', f'unexpected status {response.status_code}: {response.text}')
+        fail(
+            "/api/health", f"unexpected status {response.status_code}: {response.text}"
+        )
 
     try:
         payload = response.json()
     except json.JSONDecodeError as exc:
-        fail('/api/health', f'invalid json: {exc}')
+        fail("/api/health", f"invalid json: {exc}")
 
-    if payload.get('backend') != 'ok':
-        fail('/api/health', f"backend not ok: {payload}")
+    if payload.get("backend") != "ok":
+        fail("/api/health", f"backend not ok: {payload}")
 
-    if not payload.get('database', {}).get('ok'):
-        fail('/api/health', f"database not ok: {payload}")
+    if not payload.get("database", {}).get("ok"):
+        fail("/api/health", f"database not ok: {payload}")
 
-    if not payload.get('proxmox', {}).get('ok'):
-        fail('/api/health', f"proxmox not ok: {payload}")
+    if not payload.get("proxmox", {}).get("ok"):
+        fail("/api/health", f"proxmox not ok: {payload}")
 
-    ok('/api/health', json.dumps(payload, separators=(',', ':')))
+    ok("/api/health", json.dumps(payload, separators=(",", ":")))
 
 
 async def main() -> int:
@@ -160,12 +167,12 @@ async def main() -> int:
     _load_dotenv_if_present()
 
     checks = [
-        ('environment settings', check_required_settings_present),
-        ('encryption key', check_encryption_key_presence),
-        ('python compile', check_imports_compile),
-        ('SESSION_EXPIRED symbol', check_session_expired_symbol),
-        ('alembic heads', check_alembic_single_head),
-        ('database connectivity', check_database_connectivity),
+        ("environment settings", check_required_settings_present),
+        ("encryption key", check_encryption_key_presence),
+        ("python compile", check_imports_compile),
+        ("SESSION_EXPIRED symbol", check_session_expired_symbol),
+        ("alembic heads", check_alembic_single_head),
+        ("database connectivity", check_database_connectivity),
     ]
 
     try:
@@ -174,17 +181,19 @@ async def main() -> int:
         await check_health_endpoint()
     except CheckFailure as exc:
         print(exc)
-        print('\nDeployment validation FAILED.')
+        print("\nDeployment validation FAILED.")
         return 1
     except Exception as exc:  # noqa: BLE001
-        print(f'[FAIL] unexpected error: {exc}')
-        print('\nDeployment validation FAILED.')
+        print(f"[FAIL] unexpected error: {exc}")
+        print("\nDeployment validation FAILED.")
         return 1
 
-    print('\nDeployment validation PASSED.')
-    print('Note: this validates live state and does not treat stale historical journal logs as active failures.')
+    print("\nDeployment validation PASSED.")
+    print(
+        "Note: this validates live state and does not treat stale historical journal logs as active failures."
+    )
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     raise SystemExit(asyncio.run(main()))

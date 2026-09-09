@@ -29,6 +29,7 @@ function formatUptime(sec){
 }
 
 export default function DashboardPage({ user }) {
+  const isPlatformAdmin = String(user?.role || '').toLowerCase() === 'admin'
   const [vms, setVms] = useState([])
   const [templates, setTemplates] = useState([])
   const [resourceStats, setResourceStats] = useState(null)
@@ -45,6 +46,7 @@ export default function DashboardPage({ user }) {
   }
 
   const loadResourceStats = async () => {
+    if (!isPlatformAdmin) return
     setLoadingStats(true)
     setStatsError('')
     try {
@@ -83,8 +85,8 @@ export default function DashboardPage({ user }) {
 
   useEffect(() => {
     loadTop().catch(() => {})
-    loadResourceStats().catch(() => {})
-  }, [])
+    if (isPlatformAdmin) loadResourceStats().catch(() => {})
+  }, [isPlatformAdmin])
 
   const stats = useMemo(() => ({
     total: vms.length,
@@ -100,7 +102,7 @@ export default function DashboardPage({ user }) {
       {Object.entries(stats).map(([k,v])=><div key={k} className='stat-card'><div className='label'>{k.toUpperCase()}</div><div className='value'>{v}</div></div>)}
     </div>
 
-    <section className='panel' style={{marginTop:16}}>
+    {isPlatformAdmin ? <section className='panel' style={{marginTop:16}}>
       <div className='group' style={{justifyContent:'space-between'}}>
         <h3>Proxmox Cluster Resources</h3>
         <button onClick={loadResourceStats} disabled={loadingStats}>{loadingStats ? 'Refreshing…' : 'Refresh'}</button>
@@ -151,6 +153,6 @@ export default function DashboardPage({ user }) {
           </table>
         )}
       </> : null}
-    </section>
+    </section> : null}
   </div>
 }

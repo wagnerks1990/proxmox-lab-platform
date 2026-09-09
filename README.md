@@ -56,6 +56,31 @@ The current API is mounted at `/api` and `/v1/api` during the versioned
 transition. Interactive OpenAPI documentation is available at `/docs` on a
 running development installation.
 
+## Disposable live test
+
+The repository includes a stateful Proxmox simulator and a guarded end-to-end
+test. It exercises first-admin enrollment, organization and classroom setup,
+student authorization, durable VM clone/start/stop/delete operations, and
+logout through the public HTTP API. The test is destructive and is intended
+only for the disposable Docker Compose database created for CI.
+
+```bash
+export POSTGRES_PASSWORD='live-test-database-password'
+export JWT_SECRET_KEY='live-test-jwt-secret-at-least-32-characters'
+export CONFIG_ENCRYPTION_KEY='live-test-encryption-key-at-least-32-characters'
+export UPDATER_TOKEN='live-test-updater-token'
+export BOOTSTRAP_ADMIN_TOKEN='live-test-bootstrap-token'
+export UPDATER_GID='0'
+docker compose -f docker-compose.yml -f docker-compose.live-test.yml up -d --build
+python scripts/live_test.py --bootstrap-token "$BOOTSTRAP_ADMIN_TOKEN" \
+  --i-understand-this-deletes-data
+docker compose -f docker-compose.yml -f docker-compose.live-test.yml down \
+  --volumes --remove-orphans
+```
+
+See [`docs/operations/live-test.md`](docs/operations/live-test.md) for safety
+boundaries, troubleshooting, and what this simulator does not prove.
+
 ## Setup
 1. Backend
 ```bash

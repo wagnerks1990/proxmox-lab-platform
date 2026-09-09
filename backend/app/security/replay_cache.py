@@ -13,9 +13,7 @@ class ReplayCache:
         now_ts = int(datetime.now(timezone.utc).timestamp())
         with self._lock:
             self._used_until = {
-                key: exp
-                for key, exp in self._used_until.items()
-                if exp >= now_ts
+                key: exp for key, exp in self._used_until.items() if exp >= now_ts
             }
             if token_id in self._used_until:
                 return False

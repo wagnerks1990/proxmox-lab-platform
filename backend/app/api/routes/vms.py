@@ -1,2 +1,3 @@
 from fastapi import APIRouter
-router = APIRouter(tags=['vms'])
+
+router = APIRouter(tags=["vms"])

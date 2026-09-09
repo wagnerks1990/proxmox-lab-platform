@@ -27,7 +27,7 @@ def test_relationship_role_wins_over_stale_legacy_admin():
 
 
 def test_unknown_role_does_not_receive_student_owner_access():
-    user = User(10, relationship=None, legacy='')
+    user = User(10, relationship=None, legacy="")
     with pytest.raises(PolicyError):
         can_launch_vm(user, VM(owner_id=10))
 

@@ -17,7 +17,10 @@ def test_multi_node_assets_cluster_wide_pass_shape():
     data = _compute_asset_constraints(
         online_nodes={"pve-lab-01", "pve-lab-02"},
         eligible_nodes={"pve-lab-01", "pve-lab-02"},
-        templates=[{"vmid": 303, "node": "pve-lab-01"}, {"vmid": 303, "node": "pve-lab-02"}],
+        templates=[
+            {"vmid": 303, "node": "pve-lab-01"},
+            {"vmid": 303, "node": "pve-lab-02"},
+        ],
         iso_items=[
             {"node": "pve-lab-01", "content_id": "local:iso/ubuntu.iso"},
             {"node": "pve-lab-02", "content_id": "local:iso/ubuntu.iso"},

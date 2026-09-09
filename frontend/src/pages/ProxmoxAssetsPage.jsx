@@ -135,7 +135,7 @@ export default function ProxmoxAssetsPage() {
       : base
 
     if (jobFilter === 'active') {
-      return filteredByAge.filter((j) => ['queued', 'syncing'].includes(String(j.state || '').toLowerCase()))
+      return filteredByAge.filter((j) => ['queued', 'running', 'syncing'].includes(String(j.state || '').toLowerCase()))
     }
     if (jobFilter === 'verified') {
       return filteredByAge.filter((j) => String(j.state || '').toLowerCase() === 'verified')
@@ -152,12 +152,12 @@ export default function ProxmoxAssetsPage() {
 
   useEffect(() => {
     if (!jobs.length) return
-    const active = jobs.some(j => ['queued', 'syncing'].includes(String(j.state || '').toLowerCase()))
+    const active = jobs.some(j => ['queued', 'running', 'syncing'].includes(String(j.state || '').toLowerCase()))
     if (!active) return
     const t = setInterval(async () => {
       try {
         const latest = await loadJobs()
-        const hadActive = latest.some(j => ['queued', 'syncing'].includes(String(j.state || '').toLowerCase()))
+        const hadActive = latest.some(j => ['queued', 'running', 'syncing'].includes(String(j.state || '').toLowerCase()))
         if (!hadActive) {
           await load()
         }

@@ -5912,6 +5912,8 @@ export interface components {
         };
         /** PoolPatch */
         PoolPatch: {
+            /** Bridge */
+            bridge?: string | null;
             /** Default Protocol */
             default_protocol?: string | null;
             /** Description */
@@ -5922,6 +5924,26 @@ export interface components {
             enabled?: boolean | null;
             /** Maintenance Mode */
             maintenance_mode?: boolean | null;
+            /** Name */
+            name?: string | null;
+            /** Naming Pattern */
+            naming_pattern?: string | null;
+            /** Pool Type */
+            pool_type?: string | null;
+            /** Storage */
+            storage?: string | null;
+            /** Target Node */
+            target_node?: string | null;
+            /** Template Node */
+            template_node?: string | null;
+            /** Template Vmid */
+            template_vmid?: number | null;
+            /** Vlan Tag */
+            vlan_tag?: number | null;
+            /** Vmid End */
+            vmid_end?: number | null;
+            /** Vmid Start */
+            vmid_start?: number | null;
         };
         /** PoolPlanAction */
         PoolPlanAction: {
@@ -6032,6 +6054,11 @@ export interface components {
             state: string;
             /** Updated At */
             updated_at?: string | null;
+        };
+        /** SessionReconnectRequest */
+        SessionReconnectRequest: {
+            /** Token */
+            token: string;
         };
         /** SessionResponse */
         SessionResponse: {
@@ -6161,16 +6188,6 @@ export interface components {
             proxmox_node?: string | null;
             /** Source Vmid */
             source_vmid?: number | null;
-        };
-        /** TokenResponse */
-        TokenResponse: {
-            /** Access Token */
-            access_token: string;
-            /**
-             * Token Type
-             * @default bearer
-             */
-            token_type: string;
         };
         /** UserResponse */
         UserResponse: {
@@ -10664,13 +10681,11 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["TokenResponse"];
-                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -10697,13 +10712,11 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["TokenResponse"];
-                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -10817,13 +10830,11 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["TokenResponse"];
-                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -11431,9 +11442,7 @@ export interface operations {
     };
     session_reconnect_api_sessions__id__reconnect_post: {
         parameters: {
-            query: {
-                token: string;
-            };
+            query?: never;
             header?: {
                 "X-Organization-ID"?: number | null;
             };
@@ -11442,7 +11451,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionReconnectRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -16195,13 +16208,11 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["TokenResponse"];
-                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -16228,13 +16239,11 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["TokenResponse"];
-                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -16348,13 +16357,11 @@ export interface operations {
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["TokenResponse"];
-                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -16962,9 +16969,7 @@ export interface operations {
     };
     session_reconnect_v1_api_sessions__id__reconnect_post: {
         parameters: {
-            query: {
-                token: string;
-            };
+            query?: never;
             header?: {
                 "X-Organization-ID"?: number | null;
             };
@@ -16973,7 +16978,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionReconnectRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

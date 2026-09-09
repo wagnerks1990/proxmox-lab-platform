@@ -54,14 +54,27 @@ class FakeDB:
 
 
 def test_admin_events_worker_runs_serialization(monkeypatch):
-
     wr_rows = [
-        Obj(id=1, worker_name="health_worker", status="ok", started_at=datetime(2026, 5, 24, 10, 0, 0), request_id="req-1"),
-        Obj(id=2, worker_name="cleanup_worker", status="running", started_at=datetime(2026, 5, 24, 11, 0, 0), request_id=None),
+        Obj(
+            id=1,
+            worker_name="health_worker",
+            status="ok",
+            started_at=datetime(2026, 5, 24, 10, 0, 0),
+            request_id="req-1",
+        ),
+        Obj(
+            id=2,
+            worker_name="cleanup_worker",
+            status="running",
+            started_at=datetime(2026, 5, 24, 11, 0, 0),
+            request_id=None,
+        ),
     ]
     db = FakeDB(mapping={WorkerRun: wr_rows})
 
-    result = admin_events.list_events(limit=5, offset=0, _user=Obj(), db=db, organization=ORG)
+    result = admin_events.list_events(
+        limit=5, offset=0, _user=Obj(), db=db, organization=ORG
+    )
 
     assert set(result.keys()) == {"items", "total", "limit", "offset"}
     assert result["limit"] == 5
@@ -74,14 +87,17 @@ def test_admin_events_worker_runs_serialization(monkeypatch):
 
 
 def test_admin_events_worker_runs_null_odd_values(monkeypatch):
-
     wr_rows = [
         Obj(id=3, worker_name=None, status=None, started_at=None, request_id=None),
-        Obj(id=4, worker_name="", status="WEIRD_STATUS", started_at=None, request_id=""),
+        Obj(
+            id=4, worker_name="", status="WEIRD_STATUS", started_at=None, request_id=""
+        ),
     ]
     db = FakeDB(mapping={WorkerRun: wr_rows})
 
-    result = admin_events.list_events(limit=10, offset=0, _user=Obj(), db=db, organization=ORG)
+    result = admin_events.list_events(
+        limit=10, offset=0, _user=Obj(), db=db, organization=ORG
+    )
 
     worker_items = [i for i in result["items"] if i["source"] == "worker_runs"]
     assert len(worker_items) == 2
@@ -91,12 +107,31 @@ def test_admin_events_worker_runs_null_odd_values(monkeypatch):
 
 
 def test_admin_events_source_isolation_audit_failure(monkeypatch):
+    tel_rows = [
+        Obj(
+            id=9,
+            created_at=datetime(2026, 5, 24, 12, 0, 0),
+            severity="warning",
+            event_type="node_issue",
+            vm_id=None,
+        )
+    ]
+    wr_rows = [
+        Obj(
+            id=5,
+            worker_name="session_worker",
+            status="ok",
+            started_at=datetime(2026, 5, 24, 13, 0, 0),
+            request_id="req-5",
+        )
+    ]
+    db = FakeDB(
+        mapping={TelemetryEvent: tel_rows, WorkerRun: wr_rows}, fail_models={AuditLog}
+    )
 
-    tel_rows = [Obj(id=9, created_at=datetime(2026, 5, 24, 12, 0, 0), severity="warning", event_type="node_issue", vm_id=None)]
-    wr_rows = [Obj(id=5, worker_name="session_worker", status="ok", started_at=datetime(2026, 5, 24, 13, 0, 0), request_id="req-5")]
-    db = FakeDB(mapping={TelemetryEvent: tel_rows, WorkerRun: wr_rows}, fail_models={AuditLog})
-
-    result = admin_events.list_events(limit=20, offset=0, _user=Obj(), db=db, organization=ORG)
+    result = admin_events.list_events(
+        limit=20, offset=0, _user=Obj(), db=db, organization=ORG
+    )
 
     sources = {i["source"] for i in result["items"]}
     assert "worker_runs" in sources
@@ -104,12 +139,31 @@ def test_admin_events_source_isolation_audit_failure(monkeypatch):
 
 
 def test_admin_events_source_isolation_telemetry_failure(monkeypatch):
+    audit_rows = [
+        Obj(
+            id=10,
+            created_at=datetime(2026, 5, 24, 12, 0, 0),
+            action="updated",
+            target_type="vm",
+            target_id=101,
+        )
+    ]
+    wr_rows = [
+        Obj(
+            id=6,
+            worker_name="cleanup_worker",
+            status="error",
+            started_at=datetime(2026, 5, 24, 14, 0, 0),
+            request_id="req-6",
+        )
+    ]
+    db = FakeDB(
+        mapping={AuditLog: audit_rows, WorkerRun: wr_rows}, fail_models={TelemetryEvent}
+    )
 
-    audit_rows = [Obj(id=10, created_at=datetime(2026, 5, 24, 12, 0, 0), action="updated", target_type="vm", target_id=101)]
-    wr_rows = [Obj(id=6, worker_name="cleanup_worker", status="error", started_at=datetime(2026, 5, 24, 14, 0, 0), request_id="req-6")]
-    db = FakeDB(mapping={AuditLog: audit_rows, WorkerRun: wr_rows}, fail_models={TelemetryEvent})
-
-    result = admin_events.list_events(limit=20, offset=0, _user=Obj(), db=db, organization=ORG)
+    result = admin_events.list_events(
+        limit=20, offset=0, _user=Obj(), db=db, organization=ORG
+    )
 
     sources = {i["source"] for i in result["items"]}
     assert "worker_runs" in sources
@@ -117,12 +171,32 @@ def test_admin_events_source_isolation_telemetry_failure(monkeypatch):
 
 
 def test_admin_events_source_isolation_worker_failure(monkeypatch):
+    audit_rows = [
+        Obj(
+            id=11,
+            created_at=datetime(2026, 5, 24, 12, 0, 0),
+            action="created",
+            target_type="pool",
+            target_id=1,
+        )
+    ]
+    tel_rows = [
+        Obj(
+            id=12,
+            created_at=datetime(2026, 5, 24, 12, 1, 0),
+            severity="info",
+            event_type="heartbeat",
+            vm_id=None,
+        )
+    ]
+    db = FakeDB(
+        mapping={AuditLog: audit_rows, TelemetryEvent: tel_rows},
+        fail_models={WorkerRun},
+    )
 
-    audit_rows = [Obj(id=11, created_at=datetime(2026, 5, 24, 12, 0, 0), action="created", target_type="pool", target_id=1)]
-    tel_rows = [Obj(id=12, created_at=datetime(2026, 5, 24, 12, 1, 0), severity="info", event_type="heartbeat", vm_id=None)]
-    db = FakeDB(mapping={AuditLog: audit_rows, TelemetryEvent: tel_rows}, fail_models={WorkerRun})
-
-    result = admin_events.list_events(limit=20, offset=0, _user=Obj(), db=db, organization=ORG)
+    result = admin_events.list_events(
+        limit=20, offset=0, _user=Obj(), db=db, organization=ORG
+    )
 
     sources = {i["source"] for i in result["items"]}
     assert "audit_logs" in sources
@@ -132,15 +206,31 @@ def test_admin_events_source_isolation_worker_failure(monkeypatch):
 
 def test_admin_events_rbac_admin_and_teacher_allowed(monkeypatch):
     db = FakeDB()
-    assert admin_events.list_events(limit=1, offset=0, _user=Obj(), db=db, organization=ORG)["limit"] == 1
+    assert (
+        admin_events.list_events(
+            limit=1, offset=0, _user=Obj(), db=db, organization=ORG
+        )["limit"]
+        == 1
+    )
     instructor = OrganizationContext(1, "default", "instructor")
-    assert admin_events.list_events(limit=1, offset=0, _user=Obj(), db=db, organization=instructor)["limit"] == 1
+    assert (
+        admin_events.list_events(
+            limit=1, offset=0, _user=Obj(), db=db, organization=instructor
+        )["limit"]
+        == 1
+    )
 
 
 def test_admin_events_rbac_student_forbidden(monkeypatch):
     db = FakeDB()
 
     with pytest.raises(HTTPException) as exc:
-        admin_events.list_events(limit=1, offset=0, _user=Obj(), db=db, organization=OrganizationContext(1, "default", "student"))
+        admin_events.list_events(
+            limit=1,
+            offset=0,
+            _user=Obj(),
+            db=db,
+            organization=OrganizationContext(1, "default", "student"),
+        )
 
     assert exc.value.status_code == 403

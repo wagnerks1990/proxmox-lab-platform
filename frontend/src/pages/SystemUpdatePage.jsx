@@ -12,6 +12,12 @@ export default function SystemUpdatePage({ setMessage }) {
     setForm(current.settings)
   }
   useEffect(() => { load().catch(e => setMessage(e?.response?.data?.detail || e.message)) }, [])
+  useEffect(() => {
+    const state = String(data?.agent?.operation?.status || data?.latest_run?.status || '').toLowerCase()
+    if (!['queued', 'running'].includes(state)) return
+    const timer = setInterval(() => load().catch(() => {}), 2000)
+    return () => clearInterval(timer)
+  }, [data?.agent?.operation?.status, data?.latest_run?.status])
 
   const perform = async (label, action) => {
     if (!window.confirm(`${label}? The service may be temporarily unavailable.`)) return

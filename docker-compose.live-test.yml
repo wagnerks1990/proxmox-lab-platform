@@ -1,0 +1,23 @@
+services:
+  mock-proxmox:
+    image: python:3.12-slim
+    command: ["python", "/live/mock_proxmox.py", "--host", "0.0.0.0", "--port", "8006"]
+    volumes:
+      - ./tests/live:/live:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8006/api2/json/version', timeout=2)"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  api:
+    environment:
+      PROXMOX_BASE_URL: http://mock-proxmox:8006/api2/json
+      PROXMOX_TOKEN_ID: live-test@pve!platform
+      PROXMOX_TOKEN_SECRET: live-test-only
+      PROXMOX_VERIFY_SSL: "false"
+      OPERATION_POLL_INTERVAL_SECONDS: "1"
+    depends_on:
+      mock-proxmox:
+        condition: service_healthy
+

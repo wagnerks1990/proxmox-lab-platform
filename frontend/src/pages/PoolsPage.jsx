@@ -37,7 +37,7 @@ export default function PoolsPage(){
         <input className='input' placeholder='Name' value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/>
         <input className='input' placeholder='Description' value={form.description} onChange={e=>setForm({...form,description:e.target.value})}/>
         <select className='input' value={form.pool_type} onChange={e=>setForm({...form,pool_type:e.target.value})}><option value='persistent'>persistent</option><option value='non_persistent'>non_persistent</option></select>
-        <select className='input' value={form.default_protocol} onChange={e=>setForm({...form,default_protocol:e.target.value})}><option>NOVNC</option><option>SSH_WS</option><option>RDP</option><option>SPICE</option></select>
+        <select className='input' value={form.default_protocol} onChange={e=>setForm({...form,default_protocol:e.target.value})}><option>NOVNC</option><option>SSH_WS</option><option>RDP</option></select>
         <input className='input' type='number' min='0' value={form.desired_size} onChange={e=>setForm({...form,desired_size:e.target.value})}/>
         <select className='input' value={form.template_vmid} onChange={e=>{const v=e.target.value; const t=templates.find(x=>String(x.source_vmid)===v); setForm({...form,template_vmid:v,template_node:t?.proxmox_node||''})}}>
           <option value=''>Select imported template</option>

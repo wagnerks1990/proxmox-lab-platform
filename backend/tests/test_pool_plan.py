@@ -6,22 +6,22 @@ class P:
     desired_size = 2
     vmid_start = 300
     vmid_end = 305
-    naming_pattern = 'lab-{index}-{vmid}'
-    name = 'labpool'
-    pool_type = 'persistent'
-    default_protocol = 'SSH_WS'
+    naming_pattern = "lab-{index}-{vmid}"
+    name = "labpool"
+    pool_type = "persistent"
+    default_protocol = "SSH_WS"
     vlan_tag = 100
 
     __dict__ = {
-        'id': 1,
-        'desired_size': 2,
-        'vmid_start': 300,
-        'vmid_end': 305,
-        'naming_pattern': 'lab-{index}-{vmid}',
-        'name': 'labpool',
-        'pool_type': 'persistent',
-        'default_protocol': 'SSH_WS',
-        'vlan_tag': 100,
+        "id": 1,
+        "desired_size": 2,
+        "vmid_start": 300,
+        "vmid_end": 305,
+        "naming_pattern": "lab-{index}-{vmid}",
+        "name": "labpool",
+        "pool_type": "persistent",
+        "default_protocol": "SSH_WS",
+        "vlan_tag": 100,
     }
 
 

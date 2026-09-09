@@ -9,11 +9,15 @@ from app.services.validation_service import ValidationService
 router = APIRouter()
 
 
-@router.get('/admin/validation/summary', response_model=ApiEnvelope[list[ValidationCheck]])
-def validation_summary(_user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+@router.get(
+    "/admin/validation/summary", response_model=ApiEnvelope[list[ValidationCheck]]
+)
+def validation_summary(
+    _user=Depends(require_role("Admin")), db: Session = Depends(get_db)
+):
     return ApiEnvelope(success=True, data=ValidationService(db).run_checks())
 
 
-@router.post('/admin/validation/run', response_model=ApiEnvelope[list[ValidationCheck]])
-def validation_run(_user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+@router.post("/admin/validation/run", response_model=ApiEnvelope[list[ValidationCheck]])
+def validation_run(_user=Depends(require_role("Admin")), db: Session = Depends(get_db)):
     return ApiEnvelope(success=True, data=ValidationService(db).run_checks())

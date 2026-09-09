@@ -44,7 +44,9 @@ class RedisWorkerLockStore(WorkerLockStore):
 
     def acquire(self, name: str, ttl_seconds: int = 60) -> bool:
         token = uuid.uuid4().hex
-        acquired = bool(self.client.set(f'plp:worker-lock:{name}', token, nx=True, ex=ttl_seconds))
+        acquired = bool(
+            self.client.set(f"plp:worker-lock:{name}", token, nx=True, ex=ttl_seconds)
+        )
         if acquired:
             self._tokens[name] = token
         return acquired
@@ -52,13 +54,19 @@ class RedisWorkerLockStore(WorkerLockStore):
     def release(self, name: str) -> None:
         token = self._tokens.pop(name, None)
         if token:
-            self.client.eval("if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end", 1, f'plp:worker-lock:{name}', token)
+            self.client.eval(
+                "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
+                1,
+                f"plp:worker-lock:{name}",
+                token,
+            )
 
 
 def build_lock_store(backend: str) -> WorkerLockStore:
-    if backend == 'memory':
+    if backend == "memory":
         return InMemoryWorkerLockStore()
-    if backend == 'redis':
+    if backend == "redis":
         from app.core.config import settings
+
         return RedisWorkerLockStore(settings.redis_url)
-    raise ValueError(f'Unsupported worker lock backend: {backend}')
+    raise ValueError(f"Unsupported worker lock backend: {backend}")

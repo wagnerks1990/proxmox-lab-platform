@@ -18,8 +18,12 @@ def run_once() -> None:
                 last = last.replace(tzinfo=timezone.utc)
             if now - last < timedelta(minutes=configured.check_interval_minutes):
                 return
-        result = service.run('check', None)
-        if result.get('ok') and result.get('update_available') and now.hour == configured.maintenance_hour_utc:
-            service.run('apply', None, result.get('to_version'))
+        result = service.run("check", None)
+        if (
+            result.get("ok")
+            and result.get("update_available")
+            and now.hour == configured.maintenance_hour_utc
+        ):
+            service.run("apply", None, result.get("to_version"))
     finally:
         db.close()

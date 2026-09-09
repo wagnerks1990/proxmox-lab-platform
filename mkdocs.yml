@@ -22,6 +22,7 @@ nav:
       - Durable jobs: operations/durable-operations.md
       - Consoles: operations/consoles.md
       - Updates and rollback: operations/updates.md
+      - Disposable live test: operations/live-test.md
   - Development validation: development/validation.md
   - V2 Roadmap: roadmap/v2-rebuild.md
   - Existing documentation:

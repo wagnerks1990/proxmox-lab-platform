@@ -5,7 +5,7 @@ import time
 from dataclasses import dataclass
 from typing import Callable, TypeVar
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 @dataclass
@@ -36,4 +36,4 @@ def retry_with_backoff(
             delay = min(max_delay, base_delay * (2 ** (attempt - 1)))
             delay += random.uniform(0, jitter)
             time.sleep(delay)
-    return RetryResult(ok=False, attempts=attempt, error='retry attempts exhausted')
+    return RetryResult(ok=False, attempts=attempt, error="retry attempts exhausted")

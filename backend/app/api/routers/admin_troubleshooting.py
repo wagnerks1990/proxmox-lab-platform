@@ -9,6 +9,6 @@ from app.services.troubleshooting_service import TroubleshootingService
 router = APIRouter()
 
 
-@router.get('/admin/troubleshooting/recent', response_model=ApiEnvelope[list[dict]])
-def recent_issues(_user=Depends(require_role('Teacher', 'Admin')), db: Session = Depends(get_db)):
+@router.get("/admin/troubleshooting/recent", response_model=ApiEnvelope[list[dict]])
+def recent_issues(_user=Depends(require_role("Admin")), db: Session = Depends(get_db)):
     return ApiEnvelope(success=True, data=TroubleshootingService(db).recent())

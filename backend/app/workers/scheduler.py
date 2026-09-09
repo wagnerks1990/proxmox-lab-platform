@@ -20,13 +20,63 @@ def start_scheduler() -> None:
     if scheduler and scheduler.running:
         return
     scheduler = BackgroundScheduler()
-    scheduler.add_job(operation_run_once, 'interval', seconds=settings.operation_poll_interval_seconds, id='durable_operations', replace_existing=True, next_run_time=datetime.now(timezone.utc), max_instances=1)
-    scheduler.add_job(asset_sync_run_once, 'interval', seconds=settings.operation_poll_interval_seconds, id='asset_sync_jobs', replace_existing=True, next_run_time=datetime.now(timezone.utc), max_instances=1)
-    scheduler.add_job(session_run_once, 'interval', seconds=settings.session_cleanup_interval_seconds, id='session_cleanup', replace_existing=True, next_run_time=datetime.now(timezone.utc))
-    scheduler.add_job(cleanup_run_once, 'interval', seconds=settings.session_cleanup_interval_seconds, id='cleanup', replace_existing=True, next_run_time=datetime.now(timezone.utc))
-    scheduler.add_job(health_run_once, 'interval', seconds=settings.health_poll_interval_seconds, id='health', replace_existing=True, next_run_time=datetime.now(timezone.utc))
-    scheduler.add_job(recon_run_once, 'interval', seconds=settings.reconciliation_interval_seconds, id='reconciliation', replace_existing=True, next_run_time=datetime.now(timezone.utc))
-    scheduler.add_job(update_run_once, 'interval', seconds=settings.updater_poll_interval_seconds, id='deployment_updates', replace_existing=True)
+    scheduler.add_job(
+        operation_run_once,
+        "interval",
+        seconds=settings.operation_poll_interval_seconds,
+        id="durable_operations",
+        replace_existing=True,
+        next_run_time=datetime.now(timezone.utc),
+        max_instances=1,
+    )
+    scheduler.add_job(
+        asset_sync_run_once,
+        "interval",
+        seconds=settings.operation_poll_interval_seconds,
+        id="asset_sync_jobs",
+        replace_existing=True,
+        next_run_time=datetime.now(timezone.utc),
+        max_instances=1,
+    )
+    scheduler.add_job(
+        session_run_once,
+        "interval",
+        seconds=settings.session_cleanup_interval_seconds,
+        id="session_cleanup",
+        replace_existing=True,
+        next_run_time=datetime.now(timezone.utc),
+    )
+    scheduler.add_job(
+        cleanup_run_once,
+        "interval",
+        seconds=settings.session_cleanup_interval_seconds,
+        id="cleanup",
+        replace_existing=True,
+        next_run_time=datetime.now(timezone.utc),
+    )
+    scheduler.add_job(
+        health_run_once,
+        "interval",
+        seconds=settings.health_poll_interval_seconds,
+        id="health",
+        replace_existing=True,
+        next_run_time=datetime.now(timezone.utc),
+    )
+    scheduler.add_job(
+        recon_run_once,
+        "interval",
+        seconds=settings.reconciliation_interval_seconds,
+        id="reconciliation",
+        replace_existing=True,
+        next_run_time=datetime.now(timezone.utc),
+    )
+    scheduler.add_job(
+        update_run_once,
+        "interval",
+        seconds=settings.updater_poll_interval_seconds,
+        id="deployment_updates",
+        replace_existing=True,
+    )
     scheduler.start()
 
 

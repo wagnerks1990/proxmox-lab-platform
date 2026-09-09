@@ -14,3 +14,24 @@ test('console launch code never puts auth or Proxmox tickets in a URL', () => {
   assert.doesNotMatch(eventStream, /token=/)
   assert.doesNotMatch(vmPage, /ticket=/)
 })
+
+test('unsupported SPICE launch controls are not exposed', () => {
+  const sources = [
+    readFileSync(new URL('../src/pages/VmsPage.jsx', import.meta.url), 'utf8'),
+    readFileSync(new URL('../src/pages/PoolsPage.jsx', import.meta.url), 'utf8'),
+  ].join('\n')
+  assert.doesNotMatch(sources, /console\/spice|>SPICE</)
+})
+
+test('noVNC uses the normalized backend launch URL contract', () => {
+  const source = readFileSync(new URL('../src/pages/VmsPage.jsx', import.meta.url), 'utf8')
+  assert.match(source, /data\?\.launch_url/)
+  assert.doesNotMatch(source, /data\?\.novnc_url/)
+})
+
+test('durable VM and asset operations poll all active states', () => {
+  const vmPage = readFileSync(new URL('../src/pages/VmsPage.jsx', import.meta.url), 'utf8')
+  const assetsPage = readFileSync(new URL('../src/pages/ProxmoxAssetsPage.jsx', import.meta.url), 'utf8')
+  assert.match(vmPage, /operations\/\$\{operationId\}/)
+  assert.match(assetsPage, /'queued', 'running', 'syncing'/)
+})

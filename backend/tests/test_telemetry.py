@@ -5,5 +5,5 @@ from app.telemetry.lifecycle_metrics import as_dict
 
 def test_telemetry_subscriber_increment():
     register_subscribers(persist=False)
-    bus.publish(DomainEvent(name='RECONNECT_ATTEMPT', payload={}))
-    assert as_dict()['reconnect_attempts'] >= 1
+    bus.publish(DomainEvent(name="RECONNECT_ATTEMPT", payload={}))
+    assert as_dict()["reconnect_attempts"] >= 1
