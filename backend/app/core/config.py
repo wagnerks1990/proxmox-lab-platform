@@ -64,7 +64,7 @@ class Settings(BaseSettings):
     asset_sync_download_timeout_seconds: int = 7200
     asset_sync_lease_seconds: int = 180
 
-    updater_socket_path: str = "/run/proxmox-lab-updater/updater.sock"
+    updater_socket_path: str = "/var/lib/proxmox-lab-platform/updater/updater.sock"
     updater_token: str | None = None
     updater_repository: str = "https://github.com/wagnerks1990/proxmox-lab-platform.git"
     updater_poll_interval_seconds: int = 900
