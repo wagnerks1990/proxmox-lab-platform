@@ -47,7 +47,7 @@ services:
       WORKER_SCHEDULER_ENABLED: "true"
       RUN_MIGRATIONS: "true"
     volumes:
-      - /run/proxmox-lab-updater:/run/proxmox-lab-updater
+      - /var/lib/proxmox-lab-platform/updater:/var/lib/proxmox-lab-platform/updater
     group_add:
       - "${UPDATER_GID:?UPDATER_GID is required}"
     depends_on:
