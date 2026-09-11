@@ -38,7 +38,7 @@ services:
       PROXMOX_TOKEN_SECRET: ${PROXMOX_TOKEN_SECRET:-replace-in-gui}
       PROXMOX_VERIFY_SSL: ${PROXMOX_VERIFY_SSL:-true}
       UPDATER_TOKEN: ${UPDATER_TOKEN:?UPDATER_TOKEN is required}
-      UPDATER_REPOSITORY: ${UPDATER_REPOSITORY:-https://github.com/wagnerks1990/proxmox-lab-platform.git}
+      UPDATER_REPOSITORY: ${UPDATER_REPOSITORY:-https://github.com/wagnerks1990/labgoblin.git}
       UPDATER_ALLOW_AUTOMATIC: ${UPDATER_ALLOW_AUTOMATIC:-false}
       UPDATER_REQUIRE_SIGNED_COMMITS: ${UPDATER_REQUIRE_SIGNED_COMMITS:-false}
       REDIS_URL: redis://redis:6379/0
