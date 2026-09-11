@@ -6,10 +6,34 @@ from __future__ import annotations
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SKIP_DIRS = {".git", "node_modules", "site", "dist", "build", ".venv", "venv", "__pycache__"}
+SKIP_DIRS = {
+    ".git",
+    "node_modules",
+    "site",
+    "dist",
+    "build",
+    ".venv",
+    "venv",
+    "__pycache__",
+}
 TEXT_SUFFIXES = {
-    ".py", ".js", ".jsx", ".ts", ".tsx", ".json", ".yml", ".yaml", ".md",
-    ".sh", ".ini", ".toml", ".txt", ".service", ".css", ".html", ".env",
+    ".py",
+    ".js",
+    ".jsx",
+    ".ts",
+    ".tsx",
+    ".json",
+    ".yml",
+    ".yaml",
+    ".md",
+    ".sh",
+    ".ini",
+    ".toml",
+    ".txt",
+    ".service",
+    ".css",
+    ".html",
+    ".env",
 }
 
 DISALLOWED = (
@@ -29,12 +53,13 @@ DISALLOWED = (
     'TOKEN_ID_DEFAULT = "proxmox-lab-platform"',
 )
 
-# Policy documentation may cite retired identifiers as examples of what is forbidden.
+# Policy/checker files may cite retired identifiers as examples or detection rules.
 POLICY_FILES = {
     Path("docs/brand.md"),
     Path("docs/codex-cloud-workflow.md"),
     Path("AI_CONTEXT.md"),
     Path("AGENTS.md"),
+    Path("scripts/check_branding.py"),
 }
 
 
@@ -45,7 +70,10 @@ def iter_files():
         rel = path.relative_to(ROOT)
         if any(part in SKIP_DIRS for part in rel.parts):
             continue
-        if path.suffix.lower() in TEXT_SUFFIXES or path.name in {"Dockerfile", "Makefile"}:
+        if path.suffix.lower() in TEXT_SUFFIXES or path.name in {
+            "Dockerfile",
+            "Makefile",
+        }:
             yield path, rel
 
 

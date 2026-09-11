@@ -679,7 +679,7 @@ class ProxmoxHostAccess(Base):
         nullable=False,
     )
     node_name = Column(String(120), nullable=False)
-    runner_user = Column(String(120), nullable=False, default="proxmox-lab-runner")
+    runner_user = Column(String(120), nullable=False, default="labgoblin-runner")
     auth_method = Column(String(32), nullable=False, default="ssh_key")
     encrypted_private_key = Column(String, nullable=True)
     key_ref = Column(String(255), nullable=True)

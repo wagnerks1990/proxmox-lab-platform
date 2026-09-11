@@ -203,7 +203,9 @@ def install_agent_from(source: Path) -> None:
     temporary.replace(installed)
     service = Path("/etc/systemd/system/labgoblin-updater.service")
     service_tmp = service.with_suffix(".service.new")
-    service_tmp.write_bytes(source.joinpath("deploy/labgoblin-updater.service").read_bytes())
+    service_tmp.write_bytes(
+        source.joinpath("deploy/labgoblin-updater.service").read_bytes()
+    )
     os.chmod(service_tmp, 0o644)
     service_tmp.replace(service)
     run(["systemctl", "daemon-reload"])
@@ -253,7 +255,9 @@ def apply_update(payload: dict) -> dict:
             "target_ref must be the exact 40-character commit SHA returned by the update check"
         )
     if run(["git", "status", "--porcelain"], stdout=subprocess.PIPE).stdout.strip():
-        raise RuntimeError("Deployment checkout has local changes; refusing to overwrite them")
+        raise RuntimeError(
+            "Deployment checkout has local changes; refusing to overwrite them"
+        )
     run(["git", "fetch", "--prune", "origin"])
     previous = commit()
     target = commit(requested)
@@ -273,15 +277,37 @@ def apply_update(payload: dict) -> dict:
             "The checked update is stale or does not match this request; run update check again"
         )
     if commit(f"origin/{branch}") != target:
-        raise RuntimeError("The update branch changed after the update check; run update check again")
-    if run(["git", "merge-base", "--is-ancestor", target, f"origin/{branch}"], check=False).returncode != 0:
-        raise RuntimeError("Requested commit is not reachable from the configured update branch")
+        raise RuntimeError(
+            "The update branch changed after the update check; run update check again"
+        )
+    if (
+        run(
+            ["git", "merge-base", "--is-ancestor", target, f"origin/{branch}"],
+            check=False,
+        ).returncode
+        != 0
+    ):
+        raise RuntimeError(
+            "Requested commit is not reachable from the configured update branch"
+        )
     if REQUIRE_SIGNED_COMMITS:
         run(["git", "verify-commit", target])
-    if run(["git", "merge-base", "--is-ancestor", previous, target], check=False).returncode != 0:
-        raise RuntimeError("Refusing a non-forward update; use the rollback action for downgrades")
+    if (
+        run(
+            ["git", "merge-base", "--is-ancestor", previous, target], check=False
+        ).returncode
+        != 0
+    ):
+        raise RuntimeError(
+            "Refusing a non-forward update; use the rollback action for downgrades"
+        )
     if previous == target:
-        return {"ok": True, "from_version": previous, "to_version": target, "message": "Already current"}
+        return {
+            "ok": True,
+            "from_version": previous,
+            "to_version": target,
+            "message": "Already current",
+        }
     staging = STATE_DIR / "staging" / f"{target[:12]}-{uuid.uuid4().hex[:8]}"
     staging.parent.mkdir(parents=True, exist_ok=True)
     run(["git", "worktree", "add", "--detach", str(staging), target])
@@ -422,7 +448,9 @@ class Handler(BaseHTTPRequestHandler):
             STATE_DIR.mkdir(parents=True, exist_ok=True)
             current_operation = read_state().get("operation") or {}
             if current_operation.get("status") in {"queued", "running"}:
-                return self._reply(409, {"ok": False, "message": "Another update operation is running"})
+                return self._reply(
+                    409, {"ok": False, "message": "Another update operation is running"}
+                )
             lock_path = STATE_DIR / "update.lock"
             with lock_path.open("w") as probe:
                 fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -450,7 +478,9 @@ class Handler(BaseHTTPRequestHandler):
                 },
             )
         except BlockingIOError:
-            self._reply(409, {"ok": False, "message": "Another update operation is running"})
+            self._reply(
+                409, {"ok": False, "message": "Another update operation is running"}
+            )
         except Exception as exc:
             self._reply(500, {"ok": False, "message": str(exc)})
 
