@@ -1,18 +1,78 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { EmptyState, ErrorState, LoadingState } from '../components/workflows/WorkflowState'
+import WorkflowStatus from '../components/workflows/WorkflowStatus'
 import { listOperations } from '../services/operationsApi'
 
 const activeStates = new Set(['queued', 'running'])
+const label = value => String(value || 'operation').replaceAll('_', ' ').replace(/\b\w/g, character => character.toUpperCase())
+const formatDate = value => value ? new Date(value).toLocaleString() : 'Not reported'
 
 export default function OperationsPage() {
   const [operations, setOperations] = useState([])
-  const load = () => listOperations().then(setOperations).catch(() => setOperations([]))
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [filter, setFilter] = useState('active')
 
-  useEffect(() => { load() }, [])
+  const load = useCallback(async ({ quiet = false } = {}) => {
+    if (!quiet) setLoading(true)
+    try {
+      const rows = await listOperations()
+      setOperations(Array.isArray(rows) ? rows : [])
+      setError('')
+    } catch (requestError) {
+      const detail = requestError?.response?.data?.detail
+      setError(typeof detail === 'string' ? detail : 'Operation history could not be loaded.')
+    } finally {
+      if (!quiet) setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { load() }, [load])
   useEffect(() => {
     if (!operations.some(operation => activeStates.has(String(operation.state).toLowerCase()))) return
-    const timer = setInterval(load, 2000)
+    const timer = setInterval(() => load({ quiet: true }), 2000)
     return () => clearInterval(timer)
-  }, [operations])
+  }, [operations, load])
 
-  return <section><h2>Operations</h2><p className='muted'>Durable VM operation progress and history for the selected classroom organization.</p>{operations.length === 0 ? <p className='muted'>No durable operations recorded yet.</p> : null}<table className='vm-table'><thead><tr><th>ID</th><th>Operation</th><th>Target</th><th>State</th><th>Attempts</th><th>Error</th></tr></thead><tbody>{operations.map(row => <tr key={row.id}><td>{row.id}</td><td>{row.operation_type}</td><td>{row.target_type}:{row.target_id}</td><td>{row.state}</td><td>{row.attempts}</td><td>{row.error || '-'}</td></tr>)}</tbody></table></section>
+  const visible = useMemo(() => filter === 'active'
+    ? operations.filter(operation => activeStates.has(String(operation.state).toLowerCase()))
+    : operations, [operations, filter])
+
+  if (loading) return <LoadingState label='Loading operation activity…' />
+  if (error && !operations.length) return <ErrorState message={error} onRetry={load} retrying={loading} />
+
+  return <section>
+    <div className='panel-head'>
+      <div><h1>Operations</h1><p className='muted'>Provisioning and power actions continue safely even if you leave this page.</p></div>
+      <button type='button' onClick={() => load()} disabled={loading}>Refresh</button>
+    </div>
+    {error ? <p className='msg error' role='alert'>{error}</p> : null}
+    <div className='group' role='group' aria-label='Filter operations'>
+      <button type='button' aria-pressed={filter === 'active'} onClick={() => setFilter('active')}>Active ({operations.filter(operation => activeStates.has(String(operation.state).toLowerCase())).length})</button>
+      <button type='button' aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>History ({operations.length})</button>
+    </div>
+    {!visible.length ? <EmptyState
+      title={filter === 'active' ? 'No operations in progress' : 'No operation history yet'}
+      message={filter === 'active' && operations.length ? 'Completed and failed operations are available under History.' : 'Provisioning and VM actions will appear here.'}
+    /> : <div className='card-grid' style={{ marginTop: 16 }}>
+      {visible.map(operation => {
+        const state = String(operation.state || '').toLowerCase()
+        return <article className='panel' key={operation.id} aria-live={activeStates.has(state) ? 'polite' : undefined}>
+          <div className='panel-head'><h3>{label(operation.operation_type)}</h3><WorkflowStatus value={operation.state} /></div>
+          <p>{label(operation.target_type)} {operation.target_id}</p>
+          {operation.error ? <p className='msg error' role='alert'>{operation.error}</p> : null}
+          {activeStates.has(state) ? <p className='muted'>Attempt {operation.attempts || 0}. This status refreshes automatically.</p> : null}
+          <details>
+            <summary>Operation details</summary>
+            <dl>
+              <dt>Operation ID</dt><dd>{operation.id}</dd>
+              <dt>Attempts</dt><dd>{operation.attempts ?? 0}</dd>
+              <dt>Created</dt><dd>{formatDate(operation.created_at)}</dd>
+              <dt>Updated</dt><dd>{formatDate(operation.updated_at)}</dd>
+            </dl>
+          </details>
+        </article>
+      })}
+    </div>}
+  </section>
 }

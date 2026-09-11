@@ -12,6 +12,11 @@ nav:
   - Home: index.md
   - Brand and naming: brand.md
   - Architecture: architecture/overview.md
+  - User guide:
+      - Navigation: user-guide/navigation.md
+      - Student workflow: user-guide/student-workflow.md
+      - Instructor workflow: user-guide/instructor-workflow.md
+      - Platform administration: user-guide/platform-administration.md
   - Organization tenancy: security/organization-tenancy.md
   - Identity lifecycle: security/identity-lifecycle.md
   - Classroom runs and assignments: classroom/lab-runs-and-assignments.md
@@ -28,6 +33,7 @@ nav:
   - Development:
       - Workflow: development-workflow.md
       - Validation: development/validation.md
+      - Frontend testing: development/frontend-testing.md
       - Database reset: development-database-reset.md
       - Post-reset validation: post-reset-validation.md
       - Codex workflow: codex-cloud-workflow.md

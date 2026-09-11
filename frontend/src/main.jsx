@@ -62,7 +62,7 @@ function App() {
   if (loading || bootstrapRequired === null) return <div className='login-wrap'>Loading...</div>
   if (bootstrapRequired) return <><MessageBanner message={message} /><BootstrapPage onComplete={completeBootstrap} setMessage={setMessage} /></>
   if (user === false) return <><MessageBanner message={message} /><LoginPage onLogin={refresh} setMessage={setMessage} /></>
-  if (user.force_password_change) return <><MessageBanner message={message} /><div className='login-wrap'><div className='login-card' style={{width: 640}}><AccountSecurityPage forceChange onChanged={refresh} setMessage={setMessage} /></div></div></>
+  if (user.force_password_change) return <><MessageBanner message={message} /><div className='login-wrap'><div className='login-card login-card--wide'><AccountSecurityPage forceChange onChanged={refresh} setMessage={setMessage} /></div></div></>
   return <BrowserRouter><AppLayout setUser={setUser} user={user}><MessageBanner message={message} /><Routes>
     <Route path='/' element={<DashboardPage user={user} />} />
     <Route path='/account/security' element={<AccountSecurityPage onChanged={refresh} setMessage={setMessage} />} />

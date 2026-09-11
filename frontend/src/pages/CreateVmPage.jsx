@@ -1,18 +1,151 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { AccessContext } from '../components/AccessControl'
+import { EmptyState, ErrorState, LoadingState } from '../components/workflows/WorkflowState'
 import api from '../services/api'
 import { listMyAssignments } from '../services/classroomApi'
 
+const detail = error => {
+  const value = error?.response?.data?.detail
+  return typeof value === 'string' ? value : JSON.stringify(value || error?.message || 'Request failed')
+}
+
 export default function CreateVmPage({ setMessage }) {
-  const [templates,setTemplates]=useState([])
-  const [templateId,setTemplateId]=useState('')
-  const [labName,setLabName]=useState('linuxlab')
-  const [discoveredCount,setDiscoveredCount]=useState(0)
-  const [availability,setAvailability]=useState([])
-  const [assignments,setAssignments]=useState([])
-  const [assignmentId,setAssignmentId]=useState('')
-  useEffect(()=>{api.get('/templates').then(r=>{const rows = Array.isArray(r.data) ? r.data : []; setTemplates(rows); if(rows[0]) setTemplateId(rows[0].id)}).catch(()=>setTemplates([])); listMyAssignments().then(rows=>{setAssignments(rows||[]); const first=(rows||[]).find(row=>row.can_provision); if(first){setAssignmentId(String(first.id));setTemplateId(String(first.template_id));setLabName(first.lab_name||'classroom-lab')}}).catch(()=>setAssignments([])); api.get('/admin/proxmox/templates/discovered').then(r=>setDiscoveredCount(Array.isArray(r.data)?r.data.length:0)).catch(()=>setDiscoveredCount(0)); api.get('/admin/proxmox/templates/availability').then(r=>setAvailability(Array.isArray(r.data)?r.data:[])).catch(()=>setAvailability([]))},[])
-  const usableAssignments=assignments.filter(row=>row.can_provision)
-  const create=async()=>{try{const r=await api.post('/vms',{template_id:Number(templateId),assignment_id:assignmentId?Number(assignmentId):null,lab_name:labName,auto_start:true}); setMessage({type:'success',text:r.data.message||'Provisioning queued'}); if(assignmentId) setAssignments(rows=>rows.map(row=>String(row.id)===String(assignmentId)?{...row,can_provision:false,student_vm_id:r.data.id}:row))}catch(e){setMessage({type:'error',text:JSON.stringify(e?.response?.data?.detail||'Create failed')})}}
-  const chooseAssignment=e=>{setAssignmentId(e.target.value);const assignment=assignments.find(row=>String(row.id)===e.target.value);if(assignment){setTemplateId(String(assignment.template_id));setLabName(assignment.lab_name||'classroom-lab')}}
-  return <div className='panel'><h3>Create VM</h3><p style={{color:'#a7b0d6'}}>Students provision from an active classroom assignment. Instructors can provision directly from organization templates.</p>{assignments.length>0?<select className='input' value={assignmentId} onChange={chooseAssignment}><option value=''>Select available assignment…</option>{usableAssignments.map(row=><option key={row.id} value={row.id}>{row.run_name} — {row.lab_name} — {row.template_name}</option>)}</select>:null}<select className='input' value={templateId} disabled={!!assignmentId} onChange={e=>setTemplateId(e.target.value)}>{templates.map(t=><option key={t.id} value={t.id}>{t.name} (VMID {t.source_vmid}, {t.proxmox_node})</option>)}</select>{templates.length===0?<p className='muted'>No active classroom VM assignment is available. Ask your instructor to open a lab run and assign the roster.</p>:null}{templates.length===0 && discoveredCount>0?<p className='muted'>Proxmox templates exist but are not currently assigned through an active lab.</p>:null}{assignments.length>0 && usableAssignments.length===0?<p className='muted'>Your current assignments are already provisioned or outside their active schedule.</p>:null}{(() => { const a = availability.find(x => String(x.template_id) === String(templateId)); return a && !a.can_balance_across_all_nodes ? <p className='muted'>This template is currently available only on {a.available_nodes.join(', ')}. Load balancing will be limited. {a.recommended_action || ''}</p> : null })()}<input className='input' value={labName} onChange={e=>setLabName(e.target.value)} placeholder='Lab name' /><button onClick={create} disabled={!templateId || (assignments.length>0 && !assignmentId)}>Create VM</button></div>
+  const access = useContext(AccessContext)
+  const [templates, setTemplates] = useState([])
+  const [assignments, setAssignments] = useState([])
+  const [availability, setAvailability] = useState([])
+  const [assignmentId, setAssignmentId] = useState('')
+  const [templateId, setTemplateId] = useState('')
+  const [labName, setLabName] = useState('classroom-lab')
+  const [mode, setMode] = useState('assignment')
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [warning, setWarning] = useState('')
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    setWarning('')
+    const requests = [api.get('/templates'), listMyAssignments()]
+    if (access.platformAdmin) requests.push(api.get('/admin/proxmox/templates/availability'))
+    const [templatesResult, assignmentsResult, availabilityResult] = await Promise.allSettled(requests)
+    const templateRows = templatesResult.status === 'fulfilled' && Array.isArray(templatesResult.value.data) ? templatesResult.value.data : []
+    const assignmentRows = assignmentsResult.status === 'fulfilled' && Array.isArray(assignmentsResult.value) ? assignmentsResult.value : []
+    setTemplates(templateRows)
+    setAssignments(assignmentRows)
+    setAvailability(availabilityResult?.status === 'fulfilled' && Array.isArray(availabilityResult.value.data) ? availabilityResult.value.data : [])
+    const firstAssignment = assignmentRows.find(row => row.can_provision)
+    if (firstAssignment) {
+      setMode('assignment')
+      setAssignmentId(String(firstAssignment.id))
+      setTemplateId(String(firstAssignment.template_id))
+      setLabName(firstAssignment.lab_name || 'classroom-lab')
+    } else if (access.tenantInstructor && templateRows.length) {
+      setMode('direct')
+      setTemplateId(String(templateRows[0].id))
+    }
+    if (templatesResult.status === 'rejected' && assignmentsResult.status === 'rejected') {
+      setError(detail(assignmentsResult.reason || templatesResult.reason))
+    } else if (assignmentsResult.status === 'rejected') {
+      setWarning('Classroom assignments could not be loaded. Direct provisioning remains available to instructors.')
+    } else if (templatesResult.status === 'rejected' && access.tenantInstructor) {
+      setWarning('Organization templates could not be loaded.')
+    }
+    setLoading(false)
+  }, [access.platformAdmin, access.tenantInstructor])
+
+  useEffect(() => { load() }, [load])
+
+  const usableAssignments = useMemo(() => assignments.filter(row => row.can_provision), [assignments])
+  const selectedAssignment = assignments.find(row => String(row.id) === assignmentId)
+  const selectedAvailability = availability.find(row => String(row.template_id) === String(templateId))
+
+  const chooseAssignment = id => {
+    const assignment = assignments.find(row => String(row.id) === String(id))
+    setAssignmentId(String(id))
+    if (assignment) {
+      setTemplateId(String(assignment.template_id))
+      setLabName(assignment.lab_name || 'classroom-lab')
+    }
+  }
+
+  const create = async event => {
+    event.preventDefault()
+    setBusy(true)
+    try {
+      const response = await api.post('/vms', {
+        template_id: Number(templateId),
+        assignment_id: mode === 'assignment' ? Number(assignmentId) : null,
+        lab_name: labName,
+        auto_start: true,
+      })
+      setMessage({ type: 'success', text: response.data.message || 'VM provisioning was queued.' })
+      if (mode === 'assignment') {
+        setAssignments(rows => rows.map(row => String(row.id) === assignmentId ? { ...row, can_provision: false, student_vm_id: response.data.id } : row))
+        setAssignmentId('')
+      }
+    } catch (requestError) {
+      setMessage({ type: 'error', text: detail(requestError) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (loading) return <LoadingState label='Finding available lab assignments…' />
+  if (error) return <ErrorState message={error} onRetry={load} retrying={loading} />
+
+  const canSubmit = Boolean(templateId && labName.trim() && (mode === 'direct' || assignmentId))
+  return <section>
+    <div className='panel-head'>
+      <div><h1>Provision a virtual machine</h1><p className='muted'>Choose an assignment and LabGoblin will create and start the correct VM.</p></div>
+      <Link to='/vms'>Back to my VMs</Link>
+    </div>
+    {warning ? <p className='msg error' role='alert'>{warning}</p> : null}
+
+    {!usableAssignments.length && !access.tenantInstructor ? <EmptyState
+      title='No assignment is ready'
+      message={assignments.length ? 'Your assignments are already provisioned or outside their active schedule.' : 'Your instructor has not assigned an active lab yet.'}
+      action={<Link to='/vms'>Return to my VMs</Link>}
+    /> : <form className='panel' onSubmit={create}>
+      {usableAssignments.length ? <fieldset>
+        <legend>Available assignments</legend>
+        <div className='card-grid'>
+          {usableAssignments.map(assignment => <label className='panel' key={assignment.id}>
+            <input type='radio' name='assignment' value={assignment.id} checked={String(assignment.id) === assignmentId} onChange={() => { setMode('assignment'); chooseAssignment(assignment.id) }} />
+            <strong>{assignment.lab_name || assignment.run_name}</strong>
+            <span className='muted' style={{ display: 'block' }}>{assignment.run_name} · {assignment.template_name}</span>
+            {assignment.expires_at ? <span className='muted' style={{ display: 'block' }}>Available until {new Date(assignment.expires_at).toLocaleString()}</span> : null}
+          </label>)}
+        </div>
+      </fieldset> : null}
+
+      {access.tenantInstructor ? <details open={!usableAssignments.length} style={{ marginTop: 16 }}>
+        <summary>Instructor provisioning</summary>
+        <p className='muted'>Create a VM directly from an organization template without using a student assignment.</p>
+        <label>
+          <input type='radio' name='assignment' checked={mode === 'direct'} onChange={() => setMode('direct')} /> Provision directly
+        </label>
+        {mode === 'direct' ? <div style={{ marginTop: 12 }}>
+          <label htmlFor='provision-template'>Template</label>
+          <select id='provision-template' className='input' value={templateId} onChange={event => setTemplateId(event.target.value)}>
+            <option value=''>Select a template…</option>
+            {templates.map(template => <option key={template.id} value={template.id}>{template.name} (VMID {template.source_vmid}, {template.proxmox_node})</option>)}
+          </select>
+          <label htmlFor='provision-lab-name'>VM name prefix</label>
+          <input id='provision-lab-name' className='input' value={labName} onChange={event => setLabName(event.target.value)} />
+          {selectedAvailability && !selectedAvailability.can_balance_across_all_nodes ? <p className='msg'>Placement is limited to {(selectedAvailability.available_nodes || []).join(', ') || 'the source node'}. {selectedAvailability.recommended_action || ''}</p> : null}
+          {!templates.length ? <p className='muted'>No organization templates are available. Import and enable a template first.</p> : null}
+        </div> : null}
+      </details> : null}
+
+      {mode === 'assignment' && selectedAssignment ? <div className='panel' style={{ marginTop: 16 }}>
+        <h3>Ready to provision</h3>
+        <p>{selectedAssignment.lab_name} using {selectedAssignment.template_name}</p>
+        <p className='muted'>The VM will start automatically. Progress is available on the Operations page.</p>
+      </div> : null}
+      <button type='submit' disabled={busy || !canSubmit} style={{ marginTop: 16 }}>{busy ? 'Queuing provisioning…' : 'Provision and start VM'}</button>
+    </form>}
+  </section>
 }

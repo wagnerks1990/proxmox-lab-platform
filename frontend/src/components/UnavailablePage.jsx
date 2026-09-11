@@ -1,9 +1,11 @@
+import Button from './ui/Button'
+
 export default function UnavailablePage({ message, onRetry, busy }) {
-  return <main className='login-wrap'>
-    <section className='login-card' role='alert'>
-      <h1>LabGoblin is unavailable</h1>
+  return <main className='auth-shell'>
+    <section className='auth-card ui-stack' role='alert' aria-labelledby='unavailable-title'>
+      <h1 id='unavailable-title'>LabGoblin is unavailable</h1>
       <p className='muted'>{message}</p>
-      <button onClick={onRetry} disabled={busy} style={{width:'100%'}}>{busy ? 'Checking…' : 'Try again'}</button>
+      <Button block busy={busy} onClick={onRetry}>{busy ? 'Checking connection…' : 'Try again'}</Button>
     </section>
   </main>
 }

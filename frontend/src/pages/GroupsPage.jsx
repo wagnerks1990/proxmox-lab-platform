@@ -5,70 +5,33 @@ import { listCurrentOrganizationMembers } from '../services/organizationApi'
 const empty = { name:'', description:'', enabled:true }
 
 export default function GroupsPage(){
-  const [rows,setRows]=useState([])
-  const [users,setUsers]=useState([])
-  const [form,setForm]=useState(empty)
-  const [editing,setEditing]=useState(null)
-  const [members,setMembers]=useState({})
-  const [msg,setMsg]=useState('')
+  const [rows,setRows]=useState([]); const [users,setUsers]=useState([]); const [form,setForm]=useState(empty); const [editing,setEditing]=useState(null); const [members,setMembers]=useState({})
+  const [message,setMessage]=useState(null); const [loading,setLoading]=useState(true); const [loadError,setLoadError]=useState('')
+  const load = async()=>{setLoading(true);setLoadError('');try{setRows(await listGroups())}catch{setRows([]);setLoadError('Unable to load groups.')}finally{setLoading(false)}}
+  useEffect(()=>{load();listCurrentOrganizationMembers().then(items=>setUsers(items.map(item=>({id:item.user_id,...item})))).catch(()=>setUsers([]))},[])
+  const reportError=(error,fallback)=>setMessage({type:'error',text:JSON.stringify(error?.response?.data?.detail||fallback)})
+  const save=async event=>{event.preventDefault();try{if(editing)await patchGroup(editing,form);else await createGroup(form);setForm(empty);setEditing(null);await load();setMessage({type:'success',text:'Group saved.'})}catch(error){reportError(error,'Save failed')}}
+  const loadMembers=async group=>{try{const groupMembers=await listGroupMembers(group.id);setMembers(previous=>({...previous,[group.id]:groupMembers}))}catch(error){reportError(error,'Failed to load group members')}}
+  const removeMember=async(group,user)=>{try{await removeGroupMember(group.id,user.user_id);await loadMembers(group)}catch(error){reportError(error,'Failed to remove group member')}}
+  const addMember=async(group,userId)=>{if(!userId)return;try{await addGroupMember(group.id,{user_id:userId});await loadMembers(group);setMessage({type:'success',text:`Member added to ${group.name}.`})}catch(error){reportError(error,'Failed to add group member')}}
 
-  const load = ()=> listGroups().then(setRows).catch(()=>setRows([]))
-  useEffect(()=>{ load(); listCurrentOrganizationMembers().then(rows=>setUsers(rows.map(row=>({id:row.user_id,...row})))).catch(()=>setUsers([])) },[])
-
-  const save = async ()=> {
-    try{
-      if(editing) await patchGroup(editing, form); else await createGroup(form)
-      setForm(empty); setEditing(null); await load(); setMsg('Group saved.')
-    }catch(e){ setMsg(JSON.stringify(e?.response?.data?.detail || 'Save failed'))}
-  }
-
-  const loadMembers = async (groupId) => {
-    try {
-      const memberList = await listGroupMembers(groupId)
-      setMembers((prev) => ({ ...prev, [groupId]: memberList }))
-    } catch (e) {
-      setMsg(JSON.stringify(e?.response?.data?.detail || 'Failed to load group members'))
-    }
-  }
-
-  const removeMember = async (groupId, userId) => {
-    try {
-      await removeGroupMember(groupId, userId)
-      await loadMembers(groupId)
-    } catch (e) {
-      setMsg(JSON.stringify(e?.response?.data?.detail || 'Failed to remove group member'))
-    }
-  }
-
-  const addMember = async (groupId, userId) => {
-    if (!userId) return
-    try {
-      await addGroupMember(groupId, { user_id: userId })
-      await loadMembers(groupId)
-    } catch (e) {
-      setMsg(JSON.stringify(e?.response?.data?.detail || 'Failed to add group member'))
-    }
-  }
-
-  return <section>
-    <h2>Groups</h2>
-    <p className='muted'>Manage tenant groups and memberships. Classroom VM access is controlled by lab assignments.</p>
-    {msg?<p className='muted'>{msg}</p>:null}
-    <div className='panel'><h3>{editing?'Edit Group':'Create Group'}</h3><div className='group'>
-      <input className='input' placeholder='Name' value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/>
-      <input className='input' placeholder='Description' value={form.description} onChange={e=>setForm({...form,description:e.target.value})}/>
-      <label><input type='checkbox' checked={form.enabled} onChange={e=>setForm({...form,enabled:e.target.checked})}/> enabled</label>
-      <button onClick={save} disabled={!form.name}>Save</button>
-    </div></div>
-    {rows.length===0?<p className='muted'>No groups/classes configured yet.</p>:null}
-    <table className='vm-table'><thead><tr><th>Name</th><th>Enabled</th><th>Members</th><th>Actions</th></tr></thead><tbody>
-      {rows.map(g=><tr key={g.id}><td>{g.name}</td><td>{String(g.enabled)}</td><td>{g.member_count}</td><td><div className='group'>
-        <button onClick={()=>{setEditing(g.id); setForm({name:g.name,description:g.description||'',enabled:g.enabled})}}>Edit</button>
-        <button onClick={async()=>{await loadMembers(g.id)}}>Members</button>
-        <button className='btn-danger' onClick={async()=>{if(!confirm('Delete group? This removes memberships/permissions but not users/VMs.')) return; await deleteGroup(g.id); await load()}}>Delete</button>
-      </div>
-      {Array.isArray(members[g.id])?<div className='panel'><h4>Members</h4><div className='group'>{members[g.id].map(m=><span key={m.user_id}>{m.username||m.user_id} <button onClick={async()=>{await removeMember(g.id,m.user_id)}}>x</button></span>)}</div><select className='input' onChange={async e=>{const uid=Number(e.target.value); await addMember(g.id,uid)}}><option value=''>Add user…</option>{users.map(u=><option key={u.id} value={u.id}>{u.username}</option>)}</select></div>:null}
-      </td></tr>)}
-    </tbody></table>
+  return <section className='page-shell' aria-labelledby='groups-title'>
+    <header className='ui-page-header'><div><p className='muted'>Organization</p><h2 id='groups-title'>Groups</h2><p className='ui-page-header__description'>Organize tenant members. Classroom VM access remains controlled by lab assignments.</p></div><button onClick={load} disabled={loading}>{loading?'Refreshing…':'Refresh'}</button></header>
+    {message?<p className={`msg ${message.type}`} role={message.type==='error'?'alert':'status'} aria-live='polite'>{message.text}</p>:null}
+    {loadError?<p className='msg error' role='alert'>{loadError}</p>:null}
+    <section className='panel' aria-labelledby='group-form-title'><h3 id='group-form-title'>{editing?'Edit group':'Create group'}</h3><form className='ui-form-grid' onSubmit={save}>
+      <label className='ui-field'>Name<input className='input' value={form.name} onChange={event=>setForm({...form,name:event.target.value})}/></label>
+      <label className='ui-field'>Description<input className='input' value={form.description} onChange={event=>setForm({...form,description:event.target.value})}/></label>
+      <label className='ui-field'><input type='checkbox' checked={form.enabled} onChange={event=>setForm({...form,enabled:event.target.checked})}/> Enabled</label>
+      <div className='ui-cluster ui-form-grid__wide'><button type='submit' disabled={!form.name}>Save group</button>{editing?<button type='button' className='ui-button--secondary' onClick={()=>{setEditing(null);setForm(empty)}}>Cancel</button>:null}</div>
+    </form></section>
+    <section className='panel' aria-labelledby='group-list-title'><h3 id='group-list-title'>Configured groups</h3>
+      {!loading&&!loadError&&rows.length===0?<p className='muted'>No groups are configured yet.</p>:null}
+      {rows.length?<div className='ui-table-wrap' role='region' aria-labelledby='group-list-title' tabIndex='0'><table className='ui-table'><thead><tr><th scope='col'>Name</th><th scope='col'>Status</th><th scope='col'>Members</th><th scope='col'>Actions</th></tr></thead><tbody>
+        {rows.map(group=><tr key={group.id}><th scope='row'>{group.name}<div className='muted'>{group.description||'No description'}</div></th><td>{group.enabled?'Enabled':'Disabled'}</td><td>{group.member_count}</td><td><div className='ui-cluster'><button aria-label={`Edit group ${group.name}`} onClick={()=>{setEditing(group.id);setForm({name:group.name,description:group.description||'',enabled:group.enabled})}}>Edit</button><button aria-expanded={Array.isArray(members[group.id])} aria-controls={`group-members-${group.id}`} onClick={()=>loadMembers(group)}>Members</button><button className='btn-danger' aria-label={`Delete group ${group.name}`} onClick={async()=>{if(!confirm(`Delete group ${group.name}? This removes memberships and permissions, but not users or VMs.`))return;try{await deleteGroup(group.id);await load();setMessage({type:'success',text:`${group.name} deleted.`})}catch(error){reportError(error,'Delete failed')}}}>Delete</button></div>
+          {Array.isArray(members[group.id])?<section id={`group-members-${group.id}`} className='ui-card ui-card--muted' aria-label={`Members of ${group.name}`}><h4>Members</h4>{members[group.id].length===0?<p className='muted'>No members in this group.</p>:<ul className='member-list'>{members[group.id].map(member=><li key={member.user_id}><span>{member.username||member.user_id}</span><button className='ui-button--secondary' aria-label={`Remove ${member.username||member.user_id} from ${group.name}`} onClick={()=>removeMember(group,member)}>Remove</button></li>)}</ul>}<label className='ui-field'>Add organization member<select className='input' value='' onChange={event=>addMember(group,Number(event.target.value))}><option value=''>Select a user…</option>{users.map(user=><option key={user.id} value={user.id}>{user.username}</option>)}</select></label></section>:null}
+        </td></tr>)}
+      </tbody></table></div>:null}
+    </section>
   </section>
 }

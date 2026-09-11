@@ -20,6 +20,11 @@ docker compose -f docker-compose.yml -f docker-compose.live-test.yml config --qu
 cd frontend && npm ci && npm test && npm run build && npm audit --audit-level=moderate
 ```
 
+Frontend changes must also follow the role, viewport, view-state, and
+accessibility matrices in [Frontend testing](frontend-testing.md). The current
+dependency-free test suite checks structural UI contracts; a passing source
+assertion does not by itself prove rendered or browser behavior.
+
 Regenerate the API contract after route or schema changes:
 
 ```bash

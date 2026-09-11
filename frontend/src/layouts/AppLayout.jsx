@@ -1,9 +1,14 @@
-import { useEffect, useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { listOrganizations } from '../services/organizationApi'
 import { logoutSession } from '../services/authApi'
 import { AccessContext } from '../components/AccessControl'
 import { deriveCapabilities } from '../auth/access'
+import AppHeader from '../components/navigation/AppHeader'
+import AppSidebar from '../components/navigation/AppSidebar'
+import MobileBottomNav from '../components/navigation/MobileBottomNav'
+import MobileNavigation from '../components/navigation/MobileNavigation'
+import { pageTitleForPath } from '../navigation/appNavigation'
 
 export default function AppLayout({ children, setUser, user }) {
   const nav = useNavigate()
@@ -14,6 +19,9 @@ export default function AppLayout({ children, setUser, user }) {
   const [organizationId, setOrganizationId] = useState(localStorage.getItem('organization_id') || '')
   const [logoutError, setLogoutError] = useState('')
   const [logoutBusy, setLogoutBusy] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(localStorage.getItem('labgoblin_sidebar_collapsed') === 'true')
+  const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false)
+  const mobileMenuButtonRef = useRef(null)
   const logout = async () => {
     setLogoutBusy(true)
     setLogoutError('')
@@ -54,43 +62,54 @@ export default function AppLayout({ children, setUser, user }) {
     return () => { active = false }
   }, [user?.role])
   const changeOrganization = (event) => {
-    localStorage.setItem('organization_id', event.target.value)
-    setOrganizationId(event.target.value)
-    window.location.reload()
+    const nextOrganizationId = event.target.value
+    localStorage.setItem('organization_id', nextOrganizationId)
+    setOrganizationId(nextOrganizationId)
+    window.dispatchEvent(new CustomEvent('organization:changed', { detail: { organizationId: nextOrganizationId } }))
   }
+  const closeMobileNavigation = useCallback(() => setMobileNavigationOpen(false), [])
+  const openMobileNavigation = () => setMobileNavigationOpen(true)
+  const toggleSidebar = () => setSidebarCollapsed(previous => {
+    const next = !previous
+    localStorage.setItem('labgoblin_sidebar_collapsed', String(next))
+    return next
+  })
   const activeOrganization = organizations.find(organization => String(organization.id) === organizationId)
   const tenantRole = activeOrganization?.role
   const access = deriveCapabilities(user, tenantRole)
-  const { platformAdmin: isPlatformAdmin, tenantInstructor: isTenantInstructor, tenantAdmin: isTenantAdmin } = access
-  return <div className='app-shell'>
-    <aside className='sidebar'>
-      <div className='brand-lockup'><img src='/brand/labgoblin-icon.svg' alt='' className='brand-mark'/><div><div className='brand-wordmark'>Lab<span>Goblin</span></div><div className='brand-subtitle'>Virtual Lab Management</div></div></div>
-      {organizations.length > 0 && <label className='muted'>Organization
-        <select className='input' value={organizationId} onChange={changeOrganization} style={{marginTop: 6}}>
-          <option value='' disabled>Select an organization</option>
-          {organizations.map((organization) => <option key={organization.id} value={organization.id}>{organization.name}</option>)}
-        </select>
-      </label>}
-      <Link className='nav-link' to='/'>Dashboard</Link>
-      <Link className='nav-link' to='/vms'>My Lab VMs</Link>
-      <Link className='nav-link' to='/create'>Create VM</Link>
-      <Link className='nav-link' to='/account/security'>Account Security</Link>
-      {isTenantInstructor && <><Link className='nav-link' to='/classroom'>Classroom</Link><Link className='nav-link' to='/admin/sessions'>Sessions</Link><Link className='nav-link' to='/pools'>Pools</Link><Link className='nav-link' to='/events'>Events / Tasks</Link></>}
-      <Link className='nav-link' to='/operations'>Operations</Link>
-      {isPlatformAdmin && <><Link className='nav-link' to='/telemetry'>Telemetry</Link><Link className='nav-link' to='/troubleshooting'>Troubleshooting</Link></>}
-      {isPlatformAdmin && <Link className='nav-link' to='/admin/proxmox-setup'>Proxmox Setup</Link>}
-      {isPlatformAdmin && <Link className='nav-link' to='/admin/proxmox-inventory'>Proxmox Inventory</Link>}
-      {isPlatformAdmin && <Link className='nav-link' to='/admin/templates'>Templates</Link>}
-      {isPlatformAdmin && <Link className='nav-link' to='/admin/proxmox-assets'>Proxmox Assets</Link>}
-      {isPlatformAdmin && <Link className='nav-link' to='/admin/users'>Users</Link>}
-      {isTenantAdmin && <Link className='nav-link' to='/admin/groups'>Groups</Link>}
-      {isPlatformAdmin && <Link className='nav-link' to='/admin/organizations'>Organizations</Link>}
-      {isPlatformAdmin && <Link className='nav-link' to='/admin/system-update'>System Updates</Link>}
-      <button onClick={logout} disabled={logoutBusy} style={{marginTop: 10, width: '100%'}}>{logoutBusy ? 'Signing out…' : 'Logout'}</button>
-      {logoutError ? <div className='msg error sidebar-message' role='alert'>{logoutError}</div> : null}
-      <div className='brand-footer'>Real Skills. Virtual Machines.</div>
-      <div style={{marginTop:8, color:'#738096', fontSize:11}}>Current: {loc.pathname}</div>
-    </aside>
-    <AccessContext.Provider value={access}><main className='content'>{!organizationReady ? <section className='panel'>Selecting organization…</section> : organizationError ? <section className='panel error'>{organizationError}</section> : organizations.length > 0 && !organizationId ? <section className='panel'>Select an organization to continue.</section> : children}</main></AccessContext.Provider>
-  </div>
+  const accountRoute = loc.pathname.startsWith('/account/security')
+  const organizationBootstrapRoute = access.platformAdmin && loc.pathname.startsWith('/admin/organizations')
+  const canRenderWithoutOrganization = accountRoute || organizationBootstrapRoute
+  const content = !organizationReady && !accountRoute
+    ? <section className='panel' role='status'>Selecting organization…</section>
+    : organizationError && !canRenderWithoutOrganization
+      ? <section className='panel error' role='alert'>{organizationError}</section>
+      : !organizationId && !canRenderWithoutOrganization
+        ? <section className='panel'>Select an organization to continue.</section>
+        : <div className='route-content' key={organizationId || 'no-organization'}>{children}</div>
+
+  return <AccessContext.Provider value={access}>
+    <a className='skip-link' href='#main-content'>Skip to main content</a>
+    <div className={`app-shell${sidebarCollapsed ? ' app-shell-sidebar-collapsed' : ''}`}>
+      <AppSidebar access={access} collapsed={sidebarCollapsed} onToggle={toggleSidebar}/>
+      <div className='app-workspace'>
+        <AppHeader
+          title={pageTitleForPath(loc.pathname)}
+          user={user}
+          organizations={organizations}
+          organizationId={organizationId}
+          onOrganizationChange={changeOrganization}
+          onMenuOpen={openMobileNavigation}
+          menuOpen={mobileNavigationOpen}
+          menuButtonRef={mobileMenuButtonRef}
+          onLogout={logout}
+          logoutBusy={logoutBusy}
+          logoutError={logoutError}
+        />
+        <main className='content' id='main-content' tabIndex={-1}>{content}</main>
+      </div>
+      <MobileNavigation access={access} open={mobileNavigationOpen} onClose={closeMobileNavigation} returnFocusRef={mobileMenuButtonRef}/>
+      <MobileBottomNav access={access} onMore={openMobileNavigation}/>
+    </div>
+  </AccessContext.Provider>
 }

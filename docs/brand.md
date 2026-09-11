@@ -57,6 +57,39 @@ Green should identify primary actions, active state, success, and brand emphasis
 
 Font binaries are not stored in the repository. Use properly licensed sources if web fonts are added later.
 
+## Interface system
+
+The authenticated interface uses a quiet dark workspace with restrained green
+emphasis. Content, not decoration, owns the visual hierarchy.
+
+- Use the shared spacing, radius, surface, text, border, shadow, and motion
+  tokens in `frontend/src/styles.css`; do not add arbitrary inline colors.
+- Use bounded page content, clear page headings, and progressive disclosure for
+  advanced infrastructure controls.
+- Reserve the strongest green for the current destination and primary action.
+- Secondary actions use neutral surfaces. Destructive actions use the danger
+  treatment and explicit action text.
+- PASS, WARN, FAIL, queued, running, and unavailable states use a shared badge
+  or alert treatment with visible text. Color is supplemental.
+- Controls use a consistent height and retain at least a 44 by 44 CSS pixel
+  pointer target in compact layouts.
+- Focus indicators must remain visible against every surface.
+
+The desktop shell groups destinations by workflow. Compact layouts use a
+header, off-canvas menu, and role-aware bottom navigation. Responsive behavior
+must not remove access to an allowed destination or expose one the role cannot
+use.
+
+## Content guidance
+
+- Prefer action names such as **Create VM**, **End run**, and **Check for
+  updates** over vague labels.
+- Explain technical identifiers such as VMID and UPID where they first appear.
+- Use sentence case for headings and controls.
+- Empty states say what is absent and, when appropriate, what to do next.
+- Errors state what failed without exposing secrets or pretending the result was
+  successful.
+
 ## Logo and icon
 
 The canonical application icon is `frontend/public/brand/labgoblin-icon.svg`.

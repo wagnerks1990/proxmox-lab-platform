@@ -41,6 +41,12 @@ This repository is development software intended for fresh installation. There i
 - Mint Accent: `#A7F3D0`
 - UI/body type: Inter or system-ui fallback
 
+The complete interface contract is in `docs/brand.md` and
+`docs/frontend-architecture.md`. Use shared tokens and components rather than
+inline status styling. The shell groups work by role, marks the active route,
+offers an accessible compact drawer and bottom navigation, and supports a 320
+CSS pixel viewport without page-level horizontal scrolling.
+
 ## Non-negotiable invariants
 
 - Resolve organization membership and object ownership on every request.
@@ -59,6 +65,11 @@ This repository is development software intended for fresh installation. There i
 
 Run backend tests, frontend tests/build, dependency audits, the single-head migration check, strict documentation build, generated-contract drift check, and branding regression checks. Offline tests do not prove behavior against a real Proxmox cluster.
 
+Frontend work additionally requires role/navigation, responsive, view-state,
+keyboard, accessible-name, and live-region checks. Use the matrices in
+`docs/development/frontend-testing.md` and `docs/gui-section-validation.md`.
+Passing source-contract tests does not prove browser layout or interaction.
+
 ## Useful entry points
 
 - API composition: `backend/app/api/routes.py`
@@ -69,3 +80,8 @@ Run backend tests, frontend tests/build, dependency audits, the single-head migr
 - Deployment: `deploy/install.sh`, `deploy/updater_agent.py`, `deploy/labgoblin-updater.service`, `docker-compose.yml`
 - Contract: `frontend/openapi.json`, `frontend/src/generated/api-schema.d.ts`
 - Brand: `docs/brand.md`, `frontend/public/brand/`
+- Navigation model: `frontend/src/navigation/appNavigation.js`
+- Application shell: `frontend/src/layouts/AppLayout.jsx`,
+  `frontend/src/components/navigation/`
+- Frontend validation: `frontend/tests/`,
+  `docs/development/frontend-testing.md`
