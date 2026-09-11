@@ -19,8 +19,8 @@
 - LabGoblin-owned technical identifiers MUST use `labgoblin` / `labgoblin-` naming.
 - This is development software for fresh installation; predecessor installation identifiers do not require compatibility preservation.
 - Do not introduce LabGoblin-owned identifiers named `proxmox-lab-platform`, `proxmox_lab`, `plp_`, or `proxmox-lab-*`.
+- Do not reference the retired repository `wagnerks1990/proxmox-lab-platform`; the canonical repository is `wagnerks1990/labgoblin`.
 - Keep Proxmox terminology only when it genuinely names the Proxmox VE integration, API objects, VMIDs/UPIDs, configuration variables, or integration-specific database models.
-- The current GitHub repository URL may retain its predecessor slug until repository administration renames it; treat that value only as an upstream locator.
 - Keep README, MkDocs/wiki pages, deployment/runbooks, architecture notes, release notes, screenshots/help text, and `AI_CONTEXT.md` synchronized with relevant behavior changes.
 - Brand guidance and design tokens are defined in `docs/brand.md`.
 
