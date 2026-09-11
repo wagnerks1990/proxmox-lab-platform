@@ -25,9 +25,9 @@ alembic upgrade heads
 ## Ubuntu commands
 
 ```bash
-cd /opt/proxmox-lab-platform/backend
+cd /opt/labgoblin/app/backend
 source venv/bin/activate
-export PYTHONPATH=/opt/proxmox-lab-platform/backend
+export PYTHONPATH=/opt/labgoblin/app/backend
 
 python scripts/ensure_config_encryption_key.py
 
@@ -56,6 +56,6 @@ Default development login after reset:
 
 Warnings:
 - `admin/admin` is development-only; never use in production.
-- `CONFIG_ENCRYPTION_KEY` is written to `backend/.env` and must not be committed.
+- `CONFIG_ENCRYPTION_KEY` is written to the LabGoblin backend environment and must not be committed.
 - Back up `CONFIG_ENCRYPTION_KEY`; losing it prevents decrypting stored Proxmox token secrets.
 - Do not rotate `CONFIG_ENCRYPTION_KEY` casually after token storage.
