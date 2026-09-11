@@ -1,7 +1,9 @@
-# Codex Cloud Workflow for Proxmox Lab Platform
+# Codex Cloud Workflow for LabGoblin
 
 ## A. Purpose
-This document defines what Codex Cloud can safely do for this repository and what must still be validated manually on the Ubuntu deployment server.
+This document defines what Codex Cloud can safely do for the LabGoblin repository and what must still be validated manually on the Ubuntu deployment server.
+
+Codex and other coding agents must also follow `AGENTS.md`, `AI_CONTEXT.md`, and `docs/brand.md`.
 
 ## B. What Codex Cloud can do
 - repository inspection
@@ -19,7 +21,7 @@ This document defines what Codex Cloud can safely do for this repository and wha
 - systemd restart behavior
 - production PostgreSQL state
 - production Alembic current revision
-- live Proxmox API behavior
+- live Proxmox VE API behavior
 - live SSE browser behavior
 - live Guacamole behavior
 - live ttyd behavior
@@ -71,6 +73,8 @@ If the environment setup is minimal and dependencies are not installed, Codex mu
 
 ## G. Manual Ubuntu server validation checklist
 
+The legacy filesystem and systemd names below intentionally remain during the LabGoblin branding migration for installed-system compatibility.
+
 ```bash
 cd /opt/proxmox-lab-platform
 git pull
@@ -91,6 +95,7 @@ curl http://127.0.0.1:8000/api/health
 ```
 
 ## H. Manual browser validation checklist
+- LabGoblin branding appears on login and application shell
 - login works
 - `/api/auth/me` works
 - Dashboard loads
@@ -113,6 +118,7 @@ Every Codex Cloud PR must include:
 - summary of changes
 - backend changes
 - frontend changes
+- documentation/branding changes
 - migration changes
 - tests/checks run
 - tests/checks not run and why
