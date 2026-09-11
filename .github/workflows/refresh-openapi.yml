@@ -27,6 +27,7 @@ jobs:
       - name: Refresh generated OpenAPI files
         env:
           PYTHONPATH: backend
+          DATABASE_URL: sqlite:///./openapi-generation.db
           JWT_SECRET_KEY: ${{ github.sha }}${{ github.sha }}
           CONFIG_ENCRYPTION_KEY: ${{ github.sha }}${{ github.sha }}
           PROXMOX_BASE_URL: https://127.0.0.1:8006/api2/json
