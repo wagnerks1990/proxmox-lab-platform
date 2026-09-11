@@ -1,4 +1,4 @@
-# First-run setup
+# LabGoblin first-run setup
 
 ## Install target
 
@@ -10,9 +10,11 @@ A dedicated Debian or Ubuntu VM is recommended. Start with 2 vCPU, 4 GiB RAM, 30
 curl -fsSL https://raw.githubusercontent.com/wagnerks1990/proxmox-lab-platform/main/deploy/install.sh | sudo sh
 ```
 
+The URL above uses the repository's current GitHub slug. The product and installed runtime are LabGoblin; update this URL when the repository itself is renamed.
+
 To install directly on a Proxmox host, download the installer and explicitly pass `--allow-proxmox-host`. Do not use this override on a host you cannot rebuild.
 
-The installer creates `/opt/proxmox-lab-platform/app`, generates independent database, JWT, encryption, updater, and bootstrap secrets, starts the Compose services, runs migrations, and waits for `/api/ready`.
+The installer creates `/opt/labgoblin/app`, stores runtime state under `/var/lib/labgoblin`, creates the `labgoblin-updater` service/group, generates independent database, JWT, encryption, updater, and bootstrap secrets, starts the Compose services, runs migrations, and waits for `/api/ready`.
 
 ## Create the first administrator
 
@@ -21,7 +23,7 @@ At completion, the installer prints the application URL and a random bootstrap t
 After successful enrollment, remove `BOOTSTRAP_ADMIN_TOKEN` from the protected `.env` file and restart the API:
 
 ```bash
-cd /opt/proxmox-lab-platform/app
+cd /opt/labgoblin/app
 sudo docker compose --env-file .env up -d --force-recreate api
 ```
 
@@ -38,8 +40,8 @@ If the repository becomes private, create a dedicated read-only SSH key on the d
 
 ## Required post-install checks
 
-1. Sign in with the new administrator.
-2. Configure and validate the Proxmox cluster using a least-privilege API token.
+1. Sign in with the new administrator and confirm LabGoblin branding.
+2. Configure and validate the Proxmox VE cluster using a least-privilege API token.
 3. Import one approved template and confirm node/storage/network readiness.
 4. Create a test class, lab, run, assignment, and VM.
 5. Verify console access, VM power actions, run expiration, and cleanup.
