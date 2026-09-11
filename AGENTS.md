@@ -1,7 +1,9 @@
-# Proxmox Lab Platform — AGENT Guardrails
+# LabGoblin — AGENT Guardrails
 
 ## Project
-- This is the Proxmox Lab Platform.
+- This is **LabGoblin — Virtual Lab Provisioning & Management**.
+- Primary tagline: **Real Skills. Virtual Machines.**
+- Campaign line: **Build. Deploy. Learn. Repeat.**
 - It is a classroom VM orchestration/control-plane app.
 - Backend is FastAPI.
 - Frontend is React/Vite.
@@ -9,8 +11,18 @@
 - ORM is SQLAlchemy.
 - Migrations use Alembic.
 - Runtime deployment uses Ubuntu, nginx, and systemd.
-- Proxmox API access must remain backend-only.
+- Proxmox VE API access must remain backend-only.
 - Remote access direction is Guacamole-first, with ttyd only as fallback/debug if already present.
+
+## Branding and documentation
+- New user-facing names MUST use **LabGoblin**.
+- Do not introduce new `Proxmox Lab Platform` branding.
+- Refer to Proxmox VE only where technically relevant as the current hypervisor/integration.
+- Preserve compatibility-sensitive legacy identifiers until a migration is intentionally designed. This includes `/opt/proxmox-lab-platform`, `/var/lib/proxmox-lab-platform`, `proxmox-lab-updater`, existing database names, environment variables, and the current repository slug.
+- Do not rename compatibility-sensitive values merely for cosmetic consistency.
+- If a legacy technical identifier is migrated, provide compatibility/rollback handling and update operator documentation.
+- Keep README, MkDocs/wiki pages, deployment/runbooks, architecture notes, release notes, screenshots/help text, and `AI_CONTEXT.md` synchronized with relevant behavior changes.
+- Brand guidance and design tokens are defined in `docs/brand.md`.
 
 ## Workflow
 - Never work directly on `main`.
@@ -45,17 +57,12 @@
 - Never commit `.env` files.
 - Never commit secrets, private keys, certificates, passwords, tokens, local databases, or generated runtime artifacts.
 - Students may only access their own VMs.
-- Tenant instructors, administrators, and owners may manage VMs only in the
-  selected organization. Students may manage only VMs they own.
-- Global platform roles do not replace tenant membership. Global `Admin` is the
-  explicit break-glass exception and must still select an organization.
+- Tenant instructors, administrators, and owners may manage VMs only in the selected organization. Students may manage only VMs they own.
+- Global platform roles do not replace tenant membership. Global `Admin` is the explicit break-glass exception and must still select an organization.
 - Enforce RBAC on backend endpoints.
-- Access tokens must remain bound to a live `auth_sessions` row and the current
-  user `token_version`; do not add stateless-token bypasses for tests or tools.
-- Password, username, activation, and credential-recovery changes must preserve
-  the documented session-revocation behavior.
-- Identity audit metadata must never contain plaintext usernames from failed
-  unknown-user logins, passwords, hashes, tokens, or other credentials.
+- Access tokens must remain bound to a live `auth_sessions` row and the current user `token_version`; do not add stateless-token bypasses for tests or tools.
+- Password, username, activation, and credential-recovery changes must preserve documented session-revocation behavior.
+- Identity audit metadata must never contain plaintext usernames from failed unknown-user logins, passwords, hashes, tokens, or other credentials.
 
 ## VM/API rules
 - VM route identity should use the app database VM id unless explicitly documented otherwise.
@@ -97,14 +104,11 @@
 - Do not remove force-password-change behavior globally; only seed dev admin with `force_password_change=false`.
 
 ## V2 rebuild invariants
-- V2 work belongs on `codex/rebuild-v2-*` or another focused branch, never directly on `main`.
+- V2 work belongs on a focused branch, never directly on `main`.
 - Unknown or missing roles are denied. Authorization must positively identify an allowed role.
 - Student access is always scoped by organization, enrollment, assignment, and resource ownership.
-- Do not restore legacy permission-only student provisioning. A student VM must
-  be linked to an effective lab assignment, and every lifecycle or console path
-  must re-check the run window and blueprint access flags.
-- Expiring a lab run closes student authorization immediately. Do not claim a
-  Proxmox VM was stopped, reset, or deleted until a durable job verifies it.
+- Do not restore legacy permission-only student provisioning. A student VM must be linked to an effective lab assignment, and every lifecycle or console path must re-check the run window and blueprint access flags.
+- Expiring a lab run closes student authorization immediately. Do not claim a Proxmox VM was stopped, reset, or deleted until a durable job verifies it.
 - A template must be enabled and assigned before a student can provision it.
 - Proxmox mutations are durable jobs with idempotency keys and persisted task identifiers.
 - Database record removal and Proxmox resource deletion are separate, explicitly named operations.
