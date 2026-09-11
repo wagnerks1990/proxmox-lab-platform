@@ -32,6 +32,25 @@
 - Prefer incremental, testable changes.
 - Keep frontend API base URL as `/api`.
 
+## Frontend experience
+
+- Preserve the responsive application shell, grouped role-aware navigation,
+  active-route semantics, skip link, compact drawer, and mobile bottom
+  navigation.
+- The frontend is not an authorization boundary. Hidden navigation must match
+  capabilities, and the backend must still deny direct restricted requests.
+- Support 320, 390, 768, 1024, and 1440 CSS pixel validation widths without
+  page-level horizontal scrolling.
+- Every data-backed view must distinguish loading, empty, error, forbidden, and
+  populated states. Do not convert a failed request into a healthy empty state.
+- Give form controls persistent accessible names. Preserve heading order,
+  visible focus, keyboard operation, live feedback, and dialog focus return.
+- Use shared design tokens and status treatments. Never rely on color alone or
+  add arbitrary inline status colors.
+- Do not replace durable operation progress with optimistic Proxmox success.
+- Keep screenshots and help text sanitized and synchronized with navigation or
+  workflow changes.
+
 ## Preserve
 - login
 - RBAC
@@ -48,6 +67,8 @@
 - scheduler/worker visibility
 - Alembic migration chain
 - frontend build behavior
+- responsive and keyboard-accessible navigation
+- explicit loading, empty, error, and durable-operation states
 
 ## Security
 - Never expose Proxmox API tokens to frontend code.

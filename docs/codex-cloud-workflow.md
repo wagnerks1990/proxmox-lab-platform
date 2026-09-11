@@ -109,23 +109,30 @@ virtualenv, or a manual frontend build. Complete and retain the evidence listed
 in [Pre-production acceptance](operations/preproduction-acceptance.md).
 
 ## H. Manual browser validation checklist
-- LabGoblin branding appears on login and application shell
-- login works
-- `/api/auth/me` works
-- Dashboard loads
-- VMs page loads
-- VM list loads
-- VM create still works
-- VM start/stop/reboot/delete still work
-- Templates page loads
-- Pools page loads
-- Operations page loads
-- Troubleshooting page loads
-- Telemetry page loads
-- Session Activity page loads
-- SSE stream connects
-- Web Terminal is hidden or denied unless its pilot security prerequisites are enabled and validated
-- unsupported protocol buttons are hidden or disabled
+
+Record browser, viewport, commit, role, environment, and result. Use the full
+[GUI validation matrix](gui-section-validation.md); at minimum confirm:
+
+- LabGoblin branding appears on login and the application shell.
+- Login, bootstrap, forced password change, logout, and unavailable states are
+  distinct and announced.
+- The skip link, active destination, desktop collapse, compact drawer, bottom
+  navigation, and organization switcher work by keyboard.
+- Student, instructor, tenant-admin/owner, and platform-admin navigation matches
+  capabilities, including direct access to forbidden URLs.
+- Dashboard, Lab VMs, Create VM, Classroom, Pools, Sessions, Events, Operations,
+  Telemetry, Troubleshooting, Proxmox Setup, Inventory, Assets, Templates, Users,
+  Groups, Organizations, Updates, and Account Security show honest loading,
+  empty, error, and populated states.
+- VM create/start/stop/reboot/delete remains durable and never displays queued
+  work as completed external state.
+- SSE connects through the deployed proxy and terminates after revocation.
+- noVNC resizes and handles reconnect, expiry, and revocation.
+- SSH terminal is hidden or denied unless its security prerequisites are enabled
+  and validated.
+- Unsupported protocol buttons are hidden or clearly unavailable.
+- The interface passes at 320, 390, 768, 1024, and 1440 CSS pixel widths, 200%
+  zoom, and keyboard-only navigation.
 
 ## I. Branding validation
 A branding pass must distinguish LabGoblin-owned names from legitimate Proxmox VE integration terms. It must reject retired application-owned runtime/repository names such as `proxmox_lab`, `plp_session`, `/opt/proxmox-lab-platform`, `/var/lib/proxmox-lab-platform`, `proxmox-lab-*`, and `wagnerks1990/proxmox-lab-platform`. The canonical repository is `wagnerks1990/labgoblin`.
@@ -139,6 +146,7 @@ Every Codex Cloud PR must include:
 - migration changes
 - tests/checks run
 - tests/checks not run and why
+- role, viewport, accessibility, and view-state evidence for changed workflows
 - what still requires Ubuntu server validation
 - known risks
 - intentionally deferred items

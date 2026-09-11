@@ -20,6 +20,8 @@ environment-dependent checks.
 - Migrations upgrade a populated previous-version PostgreSQL fixture and Alembic
   reports no model/schema drift.
 - Frontend tests, production build, and dependency audit pass.
+- Responsive-shell, role-navigation, accessible-name, focus, live-region, and
+  design-token regression contracts pass.
 - Generated OpenAPI files have no drift and every routed frontend endpoint exists.
 - MkDocs strict build, branding regression check, secret scan, and Compose
   configuration validation pass.
@@ -55,6 +57,24 @@ environment-dependent checks.
   destination binding pass the hostile-guest pivot test.
 - SSE remains live through the deployed proxy without buffering and terminates
   promptly after authorization revocation.
+
+## Interface acceptance
+
+- Logged-out, student, instructor, tenant administrator/owner, and platform
+  administrator workflows pass at 320 x 568, 390 x 844, 768 x 1024,
+  1024 x 768, and 1440 x 900.
+- The interface has no page-level horizontal overflow. Dense data scrolls only
+  within a labeled region or changes to an adaptive presentation.
+- Keyboard-only and 200% zoom checks pass for navigation, organization
+  selection, every changed form, dialogs, tables, and destructive actions.
+- Skip navigation, visible focus, active-route semantics, persistent labels,
+  heading order, live feedback, and dialog focus restoration pass manual review.
+- Loading, empty, partial-failure, unavailable, forbidden, queued, succeeded,
+  and failed states are distinguishable without relying on color.
+- Compact navigation closes by Escape, backdrop, and route selection, keeps
+  focus within the drawer while open, and restores focus to its trigger.
+- Sanitized screenshots of representative public, student, instructor, and
+  platform-administrator views are retained with the acceptance record.
 
 ## Upgrade, recovery, and operations
 

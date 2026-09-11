@@ -1,85 +1,26 @@
 import { useEffect, useMemo, useState } from 'react'
 import api from '../services/api'
 
+const statusTone = status => ['running', 'online', 'up'].includes(String(status).toLowerCase()) ? 'ui-status-badge--success' : ['stopped', 'offline', 'down'].includes(String(status).toLowerCase()) ? 'ui-status-badge--neutral' : 'ui-status-badge--warning'
+
 export default function ProxmoxInventoryPage(){
-  const [rows,setRows]=useState([])
-  const [templates,setTemplates]=useState([])
-  const [filters,setFilters]=useState({q:'',status:'',node:'',template:''})
-  const [busy,setBusy]=useState(false)
-  const [availability,setAvailability]=useState([])
-  const [isoSummary,setIsoSummary]=useState({ items: [], warnings: [] })
-  const [msg,setMsg]=useState('')
+  const [rows,setRows]=useState([]); const [templates,setTemplates]=useState([]); const [filters,setFilters]=useState({q:'',status:'',node:'',template:''})
+  const [busy,setBusy]=useState(false); const [availability,setAvailability]=useState([]); const [isoSummary,setIsoSummary]=useState({items:[],warnings:[]}); const [message,setMessage]=useState(null)
+  const load=async()=>{setBusy(true);setMessage(null);try{const[inv,disc,av,clusters]=await Promise.all([api.get('/admin/proxmox/inventory/vms'),api.get('/admin/proxmox/templates/discovered'),api.get('/admin/proxmox/templates/availability'),api.get('/admin/proxmox/clusters')]);setRows(Array.isArray(inv.data)?inv.data:[]);setTemplates(Array.isArray(disc.data)?disc.data:[]);setAvailability(Array.isArray(av.data)?av.data:[]);const active=(Array.isArray(clusters.data)?clusters.data:[]).find(cluster=>cluster.is_active);if(active?.id){const iso=await api.get(`/admin/proxmox/clusters/${active.id}/isos`);setIsoSummary({items:iso?.data?.items||[],warnings:iso?.data?.warnings||[]})}else setIsoSummary({items:[],warnings:['No active cluster for ISO/media discovery.']})}catch(error){setMessage({type:'error',text:JSON.stringify(error?.response?.data?.detail||error.message)})}finally{setBusy(false)}}
+  useEffect(()=>{load()},[])
+  const act=async(node,vmid,action)=>{setBusy(true);try{await api.post(`/admin/proxmox/vms/${encodeURIComponent(node)}/${vmid}/${action}`);await load();setMessage({type:'success',text:`${action} requested for VMID ${vmid}.`})}catch(error){setMessage({type:'error',text:JSON.stringify(error?.response?.data?.detail||error.message)})}finally{setBusy(false)}}
+  const importOne=async template=>{setBusy(true);try{await api.post('/admin/proxmox/templates/import',{name:template.name,proxmox_node:template.node,source_vmid:template.vmid,enabled:true});await load();setMessage({type:'success',text:`${template.name} imported.`})}catch(error){setMessage({type:'error',text:JSON.stringify(error?.response?.data?.detail||error.message)})}finally{setBusy(false)}}
+  const syncAll=async()=>{setBusy(true);try{await api.post('/admin/proxmox/templates/sync',{});await load();setMessage({type:'success',text:'Template inventory synchronized.'})}catch(error){setMessage({type:'error',text:JSON.stringify(error?.response?.data?.detail||error.message)})}finally{setBusy(false)}}
+  const syncTemplatePlan=async template=>{setBusy(true);try{const{data}=await api.post('/admin/proxmox/assets/sync-template',{template_vmid:template.vmid,source_node:template.node,target_nodes:[],confirm:true});setMessage({type:'success',text:data?.message||'Sync request sent'})}catch(error){setMessage({type:'error',text:JSON.stringify(error?.response?.data?.detail||error.message)})}finally{setBusy(false)}}
+  const filtered=useMemo(()=>rows.filter(row=>(!filters.status||row.status===filters.status)&&(!filters.node||row.node===filters.node)&&(!(filters.template==='templates')||row.template)&&(!(filters.template==='vms')||!row.template)&&(!filters.q||(String(row.name||'').toLowerCase().includes(filters.q.toLowerCase())||String(row.vmid).includes(filters.q)))),[rows,filters])
+  const nodes=[...new Set(rows.map(row=>row.node).filter(Boolean))]; const statuses=[...new Set(rows.map(row=>row.status).filter(Boolean))]
 
-  const load = async ()=>{
-    setBusy(true); setMsg('')
-    try {
-      const [inv,disc,av,clusters] = await Promise.all([api.get('/admin/proxmox/inventory/vms'), api.get('/admin/proxmox/templates/discovered'), api.get('/admin/proxmox/templates/availability'), api.get('/admin/proxmox/clusters')])
-      setRows(Array.isArray(inv.data)?inv.data:[])
-      setTemplates(Array.isArray(disc.data)?disc.data:[])
-      setAvailability(Array.isArray(av.data)?av.data:[])
-      const active = (Array.isArray(clusters.data) ? clusters.data : []).find(c => c.is_active)
-      if (active?.id) {
-        const iso = await api.get(`/admin/proxmox/clusters/${active.id}/isos`)
-        setIsoSummary({ items: iso?.data?.items || [], warnings: iso?.data?.warnings || [] })
-      } else {
-        setIsoSummary({ items: [], warnings: ['No active cluster for ISO/media discovery.'] })
-      }
-    } catch(e){ setMsg(JSON.stringify(e?.response?.data?.detail || e.message)) }
-    finally{ setBusy(false) }
-  }
-  useEffect(()=>{ load() },[])
-
-  const act = async (node, vmid, action)=>{
-    setBusy(true)
-    try { await api.post(`/admin/proxmox/vms/${encodeURIComponent(node)}/${vmid}/${action}`); await load(); }
-    catch(e){ setMsg(JSON.stringify(e?.response?.data?.detail || e.message)) }
-    finally{ setBusy(false) }
-  }
-
-  const importOne = async (t)=>{
-    setBusy(true)
-    try { await api.post('/admin/proxmox/templates/import', {name:t.name, proxmox_node:t.node, source_vmid:t.vmid, enabled:true}); await load(); }
-    catch(e){ setMsg(JSON.stringify(e?.response?.data?.detail || e.message)) }
-    finally{ setBusy(false) }
-  }
-
-  const syncAll = async ()=>{ setBusy(true); try { await api.post('/admin/proxmox/templates/sync', {}); await load(); } catch(e){ setMsg(JSON.stringify(e?.response?.data?.detail || e.message)) } finally { setBusy(false) } }
-  const syncTemplatePlan = async (t)=>{ setBusy(true); try { const {data}=await api.post('/admin/proxmox/assets/sync-template',{template_vmid:t.vmid,source_node:t.node,target_nodes:[],confirm:true}); setMsg(data?.message||'Sync request sent') } catch(e){ setMsg(JSON.stringify(e?.response?.data?.detail || e.message)) } finally { setBusy(false) } }
-
-  const filtered = useMemo(()=>rows.filter(r=>{
-    if (filters.status && (r.status||'')!==filters.status) return false
-    if (filters.node && (r.node||'')!==filters.node) return false
-    if (filters.template==='templates' && !r.template) return false
-    if (filters.template==='vms' && r.template) return false
-    if (filters.q && !(String(r.name||'').toLowerCase().includes(filters.q.toLowerCase()) || String(r.vmid).includes(filters.q))) return false
-    return true
-  }),[rows,filters])
-
-  const nodes = [...new Set(rows.map(r=>r.node).filter(Boolean))]
-  const statuses = [...new Set(rows.map(r=>r.status).filter(Boolean))]
-
-  return <section className='panel'>
-    <h3>Proxmox Inventory</h3>
-    <p className='muted'>This page controls Proxmox inventory directly. Student VM ownership rules apply only to lab-assigned VMs.</p>
-    {msg ? <p className='muted'>{msg}</p> : null}
-    <div className='group'>
-      <input className='input' placeholder='Search name/vmid' value={filters.q} onChange={e=>setFilters({...filters,q:e.target.value})}/>
-      <select className='input' value={filters.node} onChange={e=>setFilters({...filters,node:e.target.value})}><option value=''>All nodes</option>{nodes.map(n=><option key={n}>{n}</option>)}</select>
-      <select className='input' value={filters.status} onChange={e=>setFilters({...filters,status:e.target.value})}><option value=''>All status</option>{statuses.map(s=><option key={s}>{s}</option>)}</select>
-      <select className='input' value={filters.template} onChange={e=>setFilters({...filters,template:e.target.value})}><option value=''>VMs + templates</option><option value='templates'>Templates only</option><option value='vms'>VMs only</option></select>
-      <button disabled={busy} onClick={load}>Refresh</button>
-      <button disabled={busy} onClick={syncAll}>Sync all templates</button>
-    </div>
-
-    <h4>Discovered templates</h4><p className='muted'>Template availability across nodes is shown below.</p>
-    <p className='muted'>ISO/media discovered: {isoSummary.items.length}{isoSummary.warnings.length ? ` · ${isoSummary.warnings.join('; ')}` : ''}</p>
-    <table className='vm-table'><thead><tr><th>VMID</th><th>Name</th><th>Node</th><th>Imported</th><th>Available Nodes</th><th>Action</th></tr></thead><tbody>
-      {templates.map(t=>{ const av = availability.find(a => Number(a.template_vmid)===Number(t.vmid)); return <tr key={`${t.node}-${t.vmid}`}><td>{t.vmid}</td><td>{t.name}</td><td>{t.node}</td><td>{t.already_imported?'Yes':'No'}</td><td>{av ? (av.available_nodes||[]).join(', ') : '—'}{av?.warnings?.length?<div className='muted'>{av.warnings.join('; ')}</div>:null}{av?.recommended_action?<div className='muted'>{av.recommended_action}</div>:null}</td><td>{t.already_imported?'—':<button disabled={busy} onClick={()=>importOne(t)}>Import</button>}<button disabled={busy} onClick={()=>syncTemplatePlan(t)}>Sync/Prepare</button></td></tr>})}
-    </tbody></table>
-
-    <h4>All Proxmox VMs/Templates</h4>
-    <table className='vm-table'><thead><tr><th>Node</th><th>VMID</th><th>Name</th><th>Status</th><th>Template</th><th>Linked</th><th>Owner</th><th>Actions</th></tr></thead><tbody>
-      {filtered.map(r=><tr key={`${r.node}-${r.vmid}`}><td>{r.node}</td><td>{r.vmid}</td><td>{r.name}</td><td>{r.status}</td><td>{r.template?'Yes':'No'}</td><td>{r.app_linked?'Yes':'No'}</td><td>{r.owner_username||'-'}</td><td><div className='group'>{!r.template && <><button disabled={busy} onClick={()=>act(r.node,r.vmid,'start')}>Start</button><button disabled={busy} onClick={()=>act(r.node,r.vmid,'stop')}>Stop</button><button disabled={busy} onClick={()=>act(r.node,r.vmid,'reboot')}>Reboot</button><button disabled={busy} onClick={()=>act(r.node,r.vmid,'shutdown')}>Shutdown</button></>}</div></td></tr>)}
-    </tbody></table>
+  return <section className='page-shell' aria-labelledby='inventory-title'>
+    <header className='ui-page-header'><div className='ui-page-header__copy'><p className='muted'>Infrastructure</p><h2 id='inventory-title' className='ui-page-header__title'>Proxmox inventory</h2><p className='ui-page-header__description'>Review infrastructure directly, import approved templates, and control untemplated VMs.</p></div><div className='ui-page-header__actions'><button disabled={busy} onClick={load}>{busy?'Refreshing…':'Refresh'}</button><button disabled={busy} onClick={syncAll}>Sync templates</button></div></header>
+    <p className='ui-alert ui-alert--warning'>Student ownership rules apply to lab-assigned VMs. This administrative page controls Proxmox inventory directly.</p>
+    {message?<p className={`ui-alert ui-alert--${message.type}`} role={message.type==='error'?'alert':'status'} aria-live='polite'>{message.text}</p>:null}
+    <section className='ui-card' aria-labelledby='inventory-filter-title'><h3 id='inventory-filter-title'>Filter inventory</h3><div className='ui-form-grid'><label className='ui-field'>Name or VMID<input className='input' type='search' value={filters.q} onChange={event=>setFilters({...filters,q:event.target.value})}/></label><label className='ui-field'>Node<select className='input' value={filters.node} onChange={event=>setFilters({...filters,node:event.target.value})}><option value=''>All nodes</option>{nodes.map(node=><option key={node}>{node}</option>)}</select></label><label className='ui-field'>Status<select className='input' value={filters.status} onChange={event=>setFilters({...filters,status:event.target.value})}><option value=''>All statuses</option>{statuses.map(status=><option key={status}>{status}</option>)}</select></label><label className='ui-field'>Resource type<select className='input' value={filters.template} onChange={event=>setFilters({...filters,template:event.target.value})}><option value=''>VMs and templates</option><option value='templates'>Templates only</option><option value='vms'>VMs only</option></select></label></div></section>
+    <details className='ui-card' open><summary><strong>Discovered templates</strong> · {templates.length}</summary><p className='muted'>ISO/media discovered: {isoSummary.items.length}{isoSummary.warnings.length?` · ${isoSummary.warnings.join('; ')}`:''}</p>{templates.length===0&&!busy?<p className='muted'>No templates were discovered.</p>:<div className='ui-table-wrap' role='region' aria-label='Discovered templates' tabIndex='0'><table className='ui-table'><thead><tr><th scope='col'>VMID</th><th scope='col'>Name</th><th scope='col'>Node</th><th scope='col'>Imported</th><th scope='col'>Available nodes</th><th scope='col'>Action</th></tr></thead><tbody>{templates.map(template=>{const available=availability.find(item=>Number(item.template_vmid)===Number(template.vmid));return <tr key={`${template.node}-${template.vmid}`}><td>{template.vmid}</td><th scope='row'>{template.name}</th><td>{template.node}</td><td>{template.already_imported?'Yes':'No'}</td><td>{available?(available.available_nodes||[]).join(', '):'—'}{available?.warnings?.length?<div className='muted'>{available.warnings.join('; ')}</div>:null}{available?.recommended_action?<div className='muted'>{available.recommended_action}</div>:null}</td><td><div className='ui-cluster'>{template.already_imported?null:<button disabled={busy} aria-label={`Import template ${template.name}`} onClick={()=>importOne(template)}>Import</button>}<button disabled={busy} aria-label={`Sync or prepare template ${template.name}`} onClick={()=>syncTemplatePlan(template)}>Sync/prepare</button></div></td></tr>})}</tbody></table></div>}</details>
+    <section className='ui-card' aria-labelledby='all-inventory-title'><div className='ui-card__header'><div><h3 id='all-inventory-title'>All VMs and templates</h3><p className='ui-card__description'>{filtered.length} of {rows.length} resources shown</p></div></div>{!busy&&filtered.length===0?<p className='muted'>No resources match the current filters.</p>:<div className='ui-table-wrap' role='region' aria-labelledby='all-inventory-title' tabIndex='0'><table className='ui-table'><thead><tr><th scope='col'>Node</th><th scope='col'>VMID</th><th scope='col'>Name</th><th scope='col'>Status</th><th scope='col'>Template</th><th scope='col'>Linked</th><th scope='col'>Owner</th><th scope='col'>Actions</th></tr></thead><tbody>{filtered.map(row=><tr key={`${row.node}-${row.vmid}`}><td>{row.node}</td><td>{row.vmid}</td><th scope='row'>{row.name}</th><td><span className={`ui-status-badge ${statusTone(row.status)}`}>{row.status||'unknown'}</span></td><td>{row.template?'Yes':'No'}</td><td>{row.app_linked?'Yes':'No'}</td><td>{row.owner_username||'-'}</td><td>{!row.template?<div className='ui-cluster'>{['start','stop','reboot','shutdown'].map(action=><button key={action} disabled={busy} aria-label={`${action} ${row.name} VMID ${row.vmid}`} onClick={()=>act(row.node,row.vmid,action)}>{action[0].toUpperCase()+action.slice(1)}</button>)}</div>:'—'}</td></tr>)}</tbody></table></div>}</section>
   </section>
 }

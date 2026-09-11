@@ -4,6 +4,7 @@ import api from '../services/api'
 const bootstrapInit = { name:'Primary Proxmox', api_url:'', verify_ssl:true, root_username:'root@pam', root_password:'', token_id:'labgoblin' }
 const manualInit = { name:'Primary Proxmox', api_url:'', verify_ssl:true, token_user:'root@pam', token_id:'labgoblin', token_secret:'' }
 const defaultsInit = { default_node:'', default_storage:'', default_bridge:'', default_template_vmid:'', clone_mode:'full', placement_policy:'', notes:'' }
+const statusTone = status => status === 'PASS' || status === 'ok' ? 'ui-status-badge--success' : status === 'WARN' ? 'ui-status-badge--warning' : status === 'FAIL' ? 'ui-status-badge--danger' : 'ui-status-badge--neutral'
 
 export default function ProxmoxSetupPage(){
   const [clusters,setClusters]=useState([])
@@ -28,8 +29,6 @@ export default function ProxmoxSetupPage(){
 
   const activeCluster = useMemo(()=>clusters.find(c=>c.is_active),[clusters])
   const readinessStatus = String(readiness?.status || '').toUpperCase()
-  const readinessTone = readinessStatus === 'PASS' ? '#065f46' : readinessStatus === 'WARN' ? '#92400e' : '#991b1b'
-  const readinessBg = readinessStatus === 'PASS' ? '#ecfdf5' : readinessStatus === 'WARN' ? '#fffbeb' : '#fef2f2'
 
   const run = async (fn)=>{ setLoading(true); setMsg(''); try{ await fn() } catch(e){ const m = JSON.stringify(e?.response?.data?.detail || e?.response?.data || e.message); setMsg(m); setHostAccessResult({ ok:false, message:m }) } finally { setLoading(false) } }
   const loadClusters = async ()=>{ const {data} = await api.get('/admin/proxmox/clusters'); setClusters(Array.isArray(data)?data:[]) }
@@ -143,64 +142,63 @@ export default function ProxmoxSetupPage(){
     setAssetPlanMsg(JSON.stringify(data))
   })
 
-  return <section className='panel'>
-    <h2>Proxmox Setup</h2>
-    {activeCluster ? <div className='panel'><strong>Active cluster configured:</strong> {activeCluster.name} ({activeCluster.api_url})</div> : null}
-    <p className='muted'>Root credentials are used only during bootstrap and are not stored. Token secrets are never returned by API.</p>
+  return <section className='page-shell' aria-labelledby='proxmox-setup-title'>
+    <header className='ui-page-header'><div className='ui-page-header__copy'><p className='muted'>Infrastructure</p><h2 id='proxmox-setup-title' className='ui-page-header__title'>Proxmox setup</h2><p className='ui-page-header__description'>Connect clusters, validate access, review readiness, and set placement defaults.</p></div></header>
+    {activeCluster ? <p className='ui-alert ui-alert--success'><strong>Active cluster:</strong>&nbsp; {activeCluster.name} ({activeCluster.api_url})</p> : <p className='ui-alert ui-alert--warning'>No active cluster is configured.</p>}
+    <p className='muted'>Root credentials are used only during bootstrap and are not stored. Token secrets are never returned by the API.</p>
 
-    <button disabled={loading} onClick={()=>setShowBootstrap(!showBootstrap)}>{showBootstrap ? 'Hide Bootstrap Forms' : 'Add another cluster / re-bootstrap'}</button>
+    <button disabled={loading} aria-expanded={showBootstrap || !activeCluster} aria-controls='cluster-connection-forms' onClick={()=>setShowBootstrap(!showBootstrap)}>{showBootstrap ? 'Hide connection forms' : 'Add or reconnect cluster'}</button>
 
-    {(showBootstrap || !activeCluster) ? <>
-      <h3>Bootstrap with Root</h3>
-      <div className='group'>
-        <input className='input' placeholder='Cluster name' value={bootstrap.name} onChange={e=>setBootstrap({...bootstrap,name:e.target.value})}/>
-        <input className='input' placeholder='API URL' value={bootstrap.api_url} onChange={e=>setBootstrap({...bootstrap,api_url:e.target.value})}/>
-        <input className='input' placeholder='Root username' value={bootstrap.root_username} onChange={e=>setBootstrap({...bootstrap,root_username:e.target.value})}/>
-        <input className='input' placeholder='Token ID' value={bootstrap.token_id} onChange={e=>setBootstrap({...bootstrap,token_id:e.target.value})}/>
-        <input className='input' type='password' placeholder='Root password' value={bootstrap.root_password} onChange={e=>setBootstrap({...bootstrap,root_password:e.target.value})}/>
+    {(showBootstrap || !activeCluster) ? <section id='cluster-connection-forms' className='ui-card'>
+      <h3>Bootstrap with root</h3>
+      <div className='ui-form-grid'>
+        <label className='ui-field'>Cluster name<input className='input' value={bootstrap.name} onChange={e=>setBootstrap({...bootstrap,name:e.target.value})}/></label>
+        <label className='ui-field'>API URL<input className='input' type='url' value={bootstrap.api_url} onChange={e=>setBootstrap({...bootstrap,api_url:e.target.value})}/></label>
+        <label className='ui-field'>Root username<input className='input' value={bootstrap.root_username} onChange={e=>setBootstrap({...bootstrap,root_username:e.target.value})}/></label>
+        <label className='ui-field'>Token ID<input className='input' value={bootstrap.token_id} onChange={e=>setBootstrap({...bootstrap,token_id:e.target.value})}/></label>
+        <label className='ui-field'>Root password<input className='input' type='password' autoComplete='off' value={bootstrap.root_password} onChange={e=>setBootstrap({...bootstrap,root_password:e.target.value})}/></label>
         <label><input type='checkbox' checked={bootstrap.verify_ssl} onChange={e=>setBootstrap({...bootstrap,verify_ssl:e.target.checked})}/> Verify SSL</label>
         <button disabled={loading} onClick={doBootstrap}>Bootstrap</button>
       </div>
-      <h3>Host Access</h3>
+      <h3>Host access</h3>
       <p className='muted'>Current mode: {hostAccess?.mode || 'api_only'}. Root password is used only during this request and is not persisted.</p>
       {hostAccess?.mode === 'static_asset_server' ? <div className='panel'><p className='muted'>Static asset server mode is active. ISO/CT source URLs can be generated.</p><p className='muted'>Host-runner command execution is disabled.</p><p className='muted'>Root password is not used in this mode.</p></div> : null}
       <div className='group'>
         {hostAccess?.mode !== 'static_asset_server' ? <>
-          <input className='input' placeholder='Root username' value={hostAccessForm.root_username} onChange={e=>setHostAccessForm({...hostAccessForm, root_username:e.target.value})}/>
-          <input className='input' type='password' placeholder='Root password (one-time)' value={hostAccessForm.root_password} onChange={e=>setHostAccessForm({...hostAccessForm, root_password:e.target.value})}/>
-          <select className='input' multiple value={hostAccessForm.node_names} onChange={e=>setHostAccessForm({...hostAccessForm, node_names:[...e.target.selectedOptions].map(o=>o.value)})}>
+          <label className='ui-field'>Root username<input className='input' value={hostAccessForm.root_username} onChange={e=>setHostAccessForm({...hostAccessForm, root_username:e.target.value})}/></label>
+          <label className='ui-field'>One-time root password<input className='input' type='password' autoComplete='off' value={hostAccessForm.root_password} onChange={e=>setHostAccessForm({...hostAccessForm, root_password:e.target.value})}/></label>
+          <label className='ui-field'>Target nodes<select className='input' multiple value={hostAccessForm.node_names} onChange={e=>setHostAccessForm({...hostAccessForm, node_names:[...e.target.selectedOptions].map(o=>o.value)})}>
             {(hostAccess?.nodes || nodes).map(n => <option key={n.node_name} value={n.node_name}>{n.node_name}</option>)}
-          </select>
+          </select></label>
         </> : null}
         <button disabled={true} title='Host runner bootstrap is not enabled/configured yet.' onClick={bootstrapHostAccess}>Configure Host Runner</button>
         <button disabled={loading || !(selectedId || activeCluster?.id)} onClick={validateHostAccess}>Validate Host Access</button>
       </div>
       <p className='muted'>Host runner bootstrap is not enabled/configured yet.</p>
-      {hostAccessResult ? <div className='panel' style={{borderColor: hostAccessResult.ok ? '#065f46' : '#92400e'}}><strong>Host Access Validate Result:</strong> {hostAccessResult.message}</div> : null}
-      {(hostAccess?.nodes || []).length ? <ul>{hostAccess.nodes.map(n => <li key={n.node_name} className='muted'>{n.node_name}: {n.host_access_status || n.status} ({n.runner_user})</li>)}</ul> : null}
-
-      <h3>Manual Token Fallback</h3>
-      <div className='group'>
-        <input className='input' placeholder='Cluster name' value={manual.name} onChange={e=>setManual({...manual,name:e.target.value})}/>
-        <input className='input' placeholder='API URL' value={manual.api_url} onChange={e=>setManual({...manual,api_url:e.target.value})}/>
-        <input className='input' placeholder='Token user' value={manual.token_user} onChange={e=>setManual({...manual,token_user:e.target.value})}/>
-        <input className='input' placeholder='Token ID' value={manual.token_id} onChange={e=>setManual({...manual,token_id:e.target.value})}/>
-        <input className='input' type='password' placeholder='Token secret' value={manual.token_secret} onChange={e=>setManual({...manual,token_secret:e.target.value})}/>
+      {hostAccessResult ? <p className={`ui-alert ${hostAccessResult.ok ? 'ui-alert--success' : 'ui-alert--error'}`} role={hostAccessResult.ok?'status':'alert'}><strong>Host access result:</strong>&nbsp; {hostAccessResult.message}</p> : null}
+      <h3>Manual token fallback</h3>
+      <div className='ui-form-grid'>
+        <label className='ui-field'>Cluster name<input className='input' value={manual.name} onChange={e=>setManual({...manual,name:e.target.value})}/></label>
+        <label className='ui-field'>API URL<input className='input' type='url' value={manual.api_url} onChange={e=>setManual({...manual,api_url:e.target.value})}/></label>
+        <label className='ui-field'>Token user<input className='input' value={manual.token_user} onChange={e=>setManual({...manual,token_user:e.target.value})}/></label>
+        <label className='ui-field'>Token ID<input className='input' value={manual.token_id} onChange={e=>setManual({...manual,token_id:e.target.value})}/></label>
+        <label className='ui-field'>Token secret<input className='input' type='password' autoComplete='off' value={manual.token_secret} onChange={e=>setManual({...manual,token_secret:e.target.value})}/></label>
         <label><input type='checkbox' checked={manual.verify_ssl} onChange={e=>setManual({...manual,verify_ssl:e.target.checked})}/> Verify SSL</label>
         <button disabled={loading} onClick={doManualToken}>Save Manual Token</button>
       </div>
-    </> : null}
+    </section> : null}
 
-    <h3>Configured Clusters</h3>
-    {clusters.length===0 ? <p className='muted'>No clusters configured yet.</p> : <table className='vm-table'><thead><tr><th>Name</th><th>API URL</th><th>Token</th><th>Active</th><th>Validation</th><th>Actions</th></tr></thead><tbody>
-      {clusters.map(c=><tr key={c.id}><td>{c.name}</td><td>{c.api_url}</td><td>{c.token_user} / {c.token_id}</td><td>{String(c.is_active)}</td><td>{c.last_validation_status || '-'} {c.last_validated_at || ''}</td><td><div className='group'><button disabled={loading} onClick={()=>doValidate(c.id)}>Validate</button><button disabled={loading} onClick={()=>doActivate(c.id)}>Activate</button><button disabled={loading} onClick={()=>refreshDiscovery(c.id)}>Refresh Discovery</button><button disabled={loading} onClick={()=>doDelete(c.id)}>Delete</button></div></td></tr>)}
-    </tbody></table>}
+    <section className='ui-card' aria-labelledby='configured-clusters-title'><h3 id='configured-clusters-title'>Configured clusters</h3>
+    {clusters.length===0 ? <p className='muted'>No clusters configured yet.</p> : <div className='ui-table-wrap' role='region' aria-labelledby='configured-clusters-title' tabIndex='0'><table className='ui-table'><thead><tr><th scope='col'>Name</th><th scope='col'>API URL</th><th scope='col'>Token</th><th scope='col'>Active</th><th scope='col'>Validation</th><th scope='col'>Actions</th></tr></thead><tbody>
+      {clusters.map(c=><tr key={c.id}><th scope='row'>{c.name}</th><td>{c.api_url}</td><td>{c.token_user} / {c.token_id}</td><td>{c.is_active?'Yes':'No'}</td><td><span className={`ui-status-badge ${statusTone(c.last_validation_status)}`}>{c.last_validation_status || 'Not validated'}</span> {c.last_validated_at || ''}</td><td><div className='ui-cluster'><button disabled={loading} aria-label={`Validate cluster ${c.name}`} onClick={()=>doValidate(c.id)}>Validate</button><button disabled={loading} aria-label={`Activate cluster ${c.name}`} onClick={()=>doActivate(c.id)}>Activate</button><button disabled={loading} aria-label={`Refresh discovery for ${c.name}`} onClick={()=>refreshDiscovery(c.id)}>Refresh discovery</button><button className='ui-button--danger' disabled={loading} aria-label={`Delete cluster record ${c.name}`} onClick={()=>doDelete(c.id)}>Delete</button></div></td></tr>)}
+    </tbody></table></div>}
+    </section>
 
     {selectedId ? <div className='panel'>
       {readiness ? <div className='panel'>
-        <h3>Cluster Readiness: <span style={{padding:'2px 8px', borderRadius:8, background:readinessBg, color:readinessTone}}>{readinessStatus || 'UNKNOWN'}</span></h3>
-        {readinessStatus === 'WARN' ? <p style={{color:'#92400e', fontWeight:600}}>Balanced placement is constrained. Required assets are not available on every eligible node.</p> : null}
-        {readinessStatus === 'FAIL' ? <p style={{color:'#991b1b', fontWeight:600}}>Cluster readiness has blocking failures.</p> : null}
+        <h3>Cluster readiness: <span className={`ui-status-badge ${statusTone(readinessStatus)}`}>{readinessStatus || 'UNKNOWN'}</span></h3>
+        {readinessStatus === 'WARN' ? <p className='ui-alert ui-alert--warning'>Balanced placement is constrained. Required assets are not available on every eligible node.</p> : null}
+        {readinessStatus === 'FAIL' ? <p className='ui-alert ui-alert--error'>Cluster readiness has blocking failures.</p> : null}
         <div className='group' style={{alignItems:'flex-start'}}>
           <div><strong>Placement policy:</strong> {readiness?.defaults?.placement_policy || 'not set'}</div>
           <div><strong>Eligible nodes:</strong> {(readiness.eligible_nodes || []).join(', ') || 'none'}</div>
@@ -217,27 +215,27 @@ export default function ProxmoxSetupPage(){
         {readiness.missing_templates_by_node ? <div>
           <h4>Missing Templates by Node</h4>
           {Object.keys(readiness.missing_templates_by_node).length === 0 ? <p className='muted'>No template gaps reported.</p> : (
-            <table className='vm-table'>
-              <thead><tr><th>Node</th><th>Missing template VMIDs</th></tr></thead>
+            <div className='ui-table-wrap' role='region' aria-label='Missing templates by node' tabIndex='0'><table className='ui-table'>
+              <thead><tr><th scope='col'>Node</th><th scope='col'>Missing template VMIDs</th></tr></thead>
               <tbody>
                 {Object.entries(readiness.missing_templates_by_node).map(([node, missing])=>(
                   <tr key={node}><td>{node}</td><td>{(missing || []).join(', ') || '-'}</td></tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           )}
         </div> : null}
         {readiness.missing_isos_by_node ? <div>
           <h4>Missing ISO/Media by Node</h4>
           {Object.keys(readiness.missing_isos_by_node).length === 0 ? <p className='muted'>No ISO/media gaps reported.</p> : (
-            <table className='vm-table'>
-              <thead><tr><th>Node</th><th>Missing ISO/media items</th></tr></thead>
+            <div className='ui-table-wrap' role='region' aria-label='Missing media by node' tabIndex='0'><table className='ui-table'>
+              <thead><tr><th scope='col'>Node</th><th scope='col'>Missing ISO/media items</th></tr></thead>
               <tbody>
                 {Object.entries(readiness.missing_isos_by_node).map(([node, missing])=>(
                   <tr key={node}><td>{node}</td><td>{(missing || []).join(', ') || '-'}</td></tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           )}
         </div> : null}
         {(readiness.warnings || []).length ? <ul>{readiness.warnings.map((w,i)=><li key={i} className='muted'>{w}</li>)}</ul> : null}
@@ -248,31 +246,33 @@ export default function ProxmoxSetupPage(){
         </div> : null}
         <p className='muted'>Template/media sync automation may be unsupported. Use shared storage or manual Proxmox replication when guided below.</p>
         <button disabled={loading} onClick={()=>refreshDiscovery(selectedId)}>Refresh Readiness</button>
-        <select className='input' value={selectedTemplateVmid} onChange={e=>setSelectedTemplateVmid(e.target.value)}>
+        <label className='ui-field'>Template for dry-run<select className='input' value={selectedTemplateVmid} onChange={e=>setSelectedTemplateVmid(e.target.value)}>
           <option value=''>Select template for dry-run</option>
           {(templates || []).map((t,idx)=><option key={`${t.node}-${t.vmid}-${idx}`} value={t.vmid}>{t.vmid} - {t.name} ({t.node})</option>)}
-        </select>
+        </select></label>
         <button disabled={loading || !selectedTemplateVmid} onClick={runTemplateSyncPlan}>Template Sync Plan (Dry-run)</button>
-        <select className='input' value={selectedIsoId} onChange={e=>setSelectedIsoId(e.target.value)}>
+        <label className='ui-field'>ISO or media for dry-run<select className='input' value={selectedIsoId} onChange={e=>setSelectedIsoId(e.target.value)}>
           <option value=''>Select ISO/media for dry-run</option>
           {(readiness?.isos || []).map((i,idx)=><option key={`${i.node}-${i.storage}-${i.content_id||idx}`} value={i.content_id || i.name}>{i.name} ({i.node}/{i.storage})</option>)}
-        </select>
+        </select></label>
         <button disabled={loading || !selectedIsoId} onClick={runIsoSyncPlan}>ISO Sync Plan (Dry-run)</button>
         {readiness?.isos?.length===0 ? <p className='muted'>ISO/media readiness: empty or unsupported in current cluster discovery.</p> : <p className='muted'>ISO/media discovered: {readiness.isos.length}</p>}
         {assetPlanMsg ? <pre className='muted' style={{whiteSpace:'pre-wrap'}}>{assetPlanMsg}</pre> : null}
       </div> : null}
       <h3>Defaults</h3>
       <p className='muted'>Default node = where new VMs are created unless placement policy selects another. Default storage = target storage for VM disks. Default bridge = VM network bridge. Default template VMID = template clone source.</p><p className='muted'>If resource data is unavailable, placement uses online node list with deterministic fallback rules.</p>
-      <div className='group'>
-        {nodes.length ? <select className='input' value={defaultsForm.default_node || ''} onChange={e=>setDefaultsForm({...defaultsForm,default_node:e.target.value})}><option value=''>Default node (optional)</option>{nodes.map(n=><option key={n.id} value={n.node_name}>{n.node_name}</option>)}</select> : <input className='input' placeholder='Default node' value={defaultsForm.default_node || ''} onChange={e=>setDefaultsForm({...defaultsForm,default_node:e.target.value})}/>}
-        {storage.length ? <select className='input' value={defaultsForm.default_storage || ''} onChange={e=>setDefaultsForm({...defaultsForm,default_storage:e.target.value})}><option value=''>Default storage (optional)</option>{storage.map((s,idx)=><option key={`${s.node}-${s.storage}-${idx}`} value={s.storage}>{s.storage} ({s.node})</option>)}</select> : <input className='input' placeholder='Default storage' value={defaultsForm.default_storage || ''} onChange={e=>setDefaultsForm({...defaultsForm,default_storage:e.target.value})}/>}
-        {networks.length ? <select className='input' value={defaultsForm.default_bridge || ''} onChange={e=>setDefaultsForm({...defaultsForm,default_bridge:e.target.value})}><option value=''>Default bridge (optional)</option>{networks.map((n,idx)=><option key={`${n.node}-${n.bridge}-${idx}`} value={n.bridge}>{n.bridge} ({n.node})</option>)}</select> : <input className='input' placeholder='Default bridge' value={defaultsForm.default_bridge || ''} onChange={e=>setDefaultsForm({...defaultsForm,default_bridge:e.target.value})}/>}
-        {templates.length ? <select className='input' value={defaultsForm.default_template_vmid || ''} onChange={e=>setDefaultsForm({...defaultsForm,default_template_vmid:e.target.value})}><option value=''>Default template VMID (optional)</option>{templates.map((t,idx)=><option key={`${t.node}-${t.vmid}-${idx}`} value={t.vmid}>{t.vmid} - {t.name} ({t.node})</option>)}</select> : <input className='input' placeholder='Default template VMID' value={defaultsForm.default_template_vmid || ''} onChange={e=>setDefaultsForm({...defaultsForm,default_template_vmid:e.target.value})}/>}
-        <select className='input' value={defaultsForm.clone_mode || 'full'} onChange={e=>setDefaultsForm({...defaultsForm,clone_mode:e.target.value})}><option value='full'>full</option><option value='linked'>linked</option></select>
-        <select className='input' value={defaultsForm.placement_policy || ''} onChange={e=>setDefaultsForm({...defaultsForm,placement_policy:e.target.value})}><option value=''>Placement policy (auto)</option><option value='manual'>Manual/default node only</option><option value='balanced'>Balanced across online nodes</option><option value='prefer_default_then_balance'>Prefer default, fallback balanced</option></select>
-        <input className='input' placeholder='Notes' value={defaultsForm.notes || ''} onChange={e=>setDefaultsForm({...defaultsForm,notes:e.target.value})}/>
+      <div className='ui-form-grid'>
+        <label className='ui-field'>Default node (optional){nodes.length ? <select className='input' value={defaultsForm.default_node || ''} onChange={e=>setDefaultsForm({...defaultsForm,default_node:e.target.value})}><option value=''>Automatic selection</option>{nodes.map(n=><option key={n.id} value={n.node_name}>{n.node_name}</option>)}</select> : <input className='input' value={defaultsForm.default_node || ''} onChange={e=>setDefaultsForm({...defaultsForm,default_node:e.target.value})}/>}</label>
+        <label className='ui-field'>Default storage (optional){storage.length ? <select className='input' value={defaultsForm.default_storage || ''} onChange={e=>setDefaultsForm({...defaultsForm,default_storage:e.target.value})}><option value=''>Automatic selection</option>{storage.map((s,idx)=><option key={`${s.node}-${s.storage}-${idx}`} value={s.storage}>{s.storage} ({s.node})</option>)}</select> : <input className='input' value={defaultsForm.default_storage || ''} onChange={e=>setDefaultsForm({...defaultsForm,default_storage:e.target.value})}/>}</label>
+        <label className='ui-field'>Default bridge (optional){networks.length ? <select className='input' value={defaultsForm.default_bridge || ''} onChange={e=>setDefaultsForm({...defaultsForm,default_bridge:e.target.value})}><option value=''>Automatic selection</option>{networks.map((n,idx)=><option key={`${n.node}-${n.bridge}-${idx}`} value={n.bridge}>{n.bridge} ({n.node})</option>)}</select> : <input className='input' value={defaultsForm.default_bridge || ''} onChange={e=>setDefaultsForm({...defaultsForm,default_bridge:e.target.value})}/>}</label>
+        <label className='ui-field'>Default template VMID (optional){templates.length ? <select className='input' value={defaultsForm.default_template_vmid || ''} onChange={e=>setDefaultsForm({...defaultsForm,default_template_vmid:e.target.value})}><option value=''>No default template</option>{templates.map((t,idx)=><option key={`${t.node}-${t.vmid}-${idx}`} value={t.vmid}>{t.vmid} - {t.name} ({t.node})</option>)}</select> : <input className='input' inputMode='numeric' value={defaultsForm.default_template_vmid || ''} onChange={e=>setDefaultsForm({...defaultsForm,default_template_vmid:e.target.value})}/>}</label>
+        <label className='ui-field'>Clone mode<select className='input' value={defaultsForm.clone_mode || 'full'} onChange={e=>setDefaultsForm({...defaultsForm,clone_mode:e.target.value})}><option value='full'>Full clone</option><option value='linked'>Linked clone</option></select></label>
+        <label className='ui-field'>Placement policy<select className='input' value={defaultsForm.placement_policy || ''} onChange={e=>setDefaultsForm({...defaultsForm,placement_policy:e.target.value})}><option value=''>Automatic</option><option value='manual'>Manual/default node only</option><option value='balanced'>Balanced across online nodes</option><option value='prefer_default_then_balance'>Prefer default, fallback balanced</option></select></label>
+        <label className='ui-field ui-form-grid__wide'>Notes<input className='input' value={defaultsForm.notes || ''} onChange={e=>setDefaultsForm({...defaultsForm,notes:e.target.value})}/></label>
+        <div className='ui-cluster ui-form-grid__wide'>
         <button disabled={loading} onClick={()=>refreshDiscovery(selectedId)}>Refresh Discovery</button>
         <button disabled={loading} onClick={doSaveDefaults}>Save Defaults</button>
+        </div>
       </div>
       <div className='group'>
         <div><strong>Nodes:</strong> {nodes.length}</div>
@@ -282,6 +282,6 @@ export default function ProxmoxSetupPage(){
       </div>
     </div> : null}
 
-    {msg ? <p className='muted'>{msg}</p> : null}
+    {msg ? <p className='ui-alert' role='status' aria-live='polite'>{msg}</p> : null}
   </section>
 }
