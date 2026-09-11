@@ -18,24 +18,24 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_DB: proxmox_lab_test
-          POSTGRES_USER: proxmox_lab
-          POSTGRES_PASSWORD: test-only-password
+          POSTGRES_DB: labgoblin_test
+          POSTGRES_USER: labgoblin
+          POSTGRES_PASSWORD: test-${{ github.run_id }}
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U proxmox_lab -d proxmox_lab_test"
+          --health-cmd "pg_isready -U labgoblin -d labgoblin_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
     env:
       PYTHONPATH: backend
-      DATABASE_URL: postgresql+psycopg://proxmox_lab:test-only-password@127.0.0.1:5432/proxmox_lab_test
-      JWT_SECRET_KEY: ci-only-jwt-secret-that-is-never-used-in-production
-      CONFIG_ENCRYPTION_KEY: ci-only-encryption-secret-that-is-never-used-in-production
+      DATABASE_URL: postgresql+psycopg://labgoblin:test-${{ github.run_id }}@127.0.0.1:5432/labgoblin_test
+      JWT_SECRET_KEY: ${{ github.sha }}${{ github.sha }}
+      CONFIG_ENCRYPTION_KEY: ${{ github.sha }}${{ github.sha }}
       PROXMOX_BASE_URL: https://127.0.0.1:8006/api2/json
-      PROXMOX_TOKEN_ID: ci@pve!test
-      PROXMOX_TOKEN_SECRET: ci-only-token
+      PROXMOX_TOKEN_ID: ci@pve!labgoblin
+      PROXMOX_TOKEN_SECRET: ${{ github.sha }}
       PROXMOX_VERIFY_SSL: 'true'
       WORKER_SCHEDULER_ENABLED: 'false'
     steps:
@@ -97,11 +97,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      POSTGRES_PASSWORD: ci-only-database-password
-      JWT_SECRET_KEY: ci-only-jwt-secret-that-is-never-used-in-production
-      CONFIG_ENCRYPTION_KEY: ci-only-encryption-secret-that-is-never-used-in-production
-      UPDATER_TOKEN: ci-only-updater-token
-      BOOTSTRAP_ADMIN_TOKEN: ci-only-bootstrap-token
+      POSTGRES_PASSWORD: test-${{ github.run_id }}
+      JWT_SECRET_KEY: ${{ github.sha }}${{ github.sha }}
+      CONFIG_ENCRYPTION_KEY: ${{ github.sha }}${{ github.sha }}
+      UPDATER_TOKEN: ${{ github.sha }}
+      BOOTSTRAP_ADMIN_TOKEN: ${{ github.run_id }}-${{ github.sha }}
       UPDATER_GID: '0'
       HTTP_PORT: '8080'
     steps:
@@ -109,7 +109,7 @@ jobs:
       - run: python -m compileall -q deploy/updater_agent.py
       - run: sh -n deploy/install.sh backend/docker-entrypoint.sh
       - run: docker compose -f docker-compose.yml -f docker-compose.live-test.yml config --quiet
-      - run: sudo mkdir -p /run/proxmox-lab-updater
+      - run: sudo mkdir -p /run/labgoblin-updater
       - run: docker compose -f docker-compose.yml -f docker-compose.live-test.yml up -d --build
       - name: Wait for readiness
         run: |
