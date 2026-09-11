@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 set -euo pipefail
-echo "Manual backend restart helper. Adjust systemctl service name for your host."
-echo "Example: sudo systemctl restart proxmox-lab-backend"
+echo "LabGoblin uses Docker Compose for the API service on the supported appliance deployment."
+echo "Example: cd /opt/labgoblin/app && sudo docker compose --env-file .env restart api"
