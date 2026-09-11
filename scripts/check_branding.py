@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Reject retired LabGoblin predecessor identifiers in application-owned code.
+"""Reject retired LabGoblin predecessor identifiers in application-owned source.
 
 The current GitHub repository URL is intentionally permitted until the repository
-slug itself is renamed. Proxmox VE integration terminology is also legitimate;
-this check targets only application-owned predecessor identifiers.
+slug itself is renamed. Proxmox VE integration terminology is also legitimate.
+Generated dependency lock metadata is excluded because its package-name header is
+regenerated from package.json by npm; package.json is the canonical package identity.
 """
 
 from __future__ import annotations
@@ -17,9 +18,6 @@ TEXT_SUFFIXES = {
     ".sh", ".ini", ".toml", ".txt", ".service", ".css", ".html", ".env",
 }
 
-# These are application-owned predecessor identifiers. Generic Proxmox terms,
-# PROXMOX_* integration settings, and Proxmox model/API names are intentionally
-# not included.
 DISALLOWED = (
     "/opt/proxmox-lab-platform",
     "/var/lib/proxmox-lab-platform",
@@ -36,10 +34,8 @@ DISALLOWED = (
     'TOKEN_ID_DEFAULT = "proxmox-lab-platform"',
 )
 
-# Documentation defining the policy must be allowed to name examples of what is
-# forbidden. The repository slug also necessarily contains the predecessor name
-# until GitHub repository administration renames it.
 POLICY_FILES = {Path("docs/brand.md"), Path("AI_CONTEXT.md"), Path("AGENTS.md")}
+GENERATED_FILES = {Path("frontend/package-lock.json")}
 ALLOWED_REPO_URL = "github.com/wagnerks1990/proxmox-lab-platform"
 
 
@@ -48,7 +44,7 @@ def iter_files():
         if not path.is_file():
             continue
         rel = path.relative_to(ROOT)
-        if any(part in SKIP_DIRS for part in rel.parts):
+        if rel in GENERATED_FILES or any(part in SKIP_DIRS for part in rel.parts):
             continue
         if path.suffix.lower() in TEXT_SUFFIXES or path.name in {"Dockerfile", "Makefile"}:
             yield path, rel
