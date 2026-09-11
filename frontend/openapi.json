@@ -4607,7 +4607,8 @@
     }
   },
   "info": {
-    "title": "Proxmox Lab Manager",
+    "description": "Virtual Lab Provisioning & Management API for hands-on learning environments.",
+    "title": "LabGoblin API",
     "version": "0.1.0"
   },
   "openapi": "3.1.0",
