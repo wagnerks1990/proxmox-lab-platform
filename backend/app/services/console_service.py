@@ -4,6 +4,7 @@ from app.models.models import StudentVM, User, AuditLog
 from app.db.tx import safe_commit
 from app.architecture.idempotency import store as idempotency_store
 from app.architecture.policies import can_launch_vm, PolicyError
+from app.core.config import settings
 
 
 class ConsoleService:
@@ -17,6 +18,13 @@ class ConsoleService:
             )
 
     async def terminal_url(self, user: User, vm: StudentVM):
+        if not settings.ssh_terminal_enabled:
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "error": "SSH terminal access is disabled until per-assignment credentials and trusted IP binding are configured."
+                },
+            )
         try:
             can_launch_vm(user, vm)
         except PolicyError as exc:

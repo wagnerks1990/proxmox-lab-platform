@@ -4,6 +4,20 @@ from app.db.session import SessionLocal
 from app.services.deployment_updates import DeploymentUpdateService
 
 
+def should_check_for_update(now, last, interval_minutes, maintenance_hour_utc):
+    if last is None:
+        return True
+    if last.tzinfo is None:
+        last = last.replace(tzinfo=timezone.utc)
+    else:
+        last = last.astimezone(timezone.utc)
+    interval_elapsed = now - last >= timedelta(minutes=interval_minutes)
+    maintenance_check_due = now.hour == maintenance_hour_utc and (
+        last.date() != now.date() or last.hour != maintenance_hour_utc
+    )
+    return interval_elapsed or maintenance_check_due
+
+
 def run_once() -> None:
     db = SessionLocal()
     try:
@@ -13,11 +27,13 @@ def run_once() -> None:
             return
         now = datetime.now(timezone.utc)
         last = configured.last_checked_at
-        if last is not None:
-            if last.tzinfo is None:
-                last = last.replace(tzinfo=timezone.utc)
-            if now - last < timedelta(minutes=configured.check_interval_minutes):
-                return
+        if not should_check_for_update(
+            now,
+            last,
+            configured.check_interval_minutes,
+            configured.maintenance_hour_utc,
+        ):
+            return
         result = service.run("check", None)
         if (
             result.get("ok")

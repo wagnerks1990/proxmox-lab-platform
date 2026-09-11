@@ -24,12 +24,21 @@ nav:
       - Consoles: operations/consoles.md
       - Updates and rollback: operations/updates.md
       - Disposable live test: operations/live-test.md
-  - Development validation: development/validation.md
+      - Pre-production acceptance: operations/preproduction-acceptance.md
+  - Development:
+      - Workflow: development-workflow.md
+      - Validation: development/validation.md
+      - Database reset: development-database-reset.md
+      - Post-reset validation: post-reset-validation.md
+      - Codex workflow: codex-cloud-workflow.md
+      - GUI validation: gui-section-validation.md
   - V2 Roadmap: roadmap/v2-rebuild.md
   - Existing documentation:
+      - Legacy deployment redirect: deployment.md
       - Backend architecture: backend-architecture.md
       - Frontend architecture: frontend-architecture.md
       - Database migrations: database-migrations.md
       - Proxmox setup: proxmox-setup-wizard.md
       - Cluster placement: cluster-aware-placement.md
+      - Template sync and placement: template-sync-and-placement.md
       - User and groups: user-group-management.md

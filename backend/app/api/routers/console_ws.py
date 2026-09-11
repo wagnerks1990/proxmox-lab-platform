@@ -3,15 +3,15 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_user_from_token
 from app.db.session import get_db
-from app.models.models import StudentVM, User
+from app.models.models import User
+from app.services.console_access import get_console_vm_for_user
 from app.services.console_ws_service import ConsoleWsService
 from app.services.organization_access import (
     OrganizationContext,
-    organization_role_at_least,
     resolve_organization_context,
 )
-from app.services.classroom_access import enforce_student_vm_operation
 from app.core.config import settings
+from app.middleware.csrf import websocket_origin_allowed
 
 router = APIRouter()
 
@@ -35,33 +35,28 @@ def _get_vm_for_user(
     organization: OrganizationContext,
     operation: str,
 ):
-    q = db.query(StudentVM).filter(
-        StudentVM.id == vm_id,
-        StudentVM.organization_id == organization.id,
-        StudentVM.deleted_at.is_(None),
-    )
-    if organization.role == "student":
-        q = q.filter(StudentVM.owner_id == user.id)
-    elif not organization_role_at_least(organization, "instructor"):
+    try:
+        return get_console_vm_for_user(
+            db,
+            user=user,
+            vm_id=vm_id,
+            organization=organization,
+            operation=operation,
+        )
+    except HTTPException:
         return None
-    vm = q.first()
-    if vm and organization.role == "student":
-        try:
-            enforce_student_vm_operation(
-                db,
-                user_id=user.id,
-                organization_id=organization.id,
-                vm=vm,
-                operation=operation,
-            )
-        except HTTPException:
-            return None
-    return vm
 
 
 @router.websocket("/vms/{id}/console/ssh/ws")
 async def ssh_ws(id: int, websocket: WebSocket, db: Session = Depends(get_db)):
-    user = _get_user_from_ws_token(db, websocket.cookies.get(settings.auth_cookie_name))
+    if not websocket_origin_allowed(websocket):
+        await websocket.close(code=1008, reason="Untrusted origin")
+        return
+    if not settings.ssh_terminal_enabled:
+        await websocket.close(code=1008, reason="SSH terminal is disabled")
+        return
+    token = websocket.cookies.get(settings.auth_cookie_name)
+    user = _get_user_from_ws_token(db, token)
     if not user:
         await websocket.close(code=1008, reason="Invalid token")
         return
@@ -77,12 +72,22 @@ async def ssh_ws(id: int, websocket: WebSocket, db: Session = Depends(get_db)):
     if not vm:
         await websocket.close(code=1008, reason="Forbidden")
         return
-    await ConsoleWsService(db).ssh_ws(websocket, user, vm)
+    await ConsoleWsService(db).ssh_ws(
+        websocket,
+        user,
+        vm,
+        auth_token=token,
+        organization_id=organization.id,
+    )
 
 
 @router.websocket("/vms/{id}/console/novnc/ws")
 async def novnc_ws(id: int, websocket: WebSocket, db: Session = Depends(get_db)):
-    user = _get_user_from_ws_token(db, websocket.cookies.get(settings.auth_cookie_name))
+    if not websocket_origin_allowed(websocket):
+        await websocket.close(code=1008, reason="Untrusted origin")
+        return
+    token = websocket.cookies.get(settings.auth_cookie_name)
+    user = _get_user_from_ws_token(db, token)
     if not user:
         await websocket.close(code=1008, reason="Invalid token")
         return
@@ -98,4 +103,10 @@ async def novnc_ws(id: int, websocket: WebSocket, db: Session = Depends(get_db))
     if not vm:
         await websocket.close(code=1008, reason="Forbidden")
         return
-    await ConsoleWsService(db).novnc_ws(websocket, user, vm)
+    await ConsoleWsService(db).novnc_ws(
+        websocket,
+        user,
+        vm,
+        auth_token=token,
+        organization_id=organization.id,
+    )

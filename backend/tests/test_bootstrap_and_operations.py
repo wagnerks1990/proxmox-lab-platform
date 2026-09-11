@@ -35,7 +35,10 @@ def test_first_run_bootstrap_is_one_time_and_sets_http_only_cookie(monkeypatch):
         yield db
 
     app.dependency_overrides[get_db] = override_db
-    client = TestClient(app)
+    client = TestClient(
+        app,
+        headers={"Origin": "http://testserver", "Sec-Fetch-Site": "same-origin"},
+    )
     try:
         assert client.get("/api/bootstrap/status").json()["bootstrap_required"] is True
         response = client.post(

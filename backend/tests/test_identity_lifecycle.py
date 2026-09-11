@@ -35,7 +35,15 @@ def _setup():
         yield db
 
     app.dependency_overrides[get_db] = override_get_db
-    return engine, db, user, TestClient(app)
+    return (
+        engine,
+        db,
+        user,
+        TestClient(
+            app,
+            headers={"Origin": "http://testserver", "Sec-Fetch-Site": "same-origin"},
+        ),
+    )
 
 
 def _login(client, password="OriginalPass1!"):
@@ -149,7 +157,13 @@ def test_admin_password_reset_revokes_target_sessions():
         db.add(student)
         db.commit()
         assert _login(client).status_code == 204
-        student_client = TestClient(app)
+        student_client = TestClient(
+            app,
+            headers={
+                "Origin": "http://testserver",
+                "Sec-Fetch-Site": "same-origin",
+            },
+        )
         student_login = student_client.post(
             "/api/auth/login", json={"username": "student", "password": "StudentPass1!"}
         )

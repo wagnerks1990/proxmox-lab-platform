@@ -26,6 +26,10 @@ from app.services.organization_access import (
 router = APIRouter()
 
 
+def _normalize_template_ids(values) -> list[int]:
+    return list(dict.fromkeys(int(value) for value in (values or [])))
+
+
 def _role_or_422(db: Session, role_id: int) -> Role:
     role = db.query(Role).filter(Role.id == role_id).first()
     if not role:
@@ -394,7 +398,7 @@ def patch_user_permissions(
 ):
     if not db.query(User).filter(User.id == id).first():
         raise HTTPException(status_code=404, detail="User not found")
-    template_ids = [int(x) for x in (payload.get("template_ids") or [])]
+    template_ids = _normalize_template_ids(payload.get("template_ids"))
     templates = (
         db.query(VMTemplate)
         .filter(

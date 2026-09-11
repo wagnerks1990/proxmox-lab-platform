@@ -213,10 +213,18 @@ def install_agent_from(source: Path) -> None:
 
 def write_state(data: dict) -> None:
     STATE_DIR.mkdir(parents=True, exist_ok=True)
-    temporary = STATE_DIR / "update-state.tmp"
-    temporary.write_text(json.dumps(data, indent=2))
-    os.chmod(temporary, 0o600)
-    temporary.replace(STATE_DIR / "update-state.json")
+    temporary = STATE_DIR / (
+        f".update-state.{os.getpid()}.{threading.get_ident()}.{uuid.uuid4().hex}.tmp"
+    )
+    try:
+        with temporary.open("w") as handle:
+            json.dump(data, handle, indent=2)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temporary, 0o600)
+        temporary.replace(STATE_DIR / "update-state.json")
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def read_state() -> dict:
@@ -245,6 +253,41 @@ def check_update(payload: dict) -> dict:
         "to_version": target,
         "message": "Update available" if current != target else "Already current",
     }
+
+
+def check_update_locked(payload: dict) -> dict:
+    """Run a check under the same host lock used by apply and rollback."""
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    with (STATE_DIR / "update.lock").open("w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        operation = read_state().get("operation") or {}
+        if operation.get("status") in {"queued", "running"}:
+            raise BlockingIOError("Another update operation is running")
+        return check_update(payload)
+
+
+def recover_version(version: str, backup: Path | None) -> None:
+    """Quiesce writers, restore optional state, and prove the recovered stack healthy."""
+    compose("stop", "api", "web")
+    run(["git", "checkout", "--detach", version])
+    if backup is not None:
+        restore_database(backup)
+    compose("up", "-d", "--build", "--remove-orphans")
+    wait_for_health()
+    install_agent_from(APP_DIR)
+
+
+def recover_after_failure(
+    operation: str, original_error: Exception, version: str, backup: Path | None
+) -> None:
+    try:
+        recover_version(version, backup)
+    except Exception as recovery_error:
+        raise RuntimeError(
+            f"{operation} failed and automatic recovery also failed; "
+            "the API remains stopped for operator recovery: "
+            f"{recovery_error}"
+        ) from original_error
 
 
 def apply_update(payload: dict) -> dict:
@@ -334,12 +377,8 @@ def apply_update(payload: dict) -> dict:
             "backup_path": str(backup),
             "message": "Update applied and health gate passed",
         }
-    except Exception:
-        run(["git", "checkout", "--detach", previous], check=False)
-        if backup is not None:
-            restore_database(backup)
-        compose("up", "-d", "--build", "--remove-orphans", check=False)
-        install_agent_from(APP_DIR)
+    except Exception as update_error:
+        recover_after_failure("Update", update_error, previous, backup)
         raise
     finally:
         run(["git", "worktree", "remove", "--force", str(staging)], check=False)
@@ -368,12 +407,8 @@ def rollback_update(_payload: dict) -> dict:
         compose("up", "-d", "--remove-orphans")
         wait_for_health()
         install_agent_from(APP_DIR)
-    except Exception:
-        run(["git", "checkout", "--detach", current], check=False)
-        if reverse_backup is not None:
-            restore_database(reverse_backup)
-        compose("up", "-d", "--build", "--remove-orphans", check=False)
-        install_agent_from(APP_DIR)
+    except Exception as rollback_error:
+        recover_after_failure("Rollback", rollback_error, current, reverse_backup)
         raise
     finally:
         run(["git", "worktree", "remove", "--force", str(staging)], check=False)
@@ -444,7 +479,7 @@ class Handler(BaseHTTPRequestHandler):
             if action is None:
                 return self._reply(404, {"ok": False, "message": "Not found"})
             if self.path == "/v1/check":
-                return self._reply(200, action(payload))
+                return self._reply(200, check_update_locked(payload))
             STATE_DIR.mkdir(parents=True, exist_ok=True)
             current_operation = read_state().get("operation") or {}
             if current_operation.get("status") in {"queued", "running"}:

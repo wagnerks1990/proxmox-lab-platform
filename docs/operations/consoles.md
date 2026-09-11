@@ -8,10 +8,17 @@ The launch API returns an internal `/console/{vm_id}` route. The browser opens a
 
 ## SSH terminal
 
-The launch API returns `/terminal/{vm_id}`. Backend SSH requires both `LAB_VM_SSH_PRIVATE_KEY_PATH` and `LAB_VM_SSH_KNOWN_HOSTS`; unknown or changed host keys fail closed. Password-only shared classroom SSH is not supported by this path.
+SSH terminal access is disabled by default with `SSH_TERMINAL_ENABLED=false`.
+The API rejects terminal launch and WebSocket requests while it is disabled, and
+the web application does not expose a terminal launch control.
 
-The current key is deployment-wide. Per-assignment keys and automatic rotation remain pilot work. Mount key material as a read-only secret and never bake it into an image or repository.
+Do not enable the pilot merely because a deployment-wide key and known-hosts
+file exist. Before setting `SSH_TERMINAL_ENABLED=true`, the deployment must use
+per-assignment credentials and prove that the connection destination is bound
+to trusted IPAM, DHCP, MAC, and assignment data rather than a guest-agent claim.
+A hostile guest reporting another VM or management address must fail before any
+TCP connection is attempted. Unknown or changed host keys must also fail closed.
 
 ## Remaining live validation
 
-The automated suite verifies authorization and the no-secret URL contract, but a real lab must validate keyboard layouts, resize behavior, binary noVNC transport, disconnect handling, changed-host-key failure, and concurrent session capacity.
+The automated suite verifies authorization and the no-secret URL contract, but a real lab must validate keyboard layouts, resize behavior, binary noVNC transport, disconnect handling, changed-host-key failure, hostile guest IP claims, credential isolation, and concurrent session capacity.

@@ -18,7 +18,7 @@ The installer creates `/opt/labgoblin/app`, stores runtime state under `/var/lib
 
 At completion, the installer prints the application URL and a random bootstrap token. Open the URL, enter that token, and create the first administrator. Enrollment is refused after an active administrator exists. The bootstrap token is never put in a URL.
 
-After successful enrollment, remove `BOOTSTRAP_ADMIN_TOKEN` from the protected `.env` file and restart the API:
+After successful enrollment, remove `BOOTSTRAP_ADMIN_TOKEN` from the protected `.env` file and recreate the API. The token is optional after enrollment; when the variable is absent, the bootstrap endpoint fails closed:
 
 ```bash
 cd /opt/labgoblin/app

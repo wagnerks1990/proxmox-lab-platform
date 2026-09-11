@@ -1,4 +1,7 @@
+import { normalizeMessage } from './message'
+
 export default function MessageBanner({ message }) {
-  if (!message) return null
-  return <div className={`msg ${message.type === 'error' ? 'error' : 'success'}`}>{message.text}</div>
+  const normalized = normalizeMessage(message)
+  if (!normalized) return null
+  return <div className={`msg ${normalized.type}`} role={normalized.type === 'error' ? 'alert' : 'status'} aria-live='polite'>{normalized.text}</div>
 }

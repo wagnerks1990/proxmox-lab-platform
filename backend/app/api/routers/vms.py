@@ -7,7 +7,10 @@ from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.models import (
     AuditLog,
+    Class,
+    Lab,
     LabAssignment,
+    LabRun,
     ProxmoxCluster,
     ProxmoxClusterDefault,
     ProxmoxNode,
@@ -45,6 +48,24 @@ from app.services.operation_service import _is_not_found
 router = APIRouter()
 
 
+def _scope_instructor_vms(q, db: Session, user_id: int, organization_id: int):
+    taught_vm_ids = (
+        db.query(LabAssignment.student_vm_id)
+        .join(LabRun, LabRun.id == LabAssignment.lab_run_id)
+        .join(Lab, Lab.id == LabRun.lab_id)
+        .join(Class, Class.id == Lab.class_id)
+        .filter(
+            LabAssignment.organization_id == organization_id,
+            LabRun.organization_id == organization_id,
+            Lab.organization_id == organization_id,
+            Class.organization_id == organization_id,
+            Class.instructor_id == user_id,
+            LabAssignment.student_vm_id.is_not(None),
+        )
+    )
+    return q.filter(StudentVM.id.in_(taught_vm_ids))
+
+
 def _get_vm_for_user(
     db: Session,
     user: User,
@@ -59,6 +80,8 @@ def _get_vm_for_user(
     )
     if organization.role == "student":
         q = q.filter(StudentVM.owner_id == user.id)
+    elif organization.role == "instructor" and not organization.break_glass:
+        q = _scope_instructor_vms(q, db, user.id, organization.id)
     elif not organization_role_at_least(organization, "instructor"):
         raise HTTPException(status_code=403, detail="A valid role is required")
     vm = q.first()
@@ -87,6 +110,8 @@ async def list_vms(
     )
     if organization.role == "student":
         q = q.filter(StudentVM.owner_id == user.id)
+    elif organization.role == "instructor" and not organization.break_glass:
+        q = _scope_instructor_vms(q, db, user.id, organization.id)
     elif not organization_role_at_least(organization, "instructor"):
         raise HTTPException(status_code=403, detail="A valid role is required")
     rows = q.all()
@@ -271,7 +296,11 @@ async def create_vm(
         selected_node = decision.selected_node
         placement_reason = decision.reason
 
-    vmid = allocate_vmid(db, scope=f"proxmox-cluster:{active_cluster.id}")
+    vmid = allocate_vmid(
+        db,
+        scope=f"proxmox-cluster:{active_cluster.id}",
+        proxmox_cluster_id=active_cluster.id,
+    )
     vm_name = safe_vm_name(user.username, payload.lab_name, vmid)
 
     vm = StudentVM(
@@ -483,24 +512,21 @@ async def delete_app_record_admin(
     if not vm:
         raise HTTPException(status_code=404, detail="App VM record not found")
 
-    if vm.status not in {"missing", "error"}:
-        try:
-            await ProxmoxClient(vm.proxmox_cluster_id).get_vm_status(
-                vm.proxmox_node, vm.vmid
+    try:
+        await ProxmoxClient(vm.proxmox_cluster_id).get_vm_status(
+            vm.proxmox_node, vm.vmid
+        )
+    except Exception as exc:
+        if not _is_not_found(exc):
+            raise HTTPException(
+                status_code=502,
+                detail="Unable to verify Proxmox VM state; refusing app-record delete until Proxmox check succeeds",
             )
-            if not force:
-                raise HTTPException(
-                    status_code=409,
-                    detail="VM exists in Proxmox; refusing to remove app record without force=true",
-                )
-        except HTTPException:
-            raise
-        except Exception as exc:
-            if not _is_not_found(exc):
-                raise HTTPException(
-                    status_code=502,
-                    detail="Unable to verify Proxmox VM state; refusing app-record delete until Proxmox check succeeds",
-                )
+    else:
+        raise HTTPException(
+            status_code=409,
+            detail="VM still exists in Proxmox; app-record cleanup requires a fresh not-found verification",
+        )
 
     db.add(
         AuditLog(

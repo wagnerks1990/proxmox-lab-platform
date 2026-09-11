@@ -99,13 +99,14 @@ def check_session_expired_symbol() -> None:
     ok("SESSION_EXPIRED symbol", "present in app.architecture.events")
 
 
-def check_alembic_single_head() -> None:
+def check_alembic_single_head() -> str:
     cfg = Config(str(BACKEND_DIR / "alembic.ini"))
     cfg.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
     script = ScriptDirectory.from_config(cfg)
     heads = script.get_heads()
     if len(heads) != 1:
         fail("alembic heads", f"expected one head, found {heads}")
+    expected_head = heads[0]
 
     cmd = ["alembic", "-c", str(BACKEND_DIR / "alembic.ini"), "heads"]
     result = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, check=False)
@@ -115,6 +116,7 @@ def check_alembic_single_head() -> None:
             result.stderr.strip() or result.stdout.strip() or "unknown error",
         )
     ok("alembic heads", result.stdout.strip())
+    return expected_head
 
 
 def check_database_connectivity() -> None:
@@ -130,34 +132,47 @@ def check_database_connectivity() -> None:
     ok("database connectivity", "SELECT 1 succeeded")
 
 
-async def check_health_endpoint() -> None:
-    url = "http://127.0.0.1:8000/api/health"
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            response = await client.get(url)
-    except Exception as exc:  # noqa: BLE001
-        fail("/api/health", f"request failed: {exc}")
-
-    if response.status_code != 200:
+def validate_database_revision(db, expected_head: str) -> None:
+    rows = db.execute(text("SELECT version_num FROM alembic_version")).scalars().all()
+    if rows != [expected_head]:
         fail(
-            "/api/health", f"unexpected status {response.status_code}: {response.text}"
+            "database revision",
+            f"expected {expected_head}, found {rows or 'no alembic revision'}",
         )
+    ok("database revision", expected_head)
 
+
+def check_database_revision(expected_head: str) -> None:
+    from app.db.session import SessionLocal
+
+    db = SessionLocal()
     try:
-        payload = response.json()
-    except json.JSONDecodeError as exc:
-        fail("/api/health", f"invalid json: {exc}")
+        validate_database_revision(db, expected_head)
+    finally:
+        db.close()
 
-    if payload.get("backend") != "ok":
-        fail("/api/health", f"backend not ok: {payload}")
 
-    if not payload.get("database", {}).get("ok"):
-        fail("/api/health", f"database not ok: {payload}")
-
-    if not payload.get("proxmox", {}).get("ok"):
-        fail("/api/health", f"proxmox not ok: {payload}")
-
-    ok("/api/health", json.dumps(payload, separators=(",", ":")))
+async def check_health_endpoints() -> None:
+    base_url = os.getenv("LABGOBLIN_VALIDATION_BASE_URL", "http://127.0.0.1:8000")
+    expected = {
+        "/api/ready": lambda payload: payload.get("ready") is True,
+        "/api/health": lambda payload: payload.get("status") == "ok",
+    }
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        for path, valid in expected.items():
+            try:
+                response = await client.get(f"{base_url.rstrip('/')}{path}")
+            except Exception as exc:  # noqa: BLE001
+                fail(path, f"request failed: {exc}")
+            if response.status_code != 200:
+                fail(path, f"unexpected status {response.status_code}: {response.text}")
+            try:
+                payload = response.json()
+            except json.JSONDecodeError as exc:
+                fail(path, f"invalid json: {exc}")
+            if not valid(payload):
+                fail(path, f"unexpected response: {payload}")
+            ok(path, json.dumps(payload, separators=(",", ":")))
 
 
 async def main() -> int:
@@ -171,14 +186,15 @@ async def main() -> int:
         ("encryption key", check_encryption_key_presence),
         ("python compile", check_imports_compile),
         ("SESSION_EXPIRED symbol", check_session_expired_symbol),
-        ("alembic heads", check_alembic_single_head),
         ("database connectivity", check_database_connectivity),
     ]
 
     try:
         for _name, fn in checks:
             fn()
-        await check_health_endpoint()
+        expected_head = check_alembic_single_head()
+        check_database_revision(expected_head)
+        await check_health_endpoints()
     except CheckFailure as exc:
         print(exc)
         print("\nDeployment validation FAILED.")

@@ -49,6 +49,9 @@ This repository is development software intended for fresh installation. There i
 - Allocate VMIDs through `vmid_allocators`; never calculate them from row counts.
 - Preview destructive actions and require an explicit confirmation value.
 - Keep JWTs in HttpOnly cookies. Never put JWTs, tickets, credentials, keys, or provider secrets in URLs, logs, browser storage, or normal API responses.
+- Enforce exact browser origins on cookie-authenticated unsafe requests and WebSockets.
+- Do not change a credential-bound Proxmox origin or TLS policy in place.
+- Keep SSH terminal access disabled until per-assignment credentials and trusted destination binding replace deployment-wide credentials and guest-claimed IP authority.
 - Treat AI-generated material as untrusted advice. AI is read-only until a human approves a normal, authorized durable operation.
 - Add a linear Alembic migration for schema changes and regenerate the OpenAPI contract.
 

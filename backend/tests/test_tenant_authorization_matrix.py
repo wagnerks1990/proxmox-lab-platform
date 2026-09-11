@@ -272,9 +272,9 @@ def test_two_organization_http_authorization_matrix(monkeypatch):
             "/api/vms", headers=_headers(db, "student-a", organization_b.id)
         )
         assert instructor_vms.status_code == 200
-        assert [row["vm_name"] for row in instructor_vms.json()] == [
-            "b-visible-to-instructor"
-        ]
+        # Organization-level instructor membership does not grant access to a
+        # VM belonging to another instructor's class.
+        assert instructor_vms.json() == []
 
         assert (
             client.get(

@@ -47,21 +47,45 @@ jobs:
           cache-dependency-path: |
             backend/requirements.txt
             backend/requirements-dev.txt
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
       - run: pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+      - run: npm ci --prefix frontend
       - run: python -m compileall -q backend/app backend/tests
       - run: ruff format --check backend/app backend/tests deploy scripts tests
       - run: ruff check backend/app backend/tests deploy scripts tests
       - run: bandit -r backend/app deploy -ll -q
       - run: pip-audit -r backend/requirements.txt
       - run: alembic -c backend/alembic.ini upgrade head
+      - name: Verify deployed schema is at every repository head
+        run: |
+          python - <<'PY'
+          from alembic.config import Config
+          from alembic.runtime.migration import MigrationContext
+          from alembic.script import ScriptDirectory
+          from sqlalchemy import create_engine
+          from app.core.config import settings
+
+          config = Config("backend/alembic.ini")
+          config.set_main_option("script_location", "backend/alembic")
+          expected = set(ScriptDirectory.from_config(config).get_heads())
+          with create_engine(settings.database_url).connect() as connection:
+              current = set(MigrationContext.configure(connection).get_current_heads())
+          if current != expected:
+              raise SystemExit(f"database heads {sorted(current)} != repository heads {sorted(expected)}")
+          print(f"database schema current at {sorted(current)}")
+          PY
       - run: alembic -c backend/alembic.ini check
+      - name: Import every runtime Python module
+        run: pytest -q backend/tests/test_all_runtime_modules_import.py
       - run: pytest -q --disable-warnings backend/tests
       - name: Verify generated OpenAPI contract
         run: |
           python scripts/export_openapi.py frontend/openapi.json
-          cd frontend
-          npx openapi-typescript openapi.json -o src/generated/api-schema.d.ts
-          cd ..
+          npm --prefix frontend run generate:api
           git diff --exit-code -- frontend/openapi.json frontend/src/generated/api-schema.d.ts
 
   frontend:
@@ -92,6 +116,19 @@ jobs:
           python-version: '3.12'
       - run: pip install mkdocs==1.6.1
       - run: mkdocs build --strict
+
+  repository-hygiene:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/check_branding.py
+      - run: python scripts/check_repository_hygiene.py
+      - run: sh -n deploy/install.sh backend/docker-entrypoint.sh scripts/generate_api_contract.sh
+      - run: bash -n scripts/codex_cloud_check.sh scripts/deploy.sh scripts/backend-restart.sh scripts/frontend-build.sh
 
   disposable-live-test:
     runs-on: ubuntu-latest

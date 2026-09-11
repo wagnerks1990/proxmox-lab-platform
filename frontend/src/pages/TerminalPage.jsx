@@ -14,18 +14,22 @@ export default function TerminalPage() {
     const fit = new FitAddon()
     terminal.loadAddon(fit)
     terminal.open(container.current)
-    fit.fit()
+    const fitTerminal = () => {
+      try { fit.fit() } catch { /* The container may be between layouts. */ }
+    }
+    const initialFit = window.requestAnimationFrame(fitTerminal)
     const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws'
     const organizationId = localStorage.getItem('organization_id') || ''
     const socket = new WebSocket(`${scheme}://${window.location.host}/api/vms/${id}/console/ssh/ws?organization_id=${encodeURIComponent(organizationId)}`)
     socket.onopen = () => setState('connected')
     socket.onmessage = event => terminal.write(event.data)
     socket.onerror = () => setState('failed')
-    socket.onclose = () => setState('closed')
+    socket.onclose = event => setState(current => current === 'failed' || event.code !== 1000 ? 'failed' : 'closed')
     const disposable = terminal.onData(data => { if (socket.readyState === WebSocket.OPEN) socket.send(data) })
-    const resize = () => fit.fit()
-    window.addEventListener('resize', resize)
-    return () => { disposable.dispose(); socket.close(); terminal.dispose(); window.removeEventListener('resize', resize) }
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(fitTerminal)
+    observer?.observe(container.current)
+    window.addEventListener('resize', fitTerminal)
+    return () => { window.cancelAnimationFrame(initialFit); observer?.disconnect(); disposable.dispose(); socket.close(); terminal.dispose(); window.removeEventListener('resize', fitTerminal) }
   }, [id])
 
   return <section className='panel'><h2>SSH terminal</h2><p className='muted'>Connection: {state}. Host identity is verified against the server-side known-hosts file.</p><div ref={container} style={{height:'70vh',background:'#080b16',padding:8}} /></section>

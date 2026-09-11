@@ -11,7 +11,7 @@ export default function SystemUpdatePage({ setMessage }) {
     setData(current)
     setForm(current.settings)
   }
-  useEffect(() => { load().catch(e => setMessage(e?.response?.data?.detail || e.message)) }, [])
+  useEffect(() => { load().catch(e => setMessage({ type: 'error', text: e?.response?.data?.detail || e.message })) }, [])
   useEffect(() => {
     const state = String(data?.agent?.operation?.status || data?.latest_run?.status || '').toLowerCase()
     if (!['queued', 'running'].includes(state)) return
@@ -24,17 +24,17 @@ export default function SystemUpdatePage({ setMessage }) {
     setBusy(true)
     try {
       const result = await action()
-      setMessage(result.message || `${label} requested`)
+      setMessage({ type: 'success', text: result.message || `${label} requested` })
       await load()
     } catch (e) {
-      setMessage(e?.response?.data?.detail || e.message)
+      setMessage({ type: 'error', text: e?.response?.data?.detail || e.message })
     } finally { setBusy(false) }
   }
 
   const save = async () => {
     setBusy(true)
-    try { await saveUpdateSettings(form); setMessage('Update settings saved'); await load() }
-    catch (e) { setMessage(e?.response?.data?.detail || e.message) }
+    try { await saveUpdateSettings(form); setMessage({ type: 'success', text: 'Update settings saved' }); await load() }
+    catch (e) { setMessage({ type: 'error', text: e?.response?.data?.detail || e.message }) }
     finally { setBusy(false) }
   }
 

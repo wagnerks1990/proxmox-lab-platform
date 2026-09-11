@@ -4,18 +4,18 @@ The root-owned updater listens only on a group-restricted Unix socket and authen
 
 ## Manual update
 
-1. Select **System Updates → Check**. This fetches the configured branch and returns its exact commit SHA.
+1. Select **System Updates → Check**. This fetches the configured branch and returns its exact commit SHA. Checks, applies, and rollbacks share one host lock, so a check is refused while a mutation is queued or running.
 2. Review that commit and release notes.
 3. Apply the checked SHA. The updater binds the request to the latest check and refuses stale checks, branch movement, symbolic or shortened targets, non-forward commits, repositories other than the host allowlist, and dirty deployment checkouts.
 4. Poll status while the host operation is queued or running. The request returns before the API container is replaced.
 
-The updater first builds the checked revision in an isolated Git worktree. Only after that succeeds does it stop the API and web writers and create an atomic PostgreSQL custom-format backup. It then switches the checkout, starts the stack, waits for readiness, and atomically stages the matching installed updater for the next service restart. Failure checks out the previous commit, recreates and restores the database, and restarts the prior stack.
+The updater first builds the checked revision in an isolated Git worktree. Only after that succeeds does it stop the API and web writers and create an atomic PostgreSQL custom-format backup. It then switches the checkout, starts the stack, waits for readiness, and atomically stages the matching installed updater for the next service restart. Failure stops the API and web writers again before restoring the previous database, restarts the prior stack, and requires that recovered version to pass readiness. If restore or recovered health fails, the API remains stopped for operator recovery and the operation is reported failed.
 
 Rollback uses the same ordering: prebuild the target, stop writers, preserve a reverse backup, recreate the database from the selected backup, and pass the readiness gate. Commands have bounded execution time. If the host restarts during an operation, the persisted operation is marked failed instead of remaining permanently busy; inspect the deployment and retry.
 
 ## Automatic updates
 
-Automatic updates are disabled by both database settings and host policy. Set `UPDATER_ALLOW_AUTOMATIC=true` only after the lab has passed restore testing. `UPDATER_REQUIRE_SIGNED_COMMITS=true` additionally runs `git verify-commit`; the host must have the required trust material installed or updates will fail closed.
+Automatic updates are disabled by both database settings and host policy. Set `UPDATER_ALLOW_AUTOMATIC=true` only after the lab has passed restore testing. During the configured UTC maintenance hour, the scheduler performs one check for that window even when the normal check interval has not elapsed, so the interval cadence cannot permanently skip maintenance. `UPDATER_REQUIRE_SIGNED_COMMITS=true` additionally runs `git verify-commit`; the host must have the required trust material installed or updates will fail closed.
 
 ## Honest rollback boundary
 

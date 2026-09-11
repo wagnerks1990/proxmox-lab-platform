@@ -21,31 +21,31 @@ async def test_source_url_missing_base(monkeypatch):
 @pytest.mark.asyncio
 async def test_source_url_with_base_kind_alias(monkeypatch):
     monkeypatch.setattr(
-        proxmox_assets.settings, "asset_source_iso_base_url", "http://10.0.16.126:8088"
+        proxmox_assets.settings, "asset_source_iso_base_url", "http://192.0.2.10:8088"
     )
     out = await proxmox_assets.asset_source_url(
         kind="iso", filename="virtio-win.iso", _user=object()
     )
     assert out["ok"] is True
-    assert out["source_url"] == "http://10.0.16.126:8088/virtio-win.iso"
+    assert out["source_url"] == "http://192.0.2.10:8088/virtio-win.iso"
 
 
 @pytest.mark.asyncio
 async def test_source_url_with_base_asset_type(monkeypatch):
     monkeypatch.setattr(
-        proxmox_assets.settings, "asset_source_iso_base_url", "http://10.0.16.126:8088"
+        proxmox_assets.settings, "asset_source_iso_base_url", "http://192.0.2.10:8088"
     )
     out = await proxmox_assets.asset_source_url(
         asset_type="iso", filename="virtio-win.iso", _user=object()
     )
     assert out["ok"] is True
-    assert out["source_url"] == "http://10.0.16.126:8088/virtio-win.iso"
+    assert out["source_url"] == "http://192.0.2.10:8088/virtio-win.iso"
 
 
 @pytest.mark.asyncio
 async def test_source_url_rejects_unsafe_filename_asset_type(monkeypatch):
     monkeypatch.setattr(
-        proxmox_assets.settings, "asset_source_iso_base_url", "http://10.0.16.126:8088"
+        proxmox_assets.settings, "asset_source_iso_base_url", "http://192.0.2.10:8088"
     )
     for bad in [
         "../evil.iso",

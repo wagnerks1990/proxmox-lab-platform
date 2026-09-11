@@ -47,6 +47,20 @@ The minimum bootstrap environment contains database, encryption, updater, and in
 
 Secrets remain encrypted at rest and are never exported through normal settings APIs. Changing the database encryption key is a deliberate rotation procedure, not a normal update.
 
+`BROWSER_TRUSTED_ORIGINS` is a comma-separated list of exact public browser
+origins. Cookie-authenticated unsafe requests and all browser WebSocket
+handshakes are checked against it. Bearer-token API clients do not use the
+cookie CSRF check. Set the value explicitly when TLS is terminated upstream.
+
+Proxmox API endpoints must use HTTPS and end in `/api2/json`. Existing cluster
+origins and TLS-verification policy cannot be edited in place because doing so
+could send the stored token to a replacement host. `PROXMOX_ALLOW_INSECURE_TLS`
+defaults to `false` and is only a temporary, explicit laboratory exception.
+
+Asset downloads are restricted to the exact configured ISO or container
+template source origin and base path. Loopback and link-local sources are
+rejected even if submitted by an administrator.
+
 ## Installer contract
 
 The installer will:
