@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Minimal root-owned deployment agent exposed only through a Unix socket."""
+"""Minimal root-owned LabGoblin deployment agent exposed only through a Unix socket."""
 
 from __future__ import annotations
 
@@ -21,18 +21,14 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 
-APP_DIR = Path(
-    os.environ.get("PLATFORM_APP_DIR", "/opt/proxmox-lab-platform/app")
-).resolve()
-STATE_DIR = Path(os.environ.get("PLATFORM_STATE_DIR", "/var/lib/proxmox-lab-platform"))
+APP_DIR = Path(os.environ.get("PLATFORM_APP_DIR", "/opt/labgoblin/app")).resolve()
+STATE_DIR = Path(os.environ.get("PLATFORM_STATE_DIR", "/var/lib/labgoblin"))
 SOCKET_PATH = Path(
-    os.environ.get(
-        "UPDATER_SOCKET_PATH",
-        "/var/lib/proxmox-lab-platform/updater/updater.sock",
-    )
+    os.environ.get("UPDATER_SOCKET_PATH", "/var/lib/labgoblin/updater/updater.sock")
 )
 TOKEN = os.environ.get("UPDATER_TOKEN", "")
 UPDATER_GID = int(os.environ.get("UPDATER_GID", "0"))
+# Until the GitHub repository slug is renamed, this remains the real upstream URL.
 ALLOWED_REPOSITORY = os.environ.get(
     "UPDATER_REPOSITORY", "https://github.com/wagnerks1990/proxmox-lab-platform.git"
 )
@@ -152,9 +148,9 @@ def backup_database(from_version: str) -> Path:
             "pg_dump",
             "-Fc",
             "-U",
-            env.get("POSTGRES_USER", "proxmox_lab"),
+            env.get("POSTGRES_USER", "labgoblin"),
             "-d",
-            env.get("POSTGRES_DB", "proxmox_lab"),
+            env.get("POSTGRES_DB", "labgoblin"),
             stdout=handle,
         )
     os.chmod(temporary, 0o600)
@@ -166,10 +162,8 @@ def restore_database(path: Path) -> None:
     if not path.is_file() or not path.resolve().is_relative_to(STATE_DIR.resolve()):
         raise RuntimeError("Rollback backup is missing or outside the state directory")
     env = env_file()
-    database = env.get("POSTGRES_DB", "proxmox_lab")
-    user = env.get("POSTGRES_USER", "proxmox_lab")
-    # Recreate the database so objects introduced by a newer release cannot
-    # survive a rollback merely because they are absent from the old dump.
+    database = env.get("POSTGRES_DB", "labgoblin")
+    user = env.get("POSTGRES_USER", "labgoblin")
     compose("exec", "-T", "postgres", "dropdb", "--if-exists", "-U", user, database)
     compose("exec", "-T", "postgres", "createdb", "-U", user, "-O", user, database)
     with path.open("rb") as handle:
@@ -192,7 +186,6 @@ def wait_for_health(timeout: int = 180) -> None:
     error = "health check did not run"
     while time.monotonic() < deadline:
         try:
-            # HEALTH_URL is restricted to literal loopback IPs by validate_health_url().
             with urllib.request.urlopen(HEALTH_URL, timeout=5) as response:  # nosec B310
                 if response.status == 200:
                     return
@@ -204,16 +197,14 @@ def wait_for_health(timeout: int = 180) -> None:
 
 def install_agent_from(source: Path) -> None:
     """Stage updater assets atomically without replacing the running process."""
-    installed = Path("/usr/local/lib/proxmox-lab-updater.py")
+    installed = Path("/usr/local/lib/labgoblin-updater.py")
     temporary = installed.with_suffix(".py.new")
     temporary.write_bytes(source.joinpath("deploy/updater_agent.py").read_bytes())
     os.chmod(temporary, 0o700)
     temporary.replace(installed)
-    service = Path("/etc/systemd/system/proxmox-lab-updater.service")
+    service = Path("/etc/systemd/system/labgoblin-updater.service")
     service_tmp = service.with_suffix(".service.new")
-    service_tmp.write_bytes(
-        source.joinpath("deploy/proxmox-lab-updater.service").read_bytes()
-    )
+    service_tmp.write_bytes(source.joinpath("deploy/labgoblin-updater.service").read_bytes())
     os.chmod(service_tmp, 0o644)
     service_tmp.replace(service)
     run(["systemctl", "daemon-reload"])
@@ -263,9 +254,7 @@ def apply_update(payload: dict) -> dict:
             "target_ref must be the exact 40-character commit SHA returned by the update check"
         )
     if run(["git", "status", "--porcelain"], stdout=subprocess.PIPE).stdout.strip():
-        raise RuntimeError(
-            "Deployment checkout has local changes; refusing to overwrite them"
-        )
+        raise RuntimeError("Deployment checkout has local changes; refusing to overwrite them")
     run(["git", "fetch", "--prune", "origin"])
     previous = commit()
     target = commit(requested)
@@ -285,44 +274,21 @@ def apply_update(payload: dict) -> dict:
             "The checked update is stale or does not match this request; run update check again"
         )
     if commit(f"origin/{branch}") != target:
-        raise RuntimeError(
-            "The update branch changed after the update check; run update check again"
-        )
-    if (
-        run(
-            ["git", "merge-base", "--is-ancestor", target, f"origin/{branch}"],
-            check=False,
-        ).returncode
-        != 0
-    ):
-        raise RuntimeError(
-            "Requested commit is not reachable from the configured update branch"
-        )
+        raise RuntimeError("The update branch changed after the update check; run update check again")
+    if run(["git", "merge-base", "--is-ancestor", target, f"origin/{branch}"], check=False).returncode != 0:
+        raise RuntimeError("Requested commit is not reachable from the configured update branch")
     if REQUIRE_SIGNED_COMMITS:
         run(["git", "verify-commit", target])
-    if (
-        run(
-            ["git", "merge-base", "--is-ancestor", previous, target], check=False
-        ).returncode
-        != 0
-    ):
-        raise RuntimeError(
-            "Refusing a non-forward update; use the rollback action for downgrades"
-        )
+    if run(["git", "merge-base", "--is-ancestor", previous, target], check=False).returncode != 0:
+        raise RuntimeError("Refusing a non-forward update; use the rollback action for downgrades")
     if previous == target:
-        return {
-            "ok": True,
-            "from_version": previous,
-            "to_version": target,
-            "message": "Already current",
-        }
+        return {"ok": True, "from_version": previous, "to_version": target, "message": "Already current"}
     staging = STATE_DIR / "staging" / f"{target[:12]}-{uuid.uuid4().hex[:8]}"
     staging.parent.mkdir(parents=True, exist_ok=True)
     run(["git", "worktree", "add", "--detach", str(staging), target])
     backup = None
     try:
         compose("build", "--pull", project_dir=staging)
-        # Stop application writers before taking the database snapshot.
         compose("stop", "api", "web")
         backup = backup_database(previous)
         state = {
@@ -457,9 +423,7 @@ class Handler(BaseHTTPRequestHandler):
             STATE_DIR.mkdir(parents=True, exist_ok=True)
             current_operation = read_state().get("operation") or {}
             if current_operation.get("status") in {"queued", "running"}:
-                return self._reply(
-                    409, {"ok": False, "message": "Another update operation is running"}
-                )
+                return self._reply(409, {"ok": False, "message": "Another update operation is running"})
             lock_path = STATE_DIR / "update.lock"
             with lock_path.open("w") as probe:
                 fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -487,9 +451,7 @@ class Handler(BaseHTTPRequestHandler):
                 },
             )
         except BlockingIOError:
-            self._reply(
-                409, {"ok": False, "message": "Another update operation is running"}
-            )
+            self._reply(409, {"ok": False, "message": "Another update operation is running"})
         except Exception as exc:
             self._reply(500, {"ok": False, "message": str(exc)})
 
@@ -559,7 +521,6 @@ def main() -> None:
     SOCKET_PATH.unlink(missing_ok=True)
     server = UnixHTTPServer(str(SOCKET_PATH), Handler)
     os.chown(SOCKET_PATH, 0, UPDATER_GID)
-    # The API receives only the updater group's GID; other users get no access.
     os.chmod(SOCKET_PATH, 0o660)  # nosec B103
     try:
         server.serve_forever()
