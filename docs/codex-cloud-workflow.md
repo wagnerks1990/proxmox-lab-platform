@@ -59,6 +59,8 @@ Frontend:
 
 ```bash
 cd frontend
+npm ci
+npm test
 npm run build
 ```
 
@@ -66,6 +68,12 @@ Cloud-safe validation script:
 
 ```bash
 ./scripts/codex_cloud_check.sh
+```
+
+Branding/repository validation:
+
+```bash
+python scripts/check_branding.py
 ```
 
 ## F. Dependency note
@@ -86,7 +94,8 @@ alembic upgrade heads
 python scripts/validate_deploy.py
 
 cd ../frontend
-npm install
+npm ci
+npm test
 npm run build
 
 sudo nginx -t
@@ -114,7 +123,7 @@ curl http://127.0.0.1:8080/api/ready
 - unsupported protocol buttons are hidden or disabled
 
 ## I. Branding validation
-A branding pass must distinguish LabGoblin-owned names from legitimate Proxmox VE integration terms. It should flag predecessor-owned runtime names such as `proxmox_lab`, `plp_session`, `/opt/proxmox-lab-platform`, `/var/lib/proxmox-lab-platform`, and `proxmox-lab-*`, while permitting the current upstream GitHub repository URL until the repository slug itself is renamed.
+A branding pass must distinguish LabGoblin-owned names from legitimate Proxmox VE integration terms. It must reject retired application-owned runtime/repository names such as `proxmox_lab`, `plp_session`, `/opt/proxmox-lab-platform`, `/var/lib/proxmox-lab-platform`, `proxmox-lab-*`, and `wagnerks1990/proxmox-lab-platform`. The canonical repository is `wagnerks1990/labgoblin`.
 
 ## J. PR expectations
 Every Codex Cloud PR must include:
