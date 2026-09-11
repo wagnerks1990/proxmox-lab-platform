@@ -1,11 +1,14 @@
 #!/bin/sh
 set -eu
 
-# The repository URL and filesystem/service identifiers below intentionally retain
-# their legacy values for installed-system update and rollback compatibility.
+# LabGoblin is development software and fresh installs use LabGoblin-native
+# filesystem, database, service, and runtime identifiers.
 REPOSITORY=${UPDATER_REPOSITORY:-https://github.com/wagnerks1990/proxmox-lab-platform.git}
 BRANCH=${PLATFORM_BRANCH:-main}
-INSTALL_ROOT=/opt/proxmox-lab-platform
+INSTALL_ROOT=/opt/labgoblin
+STATE_ROOT=/var/lib/labgoblin
+UPDATER_GROUP=labgoblin-updater
+UPDATER_RUN_DIR=/run/labgoblin-updater
 ALLOW_PVE=false
 
 while [ "$#" -gt 0 ]; do
@@ -41,17 +44,17 @@ if ! DEBIAN_FRONTEND=noninteractive apt-get install -y docker-compose-v2; then
 fi
 systemctl enable --now docker
 
-if ! getent group proxmox-lab-updater >/dev/null; then
-  groupadd --system proxmox-lab-updater
+if ! getent group "$UPDATER_GROUP" >/dev/null; then
+  groupadd --system "$UPDATER_GROUP"
 fi
-UPDATER_GID=$(getent group proxmox-lab-updater | cut -d: -f3)
-mkdir -p "$INSTALL_ROOT" /var/lib/proxmox-lab-platform/backups /var/lib/proxmox-lab-platform/updater /var/lib/proxmox-lab-platform/docker
-chown root:proxmox-lab-updater /var/lib/proxmox-lab-platform/updater
-chmod 0750 /var/lib/proxmox-lab-platform/updater
-chmod 0700 /var/lib/proxmox-lab-platform/docker
-mkdir -p /run/proxmox-lab-updater
-chown root:proxmox-lab-updater /run/proxmox-lab-updater
-chmod 0750 /run/proxmox-lab-updater
+UPDATER_GID=$(getent group "$UPDATER_GROUP" | cut -d: -f3)
+mkdir -p "$INSTALL_ROOT" "$STATE_ROOT/backups" "$STATE_ROOT/updater" "$STATE_ROOT/docker"
+chown root:"$UPDATER_GROUP" "$STATE_ROOT/updater"
+chmod 0750 "$STATE_ROOT/updater"
+chmod 0700 "$STATE_ROOT/docker"
+mkdir -p "$UPDATER_RUN_DIR"
+chown root:"$UPDATER_GROUP" "$UPDATER_RUN_DIR"
+chmod 0750 "$UPDATER_RUN_DIR"
 if [ ! -d "$INSTALL_ROOT/app/.git" ]; then
   git clone --branch "$BRANCH" --single-branch "$REPOSITORY" "$INSTALL_ROOT/app"
 else
@@ -67,8 +70,8 @@ CONFIG_ENCRYPTION_KEY=$(openssl rand -hex 48)
 UPDATER_TOKEN=$(openssl rand -hex 48)
 BOOTSTRAP_ADMIN_TOKEN=$(openssl rand -hex 32)
 cat > .env <<EOF
-POSTGRES_DB=proxmox_lab
-POSTGRES_USER=proxmox_lab
+POSTGRES_DB=labgoblin
+POSTGRES_USER=labgoblin
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
 JWT_SECRET_KEY=$JWT_SECRET_KEY
 CONFIG_ENCRYPTION_KEY=$CONFIG_ENCRYPTION_KEY
@@ -85,10 +88,10 @@ UPDATER_REQUIRE_SIGNED_COMMITS=false
 EOF
 chmod 0600 .env
 
-install -o root -g root -m 0700 deploy/updater_agent.py /usr/local/lib/proxmox-lab-updater.py
-install -m 0644 deploy/proxmox-lab-updater.service /etc/systemd/system/proxmox-lab-updater.service
+install -o root -g root -m 0700 deploy/updater_agent.py /usr/local/lib/labgoblin-updater.py
+install -m 0644 deploy/labgoblin-updater.service /etc/systemd/system/labgoblin-updater.service
 systemctl daemon-reload
-systemctl enable --now proxmox-lab-updater.service
+systemctl enable --now labgoblin-updater.service
 docker compose --env-file .env up -d --build
 
 attempt=0

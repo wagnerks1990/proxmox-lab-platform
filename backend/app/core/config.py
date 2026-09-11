@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     login_failure_window_seconds: int = 300
     login_lockout_seconds: int = 900
     bootstrap_admin_token: str | None = None
-    auth_cookie_name: str = "plp_session"
+    auth_cookie_name: str = "labgoblin_session"
     auth_cookie_secure: bool = False
     cors_allowed_origins: str = ""
 
@@ -58,14 +58,16 @@ class Settings(BaseSettings):
     asset_source_iso_base_url: str | None = None
     asset_source_ct_base_url: str | None = None
     host_runner_enabled: bool = False
-    host_runner_user: str = "proxmox-lab-runner"
+    host_runner_user: str = "labgoblin-runner"
     host_runner_private_key_path: str | None = None
     asset_sync_poll_interval_seconds: int = 3
     asset_sync_download_timeout_seconds: int = 7200
     asset_sync_lease_seconds: int = 180
 
-    updater_socket_path: str = "/var/lib/proxmox-lab-platform/updater/updater.sock"
+    updater_socket_path: str = "/var/lib/labgoblin/updater/updater.sock"
     updater_token: str | None = None
+    # Keep this pointed at the repository's real URL until the GitHub repository
+    # itself is renamed. It is an upstream location, not a product identifier.
     updater_repository: str = "https://github.com/wagnerks1990/proxmox-lab-platform.git"
     updater_poll_interval_seconds: int = 900
     updater_allow_automatic: bool = False

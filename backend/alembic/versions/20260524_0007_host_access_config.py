@@ -24,7 +24,7 @@ def upgrade() -> None:
             "runner_user",
             sa.String(length=120),
             nullable=False,
-            server_default="proxmox-lab-runner",
+            server_default="labgoblin-runner",
         ),
         sa.Column(
             "auth_method",

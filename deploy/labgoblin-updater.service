@@ -1,0 +1,28 @@
+[Unit]
+Description=LabGoblin Update Agent
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+Group=labgoblin-updater
+EnvironmentFile=/opt/labgoblin/app/.env
+Environment=PLATFORM_APP_DIR=/opt/labgoblin/app
+Environment=PLATFORM_STATE_DIR=/var/lib/labgoblin
+# Keep Docker's client state outside /root, which is intentionally hidden by
+# ProtectHome=true. This permits Compose builds without weakening that sandbox.
+Environment=DOCKER_CONFIG=/var/lib/labgoblin/docker
+ExecStart=/usr/bin/python3 /usr/local/lib/labgoblin-updater.py
+Restart=on-failure
+RestartSec=5
+UMask=0007
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+# The agent atomically stages replacements next to these files (.new), so
+# systemd must permit writes to their parent directories, not just the files.
+ReadWritePaths=/opt/labgoblin /var/lib/labgoblin /run/labgoblin-updater /var/run/docker.sock /usr/local/lib /etc/systemd/system
+
+[Install]
+WantedBy=multi-user.target

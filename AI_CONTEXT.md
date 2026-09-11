@@ -8,21 +8,26 @@ Read this file, `AGENTS.md`, `docs/brand.md`, and the documentation page for the
 - Category: **Virtual Lab Provisioning & Management**
 - Primary tagline: **Real Skills. Virtual Machines.**
 - Campaign line: **Build. Deploy. Learn. Repeat.**
-- Legacy identity: `Proxmox Lab Platform` / `proxmox-lab-platform`
+- Canonical technical identifier: `labgoblin`
+- Canonical service prefix: `labgoblin-`
+- Install root: `/opt/labgoblin`
+- State root: `/var/lib/labgoblin`
+- Session cookie: `labgoblin_session`
 
-All new user-facing text must use **LabGoblin**. Proxmox VE is an infrastructure integration, not part of the product name.
+All user-facing and LabGoblin-owned technical identifiers must use LabGoblin naming. Proxmox VE is an infrastructure integration, not part of the product name.
 
 ## Product boundary
 
 LabGoblin is a classroom control plane. PostgreSQL is authoritative for desired state; Proxmox VE is an external system whose observed state must be reconciled. Students never gain broad Proxmox access.
 
-## Branding migration rules
+## Clean-install branding rules
 
-- Change display names, UI copy, docs headings, browser metadata, API titles, screenshots, and help text to LabGoblin.
-- Preserve legacy deployment paths, updater service/group names, database identifiers, environment variable names, and API identifiers until a compatibility-safe migration exists.
-- Do not break installed systems solely to achieve cosmetic renaming.
-- If a compatibility-sensitive legacy identifier is replaced, add migration/alias handling and document rollback impact.
-- Keep README, source-controlled wiki, operator docs, release notes, and AI-aware files synchronized.
+This repository is development software intended for fresh installation. There is no requirement to preserve predecessor installation paths, service names, database defaults, package names, cookie names, logger namespaces, helper names, or updater state paths.
+
+- Do not introduce new LabGoblin-owned identifiers using `proxmox-lab-platform`, `proxmox_lab`, `plp_`, or `proxmox-lab-*` naming.
+- Keep `PROXMOX_*`, `ProxmoxCluster`, Proxmox API routes/fields, and similar terminology when they genuinely describe the Proxmox VE integration.
+- The current GitHub repository URL may still contain the predecessor slug until the repository itself is renamed. Treat that URL only as an upstream locator, not as canonical product naming.
+- Keep README, source-controlled wiki, operator docs, release notes, frontend metadata, deployment code, tests, and AI-aware files synchronized.
 - Do not imply that LabGoblin is affiliated with, endorsed by, or part of Proxmox Server Solutions GmbH.
 
 ## Design tokens
@@ -48,7 +53,7 @@ LabGoblin is a classroom control plane. PostgreSQL is authoritative for desired 
 
 ## Validation
 
-Run backend tests, frontend tests/build, dependency audits, the single-head migration check, strict documentation build, and generated-contract drift check. Offline tests do not prove behavior against a real Proxmox cluster.
+Run backend tests, frontend tests/build, dependency audits, the single-head migration check, strict documentation build, generated-contract drift check, and branding regression checks. Offline tests do not prove behavior against a real Proxmox cluster.
 
 ## Useful entry points
 
@@ -57,6 +62,6 @@ Run backend tests, frontend tests/build, dependency audits, the single-head migr
 - Durable work: `backend/app/services/operation_service.py`, `backend/app/workers/operation_worker.py`
 - Proxmox adapter: `backend/app/services/proxmox.py`
 - Classroom policy: `backend/app/services/classroom_access.py`
-- Deployment: `deploy/install.sh`, `deploy/updater_agent.py`, `docker-compose.yml`
+- Deployment: `deploy/install.sh`, `deploy/updater_agent.py`, `deploy/labgoblin-updater.service`, `docker-compose.yml`
 - Contract: `frontend/openapi.json`, `frontend/src/generated/api-schema.d.ts`
 - Brand: `docs/brand.md`, `frontend/public/brand/`

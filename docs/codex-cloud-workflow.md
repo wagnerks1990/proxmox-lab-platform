@@ -73,10 +73,10 @@ If the environment setup is minimal and dependencies are not installed, Codex mu
 
 ## G. Manual Ubuntu server validation checklist
 
-The legacy filesystem and systemd names below intentionally remain during the LabGoblin branding migration for installed-system compatibility.
+Fresh LabGoblin installations use `/opt/labgoblin` and LabGoblin-prefixed services and helpers.
 
 ```bash
-cd /opt/proxmox-lab-platform
+cd /opt/labgoblin/app
 git pull
 
 cd backend
@@ -90,8 +90,8 @@ npm install
 npm run build
 
 sudo nginx -t
-sudo systemctl restart proxmox-lab-backend
-curl http://127.0.0.1:8000/api/health
+sudo systemctl restart labgoblin-updater.service
+curl http://127.0.0.1:8080/api/ready
 ```
 
 ## H. Manual browser validation checklist
@@ -113,7 +113,10 @@ curl http://127.0.0.1:8000/api/health
 - Web Terminal behavior is clear and not fake
 - unsupported protocol buttons are hidden or disabled
 
-## I. PR expectations
+## I. Branding validation
+A branding pass must distinguish LabGoblin-owned names from legitimate Proxmox VE integration terms. It should flag predecessor-owned runtime names such as `proxmox_lab`, `plp_session`, `/opt/proxmox-lab-platform`, `/var/lib/proxmox-lab-platform`, and `proxmox-lab-*`, while permitting the current upstream GitHub repository URL until the repository slug itself is renamed.
+
+## J. PR expectations
 Every Codex Cloud PR must include:
 - summary of changes
 - backend changes

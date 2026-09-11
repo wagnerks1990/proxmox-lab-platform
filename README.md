@@ -22,11 +22,13 @@ LabGoblin is the product identity. **Proxmox VE** is currently the underlying hy
 
 ## Appliance installation
 
-A dedicated Debian or Ubuntu VM on the Proxmox cluster is the recommended deployment target. The repository currently retains its legacy GitHub slug during the branding migration, so the installation URL remains:
+A dedicated Debian or Ubuntu VM on the Proxmox cluster is the recommended deployment target. The GitHub repository itself has not yet been renamed, so the working installation URL is currently:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/wagnerks1990/proxmox-lab-platform/main/deploy/install.sh | sudo sh
 ```
+
+The repository URL above is only an upstream locator. A fresh installation is fully LabGoblin-native: `/opt/labgoblin`, `/var/lib/labgoblin`, the `labgoblin-updater` service/group, LabGoblin database defaults, and LabGoblin application identifiers.
 
 The installer deploys LabGoblin with Docker Compose, generates bootstrap secrets, runs database migrations, installs the local update agent, and waits for the application health gate. See [`docs/operations/deployment.md`](docs/operations/deployment.md) before using the direct-on-hypervisor override. For a private repository, clone with a read-only deploy key first; unauthenticated `raw.githubusercontent.com` links do not work for private repositories.
 
@@ -111,7 +113,23 @@ Set the appropriate configuration in `backend/.env` or configure the integration
 - `PROXMOX_TOKEN_SECRET`
 - `PROXMOX_VERIFY_SSL`
 
-The token is used only by the backend service and is never exposed to frontend code.
+The token is used only by the backend service and is never exposed to frontend code. LabGoblin-generated Proxmox tokens default to the token ID `labgoblin`.
+
+## LabGoblin runtime identifiers
+
+Fresh installations use these canonical application-owned names:
+
+- install root: `/opt/labgoblin`
+- state root: `/var/lib/labgoblin`
+- Compose project: `labgoblin`
+- default PostgreSQL database/user: `labgoblin`
+- web session cookie: `labgoblin_session`
+- updater unit/group: `labgoblin-updater.service` / `labgoblin-updater`
+- updater executable: `/usr/local/lib/labgoblin-updater.py`
+- host runner: `labgoblin-runner`
+- frontend package: `labgoblin-frontend`
+
+Proxmox-specific names remain where they describe the actual hypervisor integration rather than LabGoblin itself.
 
 ## Security notes
 
@@ -136,9 +154,9 @@ It checks backend module compilation, required architecture events, a single Ale
 
 For `/api/admin/events/stream` (EventSource/SSE), include the dedicated NGINX location block from `deploy/nginx/sse-events-stream.conf`. This disables proxy buffering and keeps the stream open so live telemetry can remain connected.
 
-## Legacy naming compatibility
+## Naming policy
 
-The product is now **LabGoblin**, but selected internal identifiers intentionally retain the old `proxmox-lab-platform` name during migration. This includes deployment paths, updater service/group names, some environment defaults, database identifiers, and the current repository slug. They must not be renamed casually because deployed installations and rollback/update logic may depend on them. See [`docs/brand.md`](docs/brand.md).
+This repository is development software intended for fresh installation, so LabGoblin-owned technical identifiers do not preserve predecessor names. The sole temporary exception is the current GitHub repository slug, which remains in working repository/install/update URLs until the repository itself is renamed. See [`docs/brand.md`](docs/brand.md).
 
 ## Future expansion-ready
 

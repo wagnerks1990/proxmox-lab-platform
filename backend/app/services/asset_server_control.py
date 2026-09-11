@@ -26,13 +26,13 @@ class ServiceSpec:
 
 SPECS: dict[str, ServiceSpec] = {
     "iso": ServiceSpec(
-        "proxmox-lab-iso-server.service",
+        "labgoblin-iso-server.service",
         "/var/lib/vz/template/iso",
         8088,
         settings.asset_source_iso_base_url,
     ),
     "ct_template": ServiceSpec(
-        "proxmox-lab-ct-template-server.service",
+        "labgoblin-ct-template-server.service",
         "/var/lib/vz/template/cache",
         8089,
         settings.asset_source_ct_base_url,

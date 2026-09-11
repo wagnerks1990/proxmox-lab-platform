@@ -1,7 +1,7 @@
 import logging
 from typing import Any
 
-logger = logging.getLogger("proxmox_lab")
+logger = logging.getLogger("labgoblin")
 
 
 def log_event(event: str, **fields: Any) -> None:

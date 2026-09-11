@@ -12,6 +12,9 @@ fi
 
 echo "=== Repository structure ==="
 test -f AGENTS.md && echo "AGENTS.md present" || echo "AGENTS.md missing"
+test -f AI_CONTEXT.md && echo "AI_CONTEXT.md present" || echo "AI_CONTEXT.md missing"
+test -f docs/brand.md && echo "docs/brand.md present" || echo "docs/brand.md missing"
+test -f scripts/check_branding.py && echo "branding check present" || echo "branding check missing"
 test -f .gitignore && echo ".gitignore present" || echo ".gitignore missing"
 test -d docs && echo "docs/ present" || echo "docs/ missing"
 test -d scripts && echo "scripts/ present" || echo "scripts/ missing"
@@ -21,6 +24,9 @@ test -f backend/scripts/seed_dev_admin.py && echo "backend/scripts/seed_dev_admi
 test -f frontend/package.json && echo "frontend/package.json present" || echo "frontend/package.json missing"
 test -f frontend/package-lock.json && echo "frontend/package-lock.json present" || echo "frontend/package-lock.json missing"
 test -d backend/alembic && echo "backend/alembic present" || echo "backend/alembic missing"
+
+echo "=== LabGoblin branding identifier check ==="
+python3 scripts/check_branding.py
 
 echo "=== Backend compile check ==="
 if [ -d backend/app ]; then
