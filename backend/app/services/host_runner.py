@@ -15,7 +15,7 @@ class HostRunnerResult:
 
 
 class HostRunnerService:
-    HELPER = "/usr/local/sbin/proxmox-lab-asset-server"
+    HELPER = "/usr/local/sbin/labgoblin-asset-server"
 
     def __init__(self):
         self.user = settings.host_runner_user
