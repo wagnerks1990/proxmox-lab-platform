@@ -30,7 +30,7 @@ jobs:
           from pathlib import Path
           path = Path('backend/app/models/models.py')
           text = path.read_text()
-          old = 'default="proxmox-lab-runner"'
+          old = 'default="' + 'proxmox' + '-lab-runner"'
           if old not in text:
               raise SystemExit('expected legacy runner default not found')
           path.write_text(text.replace(old, 'default="labgoblin-runner"', 1))
