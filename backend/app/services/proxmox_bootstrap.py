@@ -6,7 +6,7 @@ from app.models.models import ProxmoxCluster, ProxmoxNode, ProxmoxClusterDefault
 from app.services.secret_crypto import encrypt_secret, decrypt_secret
 
 
-TOKEN_ID_DEFAULT = "proxmox-lab-platform"
+TOKEN_ID_DEFAULT = "labgoblin"
 
 
 class ProxmoxBootstrapService:
