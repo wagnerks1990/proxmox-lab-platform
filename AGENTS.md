@@ -15,12 +15,12 @@
 - Remote access direction is Guacamole-first, with ttyd only as fallback/debug if already present.
 
 ## Branding and documentation
-- New user-facing names MUST use **LabGoblin**.
-- Do not introduce new `Proxmox Lab Platform` branding.
-- Refer to Proxmox VE only where technically relevant as the current hypervisor/integration.
-- Preserve compatibility-sensitive legacy identifiers until a migration is intentionally designed. This includes `/opt/proxmox-lab-platform`, `/var/lib/proxmox-lab-platform`, `proxmox-lab-updater`, existing database names, environment variables, and the current repository slug.
-- Do not rename compatibility-sensitive values merely for cosmetic consistency.
-- If a legacy technical identifier is migrated, provide compatibility/rollback handling and update operator documentation.
+- User-facing names MUST use **LabGoblin**.
+- LabGoblin-owned technical identifiers MUST use `labgoblin` / `labgoblin-` naming.
+- This is development software for fresh installation; predecessor installation identifiers do not require compatibility preservation.
+- Do not introduce LabGoblin-owned identifiers named `proxmox-lab-platform`, `proxmox_lab`, `plp_`, or `proxmox-lab-*`.
+- Keep Proxmox terminology only when it genuinely names the Proxmox VE integration, API objects, VMIDs/UPIDs, configuration variables, or integration-specific database models.
+- The current GitHub repository URL may retain its predecessor slug until repository administration renames it; treat that value only as an upstream locator.
 - Keep README, MkDocs/wiki pages, deployment/runbooks, architecture notes, release notes, screenshots/help text, and `AI_CONTEXT.md` synchronized with relevant behavior changes.
 - Brand guidance and design tokens are defined in `docs/brand.md`.
 
