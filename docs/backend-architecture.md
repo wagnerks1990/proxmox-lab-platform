@@ -6,7 +6,7 @@ routers from `app/api/routers/`; there is no legacy parallel router.
 ## Request boundary
 
 Authentication accepts a bearer token for API tooling or the HttpOnly
-`plp_session` cookie used by the web application. The token must map to a live
+`labgoblin_session` cookie used by the web application. The token must map to a live
 `auth_sessions` record and the current user token version. Organization context
 is resolved independently and fails closed for unknown roles or inactive
 memberships.
