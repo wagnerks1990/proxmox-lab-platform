@@ -1,5 +1,5 @@
-site_name: Proxmox Lab Platform
-site_description: Administration, classroom, operations, and development documentation
+site_name: LabGoblin
+site_description: LabGoblin virtual lab provisioning, classroom, operations, security, and development documentation
 repo_url: https://github.com/wagnerks1990/proxmox-lab-platform
 docs_dir: docs
 site_dir: site
@@ -10,6 +10,7 @@ theme:
 
 nav:
   - Home: index.md
+  - Brand and naming: brand.md
   - Architecture: architecture/overview.md
   - Organization tenancy: security/organization-tenancy.md
   - Identity lifecycle: security/identity-lifecycle.md
