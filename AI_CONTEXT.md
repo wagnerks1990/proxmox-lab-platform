@@ -13,6 +13,7 @@ Read this file, `AGENTS.md`, `docs/brand.md`, and the documentation page for the
 - Install root: `/opt/labgoblin`
 - State root: `/var/lib/labgoblin`
 - Session cookie: `labgoblin_session`
+- Canonical repository: `https://github.com/wagnerks1990/labgoblin.git`
 
 All user-facing and LabGoblin-owned technical identifiers must use LabGoblin naming. Proxmox VE is an infrastructure integration, not part of the product name.
 
@@ -22,11 +23,11 @@ LabGoblin is a classroom control plane. PostgreSQL is authoritative for desired 
 
 ## Clean-install branding rules
 
-This repository is development software intended for fresh installation. There is no requirement to preserve predecessor installation paths, service names, database defaults, package names, cookie names, logger namespaces, helper names, or updater state paths.
+This repository is development software intended for fresh installation. There is no requirement to preserve predecessor installation paths, service names, database defaults, package names, cookie names, logger namespaces, helper names, updater state paths, or repository URLs.
 
 - Do not introduce new LabGoblin-owned identifiers using `proxmox-lab-platform`, `proxmox_lab`, `plp_`, or `proxmox-lab-*` naming.
+- Do not use the retired repository path `wagnerks1990/proxmox-lab-platform`; the canonical repository is `wagnerks1990/labgoblin`.
 - Keep `PROXMOX_*`, `ProxmoxCluster`, Proxmox API routes/fields, and similar terminology when they genuinely describe the Proxmox VE integration.
-- The current GitHub repository URL may still contain the predecessor slug until the repository itself is renamed. Treat that URL only as an upstream locator, not as canonical product naming.
 - Keep README, source-controlled wiki, operator docs, release notes, frontend metadata, deployment code, tests, and AI-aware files synchronized.
 - Do not imply that LabGoblin is affiliated with, endorsed by, or part of Proxmox Server Solutions GmbH.
 
