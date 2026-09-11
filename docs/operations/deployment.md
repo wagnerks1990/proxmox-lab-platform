@@ -18,19 +18,18 @@ Fresh LabGoblin installations use:
 - updater service/group: `labgoblin-updater.service` / `labgoblin-updater`;
 - updater executable: `/usr/local/lib/labgoblin-updater.py`;
 - Compose project: `labgoblin`;
-- default PostgreSQL database/user: `labgoblin`.
+- default PostgreSQL database/user: `labgoblin`;
+- canonical Git repository: `https://github.com/wagnerks1990/labgoblin.git`.
 
-These are canonical LabGoblin identifiers. This development baseline does not preserve predecessor application-owned paths or service names.
+These are canonical LabGoblin identifiers. This development baseline does not preserve predecessor application-owned paths, service names, or repository URLs.
 
 ## Current one-command installer
 
 On the target VM:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/wagnerks1990/proxmox-lab-platform/main/deploy/install.sh | sudo sh
+curl -fsSL https://raw.githubusercontent.com/wagnerks1990/labgoblin/main/deploy/install.sh | sudo sh
 ```
-
-The URL still contains the repository's current GitHub slug. It is an upstream locator only and should change when the repository itself is renamed to LabGoblin.
 
 That exact command requires the repository to be public. For a private repository, configure a read-only GitHub deploy key, clone the repository, and run `sudo deploy/install.sh`. The deploy key must remain available to the root-owned updater for later fetches. Do not put a personal access token in `.env`, the database, a Compose file, or a command retained in shell history.
 

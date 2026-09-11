@@ -1,6 +1,6 @@
 site_name: LabGoblin
 site_description: LabGoblin virtual lab provisioning, classroom, operations, security, and development documentation
-repo_url: https://github.com/wagnerks1990/proxmox-lab-platform
+repo_url: https://github.com/wagnerks1990/labgoblin
 docs_dir: docs
 site_dir: site
 strict: true

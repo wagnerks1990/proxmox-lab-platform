@@ -66,9 +66,7 @@ class Settings(BaseSettings):
 
     updater_socket_path: str = "/var/lib/labgoblin/updater/updater.sock"
     updater_token: str | None = None
-    # Keep this pointed at the repository's real URL until the GitHub repository
-    # itself is renamed. It is an upstream location, not a product identifier.
-    updater_repository: str = "https://github.com/wagnerks1990/proxmox-lab-platform.git"
+    updater_repository: str = "https://github.com/wagnerks1990/labgoblin.git"
     updater_poll_interval_seconds: int = 900
     updater_allow_automatic: bool = False
     updater_require_signed_commits: bool = False

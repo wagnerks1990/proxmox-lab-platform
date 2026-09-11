@@ -3,7 +3,7 @@ set -eu
 
 # LabGoblin is development software and fresh installs use LabGoblin-native
 # filesystem, database, service, and runtime identifiers.
-REPOSITORY=${UPDATER_REPOSITORY:-https://github.com/wagnerks1990/proxmox-lab-platform.git}
+REPOSITORY=${UPDATER_REPOSITORY:-https://github.com/wagnerks1990/labgoblin.git}
 BRANCH=${PLATFORM_BRANCH:-main}
 INSTALL_ROOT=/opt/labgoblin
 STATE_ROOT=/var/lib/labgoblin

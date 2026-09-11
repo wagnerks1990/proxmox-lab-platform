@@ -7,10 +7,8 @@ A dedicated Debian or Ubuntu VM is recommended. Start with 2 vCPU, 4 GiB RAM, 30
 ## Public repository installation
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/wagnerks1990/proxmox-lab-platform/main/deploy/install.sh | sudo sh
+curl -fsSL https://raw.githubusercontent.com/wagnerks1990/labgoblin/main/deploy/install.sh | sudo sh
 ```
-
-The URL above uses the repository's current GitHub slug. The product and installed runtime are LabGoblin; update this URL when the repository itself is renamed.
 
 To install directly on a Proxmox host, download the installer and explicitly pass `--allow-proxmox-host`. Do not use this override on a host you cannot rebuild.
 

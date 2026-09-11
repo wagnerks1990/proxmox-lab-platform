@@ -14,6 +14,7 @@
 | Install root | `/opt/labgoblin` |
 | State root | `/var/lib/labgoblin` |
 | Session cookie | `labgoblin_session` |
+| Repository | `https://github.com/wagnerks1990/labgoblin.git` |
 
 LabGoblin is the product. Proxmox VE is currently the primary hypervisor integration and should be named only where the underlying platform matters technically.
 
@@ -74,6 +75,7 @@ This repository is development software intended for fresh installations. LabGob
 
 Canonical examples:
 
+- repository: `wagnerks1990/labgoblin`
 - Compose project: `labgoblin`
 - PostgreSQL default database/user: `labgoblin`
 - updater group and unit: `labgoblin-updater` / `labgoblin-updater.service`
@@ -98,19 +100,9 @@ Do not mechanically remove the word Proxmox. These names describe the supported 
 
 The distinction is ownership: LabGoblin-owned runtime names use LabGoblin; integration-domain names use Proxmox where appropriate.
 
-## Current repository slug
+## Repository naming
 
-The GitHub repository itself is still hosted at `wagnerks1990/proxmox-lab-platform`. Until GitHub repository administration renames that slug, its URL may appear in installer/update defaults and documentation strictly as a working upstream locator.
-
-After the repository is renamed to `labgoblin`, update in one change:
-
-1. README installation URLs.
-2. `mkdocs.yml` `repo_url`.
-3. updater default repository URL.
-4. `.env.example` updater repository URL.
-5. deployment/first-run documentation.
-6. tests and fixtures that assert repository URLs.
-7. automation and external deployment references.
+The canonical GitHub repository is `wagnerks1990/labgoblin`. Active installer, updater, MkDocs, documentation, automation, test, and AI-agent references must point to the canonical repository and must not rely on GitHub redirects from the retired repository path.
 
 ## AI/coding-agent contract
 

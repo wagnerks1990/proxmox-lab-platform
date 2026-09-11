@@ -28,9 +28,8 @@ SOCKET_PATH = Path(
 )
 TOKEN = os.environ.get("UPDATER_TOKEN", "")
 UPDATER_GID = int(os.environ.get("UPDATER_GID", "0"))
-# Until the GitHub repository slug is renamed, this remains the real upstream URL.
 ALLOWED_REPOSITORY = os.environ.get(
-    "UPDATER_REPOSITORY", "https://github.com/wagnerks1990/proxmox-lab-platform.git"
+    "UPDATER_REPOSITORY", "https://github.com/wagnerks1990/labgoblin.git"
 )
 HEALTH_URL = os.environ.get("PLATFORM_HEALTH_URL", "http://127.0.0.1:8080/api/ready")
 REF_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,119}$")

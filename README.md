@@ -22,13 +22,13 @@ LabGoblin is the product identity. **Proxmox VE** is currently the underlying hy
 
 ## Appliance installation
 
-A dedicated Debian or Ubuntu VM on the Proxmox cluster is the recommended deployment target. The GitHub repository itself has not yet been renamed, so the working installation URL is currently:
+A dedicated Debian or Ubuntu VM on the Proxmox cluster is the recommended deployment target.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/wagnerks1990/proxmox-lab-platform/main/deploy/install.sh | sudo sh
+curl -fsSL https://raw.githubusercontent.com/wagnerks1990/labgoblin/main/deploy/install.sh | sudo sh
 ```
 
-The repository URL above is only an upstream locator. A fresh installation is fully LabGoblin-native: `/opt/labgoblin`, `/var/lib/labgoblin`, the `labgoblin-updater` service/group, LabGoblin database defaults, and LabGoblin application identifiers.
+A fresh installation is fully LabGoblin-native: `/opt/labgoblin`, `/var/lib/labgoblin`, the `labgoblin-updater` service/group, LabGoblin database defaults, and LabGoblin application identifiers.
 
 The installer deploys LabGoblin with Docker Compose, generates bootstrap secrets, runs database migrations, installs the local update agent, and waits for the application health gate. See [`docs/operations/deployment.md`](docs/operations/deployment.md) before using the direct-on-hypervisor override. For a private repository, clone with a read-only deploy key first; unauthenticated `raw.githubusercontent.com` links do not work for private repositories.
 
@@ -128,6 +128,7 @@ Fresh installations use these canonical application-owned names:
 - updater executable: `/usr/local/lib/labgoblin-updater.py`
 - host runner: `labgoblin-runner`
 - frontend package: `labgoblin-frontend`
+- canonical repository: `https://github.com/wagnerks1990/labgoblin.git`
 
 Proxmox-specific names remain where they describe the actual hypervisor integration rather than LabGoblin itself.
 
@@ -156,7 +157,7 @@ For `/api/admin/events/stream` (EventSource/SSE), include the dedicated NGINX lo
 
 ## Naming policy
 
-This repository is development software intended for fresh installation, so LabGoblin-owned technical identifiers do not preserve predecessor names. The sole temporary exception is the current GitHub repository slug, which remains in working repository/install/update URLs until the repository itself is renamed. See [`docs/brand.md`](docs/brand.md).
+This repository is development software intended for fresh installation. LabGoblin-owned technical identifiers use canonical LabGoblin naming and predecessor repository/runtime identifiers are not permitted in active configuration or documentation. See [`docs/brand.md`](docs/brand.md).
 
 ## Future expansion-ready
 

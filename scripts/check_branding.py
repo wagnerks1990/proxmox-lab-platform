@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
-"""Reject retired LabGoblin predecessor identifiers in application-owned source.
-
-The current GitHub repository URL is intentionally permitted until the repository
-slug itself is renamed. Proxmox VE integration terminology is also legitimate.
-Generated dependency lock metadata is excluded because its package-name header is
-regenerated from package.json by npm; package.json is the canonical package identity.
-"""
+"""Reject retired LabGoblin predecessor identifiers in application-owned source."""
 
 from __future__ import annotations
 
@@ -29,14 +23,19 @@ DISALLOWED = (
     "proxmox-lab-iso-server",
     "proxmox-lab-ct-template-server",
     "proxmox-lab-frontend",
+    "wagnerks1990/proxmox-lab-platform",
     "token_id:'proxmox-lab-platform'",
     'token_id:"proxmox-lab-platform"',
     'TOKEN_ID_DEFAULT = "proxmox-lab-platform"',
 )
 
-POLICY_FILES = {Path("docs/brand.md"), Path("AI_CONTEXT.md"), Path("AGENTS.md")}
-GENERATED_FILES = {Path("frontend/package-lock.json")}
-ALLOWED_REPO_URL = "github.com/wagnerks1990/proxmox-lab-platform"
+# Policy documentation may cite retired identifiers as examples of what is forbidden.
+POLICY_FILES = {
+    Path("docs/brand.md"),
+    Path("docs/codex-cloud-workflow.md"),
+    Path("AI_CONTEXT.md"),
+    Path("AGENTS.md"),
+}
 
 
 def iter_files():
@@ -44,7 +43,7 @@ def iter_files():
         if not path.is_file():
             continue
         rel = path.relative_to(ROOT)
-        if rel in GENERATED_FILES or any(part in SKIP_DIRS for part in rel.parts):
+        if any(part in SKIP_DIRS for part in rel.parts):
             continue
         if path.suffix.lower() in TEXT_SUFFIXES or path.name in {"Dockerfile", "Makefile"}:
             yield path, rel
@@ -60,11 +59,8 @@ def main() -> int:
         except UnicodeDecodeError:
             continue
         for number, line in enumerate(lines, 1):
-            check = line
-            if ALLOWED_REPO_URL in check:
-                check = check.replace(ALLOWED_REPO_URL, "<CURRENT_REPOSITORY>")
             for retired in DISALLOWED:
-                if retired in check:
+                if retired in line:
                     failures.append((rel, number, retired))
     if failures:
         print("Retired LabGoblin predecessor identifiers found:")
