@@ -9,6 +9,11 @@
 | Primary tagline | **Real Skills. Virtual Machines.** |
 | Campaign line | **Build. Deploy. Learn. Repeat.** |
 | Alternate campaign line | Virtual Labs. Real Opportunities. |
+| Technical identifier | `labgoblin` |
+| Service prefix | `labgoblin-` |
+| Install root | `/opt/labgoblin` |
+| State root | `/var/lib/labgoblin` |
+| Session cookie | `labgoblin_session` |
 
 LabGoblin is the product. Proxmox VE is currently the primary hypervisor integration and should be named only where the underlying platform matters technically.
 
@@ -63,34 +68,41 @@ Rules:
 - Do not use decorative glow/shadow effects where they reduce legibility.
 - Use accessible `alt` text when the mark communicates identity; use empty `alt` text when adjacent text already says LabGoblin.
 
-## Product naming
+## Clean-install naming policy
 
-Write the product as **LabGoblin** with capital L and G.
+This repository is development software intended for fresh installations. LabGoblin-owned runtime and developer identifiers use LabGoblin naming directly; predecessor compatibility aliases are not required.
 
-Acceptable technical identifiers for new, non-compatibility-sensitive work:
+Canonical examples:
 
-- `labgoblin`
-- `lab-goblin`
+- Compose project: `labgoblin`
+- PostgreSQL default database/user: `labgoblin`
+- updater group and unit: `labgoblin-updater` / `labgoblin-updater.service`
+- updater executable: `/usr/local/lib/labgoblin-updater.py`
+- host runner: `labgoblin-runner`
+- host helper: `/usr/local/sbin/labgoblin-asset-server`
+- asset units: `labgoblin-iso-server.service` and `labgoblin-ct-template-server.service`
+- logger namespace: `labgoblin`
+- frontend package: `labgoblin-frontend`
 
-Do not create new technical identifiers named `proxmox-lab-platform` unless they are explicitly required for backward compatibility.
+Do not introduce LabGoblin-owned identifiers using predecessor forms such as `proxmox-lab-platform`, `proxmox_lab`, `plp_`, or `proxmox-lab-*`.
 
-## Legacy compatibility boundary
+## Legitimate Proxmox terminology
 
-The following identifiers currently remain intentionally unchanged because existing deployments, updates, rollback, credentials, or automation may depend on them:
+Do not mechanically remove the word Proxmox. These names describe the supported hypervisor integration and should remain when technically accurate:
 
-- GitHub repository slug: `wagnerks1990/proxmox-lab-platform`
-- install root: `/opt/proxmox-lab-platform`
-- state root: `/var/lib/proxmox-lab-platform`
-- updater service/group/files containing `proxmox-lab-updater`
-- existing environment variable names beginning with `PROXMOX_`, because those describe the integration
-- existing database/schema names such as `proxmox_lab`
-- API fields/routes that explicitly describe Proxmox integration objects
+- `PROXMOX_*` configuration variables;
+- `ProxmoxCluster`, `ProxmoxNode`, and other integration models;
+- Proxmox API clients, URLs, token concepts, VMIDs and UPIDs;
+- Proxmox Setup, Inventory, Assets, and integration documentation;
+- database tables whose domain object is specifically a Proxmox resource.
 
-These are implementation compatibility identifiers, not the public product name.
+The distinction is ownership: LabGoblin-owned runtime names use LabGoblin; integration-domain names use Proxmox where appropriate.
 
-## Future repository rename
+## Current repository slug
 
-When the GitHub repository itself is renamed to `labgoblin`, update all of the following in one compatibility-reviewed change:
+The GitHub repository itself is still hosted at `wagnerks1990/proxmox-lab-platform`. Until GitHub repository administration renames that slug, its URL may appear in installer/update defaults and documentation strictly as a working upstream locator.
+
+After the repository is renamed to `labgoblin`, update in one change:
 
 1. README installation URLs.
 2. `mkdocs.yml` `repo_url`.
@@ -98,9 +110,7 @@ When the GitHub repository itself is renamed to `labgoblin`, update all of the f
 4. `.env.example` updater repository URL.
 5. deployment/first-run documentation.
 6. tests and fixtures that assert repository URLs.
-7. automation or external deployment references.
-
-GitHub normally redirects old repository URLs after a rename, but do not rely on that as the sole updater migration strategy. Existing installations should be tested for fetch/update/rollback behavior.
+7. automation and external deployment references.
 
 ## AI/coding-agent contract
 
