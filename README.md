@@ -43,7 +43,8 @@ The installer deploys LabGoblin with Docker Compose, generates bootstrap secrets
 - `backend/app/api/routes.py` – REST endpoints
 - `backend/app/models/models.py` – relational models (`users`, `roles`, `vm_templates`, `student_vms`, `permissions`, `audit_logs`)
 - `backend/app/services/proxmox.py` – secure backend-only Proxmox API client
-- `backend/init.sql` – seed data
+- `backend/alembic/` – authoritative PostgreSQL schema migrations
+- `backend/scripts/seed_dev_admin.py` and `seed_dev_lab_data.py` – development-only seed helpers
 - `frontend/src/main.jsx` – application routes and bootstrap
 - `frontend/public/brand/` – application branding assets
 
@@ -92,6 +93,8 @@ python scripts/ensure_config_encryption_key.py --create
 alembic upgrade head
 uvicorn app.main:app --reload
 ```
+
+Alembic is the only supported schema initialization path. For optional development data, use the seed scripts after migrating; `seed_dev_lab_data.py` requires `DEV_ORGANIZATION_SLUG` so records cannot be written into an implicit tenant.
 
 ### Frontend
 ```bash
@@ -153,7 +156,7 @@ It checks backend module compilation, required architecture events, a single Ale
 
 ## SSE proxy requirement
 
-For `/api/admin/events/stream` (EventSource/SSE), include the dedicated NGINX location block from `deploy/nginx/sse-events-stream.conf`. This disables proxy buffering and keeps the stream open so live telemetry can remain connected.
+The shipped frontend NGINX configuration includes a dedicated `/api/admin/events/stream` location that disables proxy buffering and keeps the stream open. Custom Compose proxies can reuse `deploy/nginx/sse-events-stream.conf`; deployments using a host-level proxy must replace its `api:8000` container upstream with the host's actual API upstream.
 
 ## Naming policy
 

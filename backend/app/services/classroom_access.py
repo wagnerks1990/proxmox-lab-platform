@@ -171,6 +171,10 @@ def enforce_student_vm_operation(
         raise HTTPException(
             status_code=403, detail="Students may not power off this lab VM"
         )
+    if operation in {"reboot", "reset"} and not lab.student_can_reset:
+        raise HTTPException(
+            status_code=403, detail="Students may not reset this lab VM"
+        )
     if operation == "terminal" and not lab.terminal_enabled:
         raise HTTPException(
             status_code=403, detail="Terminal access is disabled for this lab"

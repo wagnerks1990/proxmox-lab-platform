@@ -3,15 +3,14 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.db.session import get_db
-from app.models.models import User, StudentVM
+from app.models.models import User
 from app.schemas.console import ConsoleLaunchResponse
+from app.services.console_access import get_console_vm_for_user
 from app.services.console_service import ConsoleService
 from app.services.organization_access import (
     OrganizationContext,
     get_current_organization,
-    organization_role_at_least,
 )
-from app.services.classroom_access import enforce_student_vm_operation
 
 router = APIRouter()
 
@@ -23,27 +22,13 @@ def _get_vm_for_user(
     organization: OrganizationContext,
     operation: str,
 ):
-    q = db.query(StudentVM).filter(
-        StudentVM.id == vm_id,
-        StudentVM.organization_id == organization.id,
-        StudentVM.deleted_at.is_(None),
+    return get_console_vm_for_user(
+        db,
+        user=user,
+        vm_id=vm_id,
+        organization=organization,
+        operation=operation,
     )
-    if organization.role == "student":
-        q = q.filter(StudentVM.owner_id == user.id)
-    elif not organization_role_at_least(organization, "instructor"):
-        raise HTTPException(status_code=403, detail="A valid role is required")
-    vm = q.first()
-    if not vm:
-        raise HTTPException(status_code=404, detail="VM not found")
-    if organization.role == "student":
-        enforce_student_vm_operation(
-            db,
-            user_id=user.id,
-            organization_id=organization.id,
-            vm=vm,
-            operation=operation,
-        )
-    return vm
 
 
 @router.get("/vms/{id}/console/terminal-url", response_model=ConsoleLaunchResponse)

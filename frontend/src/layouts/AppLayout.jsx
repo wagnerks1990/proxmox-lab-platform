@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { listOrganizations } from '../services/organizationApi'
 import { logoutSession } from '../services/authApi'
+import { AccessContext } from '../components/AccessControl'
+import { deriveCapabilities } from '../auth/access'
 
 export default function AppLayout({ children, setUser, user }) {
   const nav = useNavigate()
@@ -10,7 +12,23 @@ export default function AppLayout({ children, setUser, user }) {
   const [organizationReady, setOrganizationReady] = useState(false)
   const [organizationError, setOrganizationError] = useState('')
   const [organizationId, setOrganizationId] = useState(localStorage.getItem('organization_id') || '')
-  const logout = async () => { try { await logoutSession() } catch {} localStorage.removeItem('organization_id'); setUser(false); nav('/') }
+  const [logoutError, setLogoutError] = useState('')
+  const [logoutBusy, setLogoutBusy] = useState(false)
+  const logout = async () => {
+    setLogoutBusy(true)
+    setLogoutError('')
+    try {
+      await logoutSession()
+      localStorage.removeItem('organization_id')
+      setUser(false)
+      nav('/')
+    } catch (error) {
+      const detail = error?.response?.data?.detail
+      setLogoutError(typeof detail === 'string' ? detail : 'Sign out failed. Your server session is still active; try again.')
+    } finally {
+      setLogoutBusy(false)
+    }
+  }
   useEffect(() => {
     let active = true
     listOrganizations().then((rows) => {
@@ -40,12 +58,10 @@ export default function AppLayout({ children, setUser, user }) {
     setOrganizationId(event.target.value)
     window.location.reload()
   }
-  const normalizedRole = (user?.role || '').toLowerCase()
   const activeOrganization = organizations.find(organization => String(organization.id) === organizationId)
   const tenantRole = activeOrganization?.role
-  const isPlatformAdmin = normalizedRole === 'admin'
-  const isTenantInstructor = ['instructor', 'admin', 'owner'].includes(tenantRole) || isPlatformAdmin
-  const isTenantAdmin = ['admin', 'owner'].includes(tenantRole) || isPlatformAdmin
+  const access = deriveCapabilities(user, tenantRole)
+  const { platformAdmin: isPlatformAdmin, tenantInstructor: isTenantInstructor, tenantAdmin: isTenantAdmin } = access
   return <div className='app-shell'>
     <aside className='sidebar'>
       <div className='brand-lockup'><img src='/brand/labgoblin-icon.svg' alt='' className='brand-mark'/><div><div className='brand-wordmark'>Lab<span>Goblin</span></div><div className='brand-subtitle'>Virtual Lab Management</div></div></div>
@@ -64,15 +80,17 @@ export default function AppLayout({ children, setUser, user }) {
       {isPlatformAdmin && <><Link className='nav-link' to='/telemetry'>Telemetry</Link><Link className='nav-link' to='/troubleshooting'>Troubleshooting</Link></>}
       {isPlatformAdmin && <Link className='nav-link' to='/admin/proxmox-setup'>Proxmox Setup</Link>}
       {isPlatformAdmin && <Link className='nav-link' to='/admin/proxmox-inventory'>Proxmox Inventory</Link>}
+      {isPlatformAdmin && <Link className='nav-link' to='/admin/templates'>Templates</Link>}
       {isPlatformAdmin && <Link className='nav-link' to='/admin/proxmox-assets'>Proxmox Assets</Link>}
       {isPlatformAdmin && <Link className='nav-link' to='/admin/users'>Users</Link>}
       {isTenantAdmin && <Link className='nav-link' to='/admin/groups'>Groups</Link>}
       {isPlatformAdmin && <Link className='nav-link' to='/admin/organizations'>Organizations</Link>}
       {isPlatformAdmin && <Link className='nav-link' to='/admin/system-update'>System Updates</Link>}
-      <button onClick={logout} style={{marginTop: 10, width: '100%'}}>Logout</button>
+      <button onClick={logout} disabled={logoutBusy} style={{marginTop: 10, width: '100%'}}>{logoutBusy ? 'Signing out…' : 'Logout'}</button>
+      {logoutError ? <div className='msg error sidebar-message' role='alert'>{logoutError}</div> : null}
       <div className='brand-footer'>Real Skills. Virtual Machines.</div>
       <div style={{marginTop:8, color:'#738096', fontSize:11}}>Current: {loc.pathname}</div>
     </aside>
-    <main className='content'>{!organizationReady ? <section className='panel'>Selecting organization…</section> : organizationError ? <section className='panel error'>{organizationError}</section> : organizations.length > 0 && !organizationId ? <section className='panel'>Select an organization to continue.</section> : children}</main>
+    <AccessContext.Provider value={access}><main className='content'>{!organizationReady ? <section className='panel'>Selecting organization…</section> : organizationError ? <section className='panel error'>{organizationError}</section> : organizations.length > 0 && !organizationId ? <section className='panel'>Select an organization to continue.</section> : children}</main></AccessContext.Provider>
   </div>
 }

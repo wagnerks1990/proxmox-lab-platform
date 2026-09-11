@@ -16,11 +16,13 @@ class Settings(BaseSettings):
     auth_cookie_name: str = "labgoblin_session"
     auth_cookie_secure: bool = False
     cors_allowed_origins: str = ""
+    browser_trusted_origins: str = ""
 
     proxmox_base_url: str
     proxmox_token_id: str
     proxmox_token_secret: str
     proxmox_verify_ssl: bool = True
+    proxmox_allow_insecure_tls: bool = False
     app_secret_key: str | None = None
     config_encryption_key: str | None = None
 
@@ -36,6 +38,8 @@ class Settings(BaseSettings):
     guacamole_datasource: str = "postgresql"
     guacamole_verify_ssl: bool = True
 
+    ssh_terminal_enabled: bool = False
+
     heartbeat_timeout_seconds: int = 60
     session_reconnect_timeout_seconds: int = 180
     session_idle_timeout_seconds: int = 900
@@ -50,6 +54,9 @@ class Settings(BaseSettings):
     operation_poll_interval_seconds: int = 2
     operation_lease_seconds: int = 180
     operation_max_attempts: int = 3
+    operation_task_timeout_seconds: int = 900
+    operation_clone_timeout_seconds: int = 3600
+    operation_delete_timeout_seconds: int = 900
 
     replay_store_backend: str = "memory"
     worker_lock_backend: str = "memory"

@@ -4,6 +4,8 @@ import uuid
 
 from app.db.session import SessionLocal
 from app.services.operation_service import (
+    OperationAuthorizationError,
+    cancel_unauthorized_operation,
     claim_operation,
     execute_operation,
     fail_or_retry,
@@ -20,6 +22,12 @@ def run_once() -> dict[str, int]:
         try:
             asyncio.run(execute_operation(db, row))
             return {"claimed": 1, "succeeded": 1}
+        except OperationAuthorizationError as exc:
+            db.rollback()
+            row = db.query(type(row)).filter(type(row).id == row.id).first()
+            if row:
+                cancel_unauthorized_operation(db, row, exc)
+            return {"claimed": 1, "cancelled": 1}
         except Exception as exc:
             db.rollback()
             row = db.query(type(row)).filter(type(row).id == row.id).first()

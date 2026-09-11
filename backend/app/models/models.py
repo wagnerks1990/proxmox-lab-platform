@@ -42,6 +42,10 @@ class OrganizationMembership(Base):
         UniqueConstraint(
             "organization_id", "user_id", name="uq_organization_membership_user"
         ),
+        CheckConstraint(
+            "role IN ('student', 'instructor', 'admin', 'owner')",
+            name="ck_organization_membership_role",
+        ),
     )
     id = Column(Integer, primary_key=True)
     organization_id = Column(
@@ -203,6 +207,9 @@ class VMTemplate(Base):
 
 class Permission(Base):
     __tablename__ = "permissions"
+    __table_args__ = (
+        UniqueConstraint("user_id", "template_id", name="uq_permissions_user_template"),
+    )
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     template_id = Column(Integer, ForeignKey("vm_templates.id"), nullable=False)
@@ -210,7 +217,11 @@ class Permission(Base):
 
 class StudentVM(Base):
     __tablename__ = "student_vms"
-    __table_args__ = (UniqueConstraint("vmid", name="uq_student_vms_vmid"),)
+    __table_args__ = (
+        UniqueConstraint(
+            "proxmox_cluster_id", "vmid", name="uq_student_vms_cluster_vmid"
+        ),
+    )
     id = Column(Integer, primary_key=True)
     organization_id = Column(
         Integer, ForeignKey("organizations.id"), nullable=False, index=True
@@ -616,6 +627,10 @@ class LabRun(Base):
             "state IN ('draft', 'scheduled', 'active', 'ended', 'cancelled')",
             name="ck_lab_runs_state",
         ),
+        CheckConstraint(
+            "max_vms_per_student >= 1 AND max_vms_per_student <= 10",
+            name="ck_lab_runs_vm_quota",
+        ),
     )
     id = Column(Integer, primary_key=True)
     organization_id = Column(
@@ -649,6 +664,7 @@ class LabAssignment(Base):
             "status IN ('assigned', 'ready', 'expired', 'revoked')",
             name="ck_lab_assignments_status",
         ),
+        CheckConstraint("slot_index >= 1", name="ck_lab_assignments_slot"),
     )
     id = Column(Integer, primary_key=True)
     organization_id = Column(

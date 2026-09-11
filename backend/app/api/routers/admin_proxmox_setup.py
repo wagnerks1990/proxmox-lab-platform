@@ -441,7 +441,15 @@ def patch_cluster(
     row = db.query(ProxmoxCluster).filter(ProxmoxCluster.id == id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Cluster not found")
-    for key in ["name", "api_url", "verify_ssl"]:
+    if "api_url" in payload or "verify_ssl" in payload:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Cluster endpoint and TLS policy cannot be changed in place. "
+                "Create or validate a new credential-bound cluster configuration."
+            ),
+        )
+    for key in ["name"]:
         if key in payload:
             setattr(row, key, payload[key])
     db.commit()
@@ -455,6 +463,22 @@ def delete_cluster(
     row = db.query(ProxmoxCluster).filter(ProxmoxCluster.id == id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Cluster not found")
+    dependency_counts = {
+        "templates": db.query(VMTemplate)
+        .filter(VMTemplate.proxmox_cluster_id == id)
+        .count(),
+        "vm_history": db.query(StudentVM)
+        .filter(StudentVM.proxmox_cluster_id == id)
+        .count(),
+    }
+    if any(dependency_counts.values()):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "Cluster cannot be deleted while templates or VM history reference it.",
+                "dependencies": dependency_counts,
+            },
+        )
     db.query(ProxmoxNode).filter(ProxmoxNode.cluster_id == id).delete()
     db.query(ProxmoxClusterDefault).filter(
         ProxmoxClusterDefault.cluster_id == id
@@ -600,7 +624,10 @@ async def manual_token(
             status_code=422, detail={"error": f"Missing fields: {', '.join(missing)}"}
         )
     svc = ProxmoxBootstrapService(db)
-    result = await svc.upsert_manual_token(payload)
+    try:
+        result = await svc.upsert_manual_token(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     if not result.get("ok"):
         raise HTTPException(status_code=400, detail=result)
     return result

@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import router
 from app.middleware.request_id import RequestIdMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
+from app.middleware.csrf import CookieCsrfMiddleware
 from app.core.config import settings
 from app.telemetry.subscribers import register_subscribers
 from app.workers.scheduler import start_scheduler, stop_scheduler
@@ -27,6 +28,7 @@ app = FastAPI(
 )
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestIdMiddleware)
+app.add_middleware(CookieCsrfMiddleware)
 allowed_origins = [
     origin.strip()
     for origin in settings.cors_allowed_origins.split(",")

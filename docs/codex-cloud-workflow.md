@@ -35,7 +35,9 @@ Run:
 git status --short
 ```
 
-If the working tree is not clean, Codex should stop and report dirty files before making changes.
+If the working tree is not clean, Codex must identify and preserve unrelated
+changes. It may continue only when its work can be isolated safely; otherwise it
+must stop and report the conflict.
 
 ## E. Recommended Cloud checks
 These may require dependencies to already exist in the environment.
@@ -70,6 +72,12 @@ Cloud-safe validation script:
 ./scripts/codex_cloud_check.sh
 ```
 
+This is a strict gate covering required repository files, branding and repository
+hygiene, shell and Compose syntax, backend formatting/lint/tests/security audits,
+frontend tests/build/audit, generated-contract drift, and the strict documentation
+build. A missing tool or dependency is a failed gate with setup guidance, not a
+skipped success.
+
 Branding/repository validation:
 
 ```bash
@@ -77,31 +85,28 @@ python scripts/check_branding.py
 ```
 
 ## F. Dependency note
-If the environment setup is minimal and dependencies are not installed, Codex must not fake build/test success. It should report that dependency-backed checks were not run and explain why.
+If the environment setup is minimal and dependencies are not installed, the
+validation script exits nonzero and prints setup guidance. Codex must report that
+failure and must not describe the gate as passed.
 
-## G. Manual Ubuntu server validation checklist
+## G. Ubuntu appliance validation checklist
 
 Fresh LabGoblin installations use `/opt/labgoblin` and LabGoblin-prefixed services and helpers.
 
 ```bash
 cd /opt/labgoblin/app
-git pull
-
-cd backend
-source venv/bin/activate
-alembic heads
-alembic upgrade heads
-python scripts/validate_deploy.py
-
-cd ../frontend
-npm ci
-npm test
-npm run build
-
-sudo nginx -t
-sudo systemctl restart labgoblin-updater.service
-curl http://127.0.0.1:8080/api/ready
+sudo systemctl status labgoblin-updater.service --no-pager
+sudo docker compose --env-file .env ps
+sudo docker compose --env-file .env exec -T api alembic current
+sudo docker compose --env-file .env exec -T api alembic heads
+sudo docker compose --env-file .env exec -T api python scripts/validate_deploy.py
+curl -fsS http://127.0.0.1:8080/api/ready
 ```
+
+Use the administrator update workflow for deployed upgrades. Do not bypass its
+backup, exact-commit, health, and rollback controls with `git pull`, a host
+virtualenv, or a manual frontend build. Complete and retain the evidence listed
+in [Pre-production acceptance](operations/preproduction-acceptance.md).
 
 ## H. Manual browser validation checklist
 - LabGoblin branding appears on login and application shell
@@ -119,7 +124,7 @@ curl http://127.0.0.1:8080/api/ready
 - Telemetry page loads
 - Session Activity page loads
 - SSE stream connects
-- Web Terminal behavior is clear and not fake
+- Web Terminal is hidden or denied unless its pilot security prerequisites are enabled and validated
 - unsupported protocol buttons are hidden or disabled
 
 ## I. Branding validation

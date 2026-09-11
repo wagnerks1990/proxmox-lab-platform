@@ -7,12 +7,14 @@ from urllib.parse import urlencode
 import websockets
 
 from app.core.config import settings
+from app.api.deps import get_user_from_token
 from app.models.models import User, StudentVM, AuditLog
+from app.services.console_access import get_console_vm_for_user
+from app.services.organization_access import resolve_organization_context
 from app.services.proxmox import ProxmoxClient
 from app.db.tx import safe_commit
 from app.architecture.async_retry import async_retry_with_backoff
 from app.services.session_service import SessionService
-from app.services.classroom_access import enforce_student_vm_operation
 
 
 class ConsoleWsService:
@@ -37,27 +39,44 @@ class ConsoleWsService:
         user: User,
         vm: StudentVM,
         operation: str,
+        auth_token: str,
+        organization_id: int,
     ) -> None:
         while True:
             await asyncio.sleep(30)
             self.db.expire_all()
-            if user.role_rel and user.role_rel.name == "Student":
-                try:
-                    enforce_student_vm_operation(
-                        self.db,
-                        user_id=user.id,
-                        organization_id=vm.organization_id,
-                        vm=vm,
-                        operation=operation,
+            try:
+                current_user = get_user_from_token(auth_token, self.db)
+                if getattr(current_user, "force_password_change", False):
+                    raise HTTPException(
+                        status_code=403, detail="Password change required"
                     )
-                except HTTPException:
-                    await websocket.close(code=1008, reason="Classroom access ended")
-                    return
+                organization = resolve_organization_context(
+                    self.db, current_user, organization_id
+                )
+                get_console_vm_for_user(
+                    self.db,
+                    user=current_user,
+                    vm_id=vm.id,
+                    organization=organization,
+                    operation=operation,
+                )
+            except HTTPException:
+                await websocket.close(code=1008, reason="Console access revoked")
+                return
             if not service.heartbeat(session_id):
                 await websocket.close(code=1008, reason="Session expired")
                 return
 
-    async def ssh_ws(self, websocket: WebSocket, user: User, vm: StudentVM):
+    async def ssh_ws(
+        self,
+        websocket: WebSocket,
+        user: User,
+        vm: StudentVM,
+        *,
+        auth_token: str,
+        organization_id: int,
+    ):
         proxmox = ProxmoxClient(cluster_id=vm.proxmox_cluster_id)
         host = vm.assigned_ip
         if not host:
@@ -142,7 +161,14 @@ class ConsoleWsService:
                 t2 = asyncio.create_task(from_ws())
                 watchdog = asyncio.create_task(
                     self._watch_session_access(
-                        websocket, svc, session.id, user, vm, "terminal"
+                        websocket,
+                        svc,
+                        session.id,
+                        user,
+                        vm,
+                        "terminal",
+                        auth_token,
+                        organization_id,
                     )
                 )
                 _done, pending = await asyncio.wait(
@@ -163,7 +189,15 @@ class ConsoleWsService:
         finally:
             svc.mark_disconnected(session.id)
 
-    async def novnc_ws(self, websocket: WebSocket, user: User, vm: StudentVM):
+    async def novnc_ws(
+        self,
+        websocket: WebSocket,
+        user: User,
+        vm: StudentVM,
+        *,
+        auth_token: str,
+        organization_id: int,
+    ):
         proxmox = ProxmoxClient(cluster_id=vm.proxmox_cluster_id)
         if not vm.console_enabled:
             await websocket.close(code=1008, reason="Console disabled for VM")
@@ -234,7 +268,14 @@ class ConsoleWsService:
                 t2 = asyncio.create_task(p2c())
                 watchdog = asyncio.create_task(
                     self._watch_session_access(
-                        websocket, svc, session.id, user, vm, "console"
+                        websocket,
+                        svc,
+                        session.id,
+                        user,
+                        vm,
+                        "console",
+                        auth_token,
+                        organization_id,
                     )
                 )
                 _done, pending = await asyncio.wait(

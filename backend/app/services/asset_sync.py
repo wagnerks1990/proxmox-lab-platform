@@ -4,8 +4,9 @@ import asyncio
 import ast
 import json
 import math
+import ipaddress
 from datetime import datetime, timedelta
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 from sqlalchemy.orm import Session
 
@@ -14,22 +15,51 @@ from app.services.proxmox_assets import ProxmoxAssetsService
 from app.db.session import SessionLocal
 from app.core.config import settings
 
-ALLOWED_HOSTS = {"10.0.16.126", "127.0.0.1", "localhost"}
-
 
 class AssetSyncService:
     def __init__(self, db: Session):
         self.db = db
         self.assets = ProxmoxAssetsService()
 
-    def _validate_url(self, source_url: str):
+    @staticmethod
+    def _origin(parsed) -> tuple[str, str, int]:
+        if not parsed.hostname:
+            raise ValueError("asset source URL must include a host")
+        try:
+            port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        except ValueError as exc:
+            raise ValueError("asset source URL has an invalid port") from exc
+        return parsed.scheme.lower(), parsed.hostname.lower(), port
+
+    def _validate_url(self, source_url: str, *, base_url: str | None, filename: str):
+        if not base_url:
+            raise ValueError("asset source base URL is not configured")
         p = urlparse(source_url)
+        base = urlparse(base_url)
         if p.scheme not in {"http", "https"}:
             raise ValueError("source_url must use http/https")
-        if p.username or p.password:
+        if p.username or p.password or p.query or p.fragment:
             raise ValueError("source_url must not include credentials")
-        if p.hostname not in ALLOWED_HOSTS:
-            raise ValueError(f"source_url host not allowlisted: {p.hostname}")
+        if base.scheme not in {"http", "https"} or base.username or base.password:
+            raise ValueError("configured asset source base URL is invalid")
+        if base.query or base.fragment or self._origin(p) != self._origin(base):
+            raise ValueError("source_url origin does not match configured asset source")
+        try:
+            address = ipaddress.ip_address(p.hostname or "")
+        except ValueError:
+            address = None
+        if address and (
+            address.is_loopback
+            or address.is_link_local
+            or address.is_unspecified
+            or address.is_multicast
+        ):
+            raise ValueError("asset source address is not safe")
+        if not filename or any(part in filename for part in ("..", "/", "\\")):
+            raise ValueError("asset filename is invalid")
+        expected_path = f"{unquote(base.path).rstrip('/')}/{filename}"
+        if unquote(p.path) != expected_path:
+            raise ValueError("source_url path is outside the configured asset source")
 
     async def _validate_targets(self, target_nodes: list[str], storage_id: str):
         nodes = await self.assets.discover_nodes()
@@ -172,7 +202,11 @@ class AssetSyncService:
     async def enqueue_iso(
         self, filename: str, storage_id: str, source_url: str, target_nodes: list[str]
     ):
-        self._validate_url(source_url)
+        self._validate_url(
+            source_url,
+            base_url=settings.asset_source_iso_base_url,
+            filename=filename,
+        )
         await self._validate_targets(target_nodes, storage_id)
         jobs = []
         for node in target_nodes:
@@ -196,7 +230,11 @@ class AssetSyncService:
     async def enqueue_ct_template(
         self, filename: str, storage_id: str, source_url: str, target_nodes: list[str]
     ):
-        self._validate_url(source_url)
+        self._validate_url(
+            source_url,
+            base_url=settings.asset_source_ct_base_url,
+            filename=filename,
+        )
         await self._validate_targets(target_nodes, storage_id)
         jobs = []
         for node in target_nodes:

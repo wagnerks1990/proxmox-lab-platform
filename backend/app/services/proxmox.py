@@ -5,6 +5,7 @@ from app.architecture.async_retry import async_retry_with_backoff
 from app.db.session import SessionLocal
 from app.models.models import ProxmoxCluster
 from app.services.secret_crypto import decrypt_secret
+from app.services.proxmox_url import canonicalize_proxmox_api_url
 
 
 class ProxmoxClient:
@@ -35,6 +36,12 @@ class ProxmoxClient:
             raise RuntimeError(
                 "Proxmox is not configured. Complete Admin > Proxmox Setup."
             )
+        try:
+            self.base_url = canonicalize_proxmox_api_url(
+                self.base_url, verify_ssl=self.verify_ssl
+            )
+        except ValueError as exc:
+            raise RuntimeError(f"Unsafe Proxmox API configuration: {exc}") from exc
 
     def _load_cluster(self, cluster_id: int | None):
         db = SessionLocal()

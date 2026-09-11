@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_, select
 
 from app.api.deps import get_user_from_token, get_current_user
-from app.db.session import get_db
+from app.db.session import SessionLocal, get_db
 from app.models.models import AuditLog, StudentVM, TelemetryEvent, WorkerRun
 from app.services.organization_access import (
     OrganizationContext,
@@ -72,6 +72,22 @@ def first_present(obj, *field_names, default=None):
     return default
 
 
+def _sse_access_allowed(token: str, organization_id: int) -> bool:
+    """Revalidate the original session and tenant role for a live SSE stream."""
+    live_db = SessionLocal()
+    try:
+        user = get_user_from_token(token, live_db)
+        if getattr(user, "force_password_change", False):
+            return False
+        organization = resolve_organization_context(live_db, user, organization_id)
+        enforce_organization_role(organization, "instructor")
+        return True
+    except (HTTPException, TypeError, ValueError):
+        return False
+    finally:
+        live_db.close()
+
+
 @router.get("/admin/events/stream")
 async def events_stream(request: Request, db: Session = Depends(get_db)):
     auth = request.headers.get("authorization", "")
@@ -98,8 +114,16 @@ async def events_stream(request: Request, db: Session = Depends(get_db)):
 
     async def gen():
         q = event_stream.subscribe()
+        last_revalidation = 0.0
         try:
             while True:
+                now = asyncio.get_running_loop().time()
+                if await request.is_disconnected():
+                    return
+                if now - last_revalidation >= 10:
+                    if not _sse_access_allowed(token, organization.id):
+                        return
+                    last_revalidation = now
                 try:
                     evt = await asyncio.wait_for(q.get(), timeout=10)
                     if safe_int(evt.get("organization_id")) != organization.id:

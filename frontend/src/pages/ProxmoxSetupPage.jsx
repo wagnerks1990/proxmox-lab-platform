@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import api from '../services/api'
 
-const bootstrapInit = { name:'Primary Proxmox', api_url:'', verify_ssl:false, root_username:'root@pam', root_password:'', token_id:'labgoblin' }
-const manualInit = { name:'Primary Proxmox', api_url:'', verify_ssl:false, token_user:'root@pam', token_id:'labgoblin', token_secret:'' }
+const bootstrapInit = { name:'Primary Proxmox', api_url:'', verify_ssl:true, root_username:'root@pam', root_password:'', token_id:'labgoblin' }
+const manualInit = { name:'Primary Proxmox', api_url:'', verify_ssl:true, token_user:'root@pam', token_id:'labgoblin', token_secret:'' }
 const defaultsInit = { default_node:'', default_storage:'', default_bridge:'', default_template_vmid:'', clone_mode:'full', placement_policy:'', notes:'' }
 
 export default function ProxmoxSetupPage(){

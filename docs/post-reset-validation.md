@@ -38,6 +38,7 @@ python scripts/validate_deploy.py
 
 # Optional development lab seed values
 export DEV_TEMPLATE_NAME="Linux Lab Template"
+export DEV_ORGANIZATION_SLUG="default"
 export DEV_TEMPLATE_VMID="<template-vmid>"
 export DEV_TEMPLATE_NODE="<proxmox-node>"
 export DEV_TEMPLATE_OS="Linux"
@@ -49,6 +50,7 @@ python scripts/validate_post_reset_state.py
 ```
 
 Actual Proxmox template VMIDs/nodes must be supplied by an administrator (or set through env vars) when seeding template/pool defaults.
+`DEV_ORGANIZATION_SLUG` is required and must identify an enabled organization; seed records are created or updated only inside that organization.
 
 Default development login after reset:
 - username: `admin`

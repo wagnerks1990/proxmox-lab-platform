@@ -51,9 +51,9 @@ guest or the control plane.
 - VM access uses per-assignment or short-lived credentials, never one shared password.
 - Browser clients never receive Proxmox API credentials.
 - Long-term JWTs, console tickets, reconnect grants, and provider keys must not
-  be placed in query strings. The current SSE and WebSocket compatibility paths
-  still carry a revocable access token in the query string; replacing those
-  paths with short-lived, audience-bound grants is required before production.
+  be placed in query strings. Current SSE and WebSocket paths authenticate with
+  the HttpOnly session cookie; future launch grants must remain short-lived,
+  audience-bound, server-side validated, and absent from browser URLs.
 - Access JWTs are bound to revocable database sessions and a per-user token
   version. Logout, password reset, username change, and account disablement
   invalidate affected sessions immediately.

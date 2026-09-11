@@ -4,12 +4,20 @@ Run from the repository root with safe test-only environment values:
 
 ```bash
 pip install -r backend/requirements.txt -r backend/requirements-dev.txt
-PYTHONPATH=backend alembic -c backend/alembic.ini upgrade head
-PYTHONPATH=backend pytest -q backend/tests
-ruff check --select E9,F63,F7,F82 backend/app backend/tests deploy scripts
-bandit -r backend/app deploy -lll -q
+python -m compileall -q backend/app backend/tests
+ruff format --check backend/app backend/tests deploy scripts tests
+ruff check backend/app backend/tests deploy scripts tests
+bandit -r backend/app deploy -ll -q
 pip-audit -r backend/requirements.txt
-cd frontend && npm ci && npm test && npm run build && npm audit --omit=dev
+PYTHONPATH=backend alembic -c backend/alembic.ini upgrade head
+PYTHONPATH=backend alembic -c backend/alembic.ini check
+PYTHONPATH=backend pytest -q backend/tests
+python scripts/check_branding.py
+python scripts/check_repository_hygiene.py
+mkdocs build --strict
+sh -n deploy/install.sh backend/docker-entrypoint.sh
+docker compose -f docker-compose.yml -f docker-compose.live-test.yml config --quiet
+cd frontend && npm ci && npm test && npm run build && npm audit --audit-level=moderate
 ```
 
 Regenerate the API contract after route or schema changes:
@@ -20,4 +28,17 @@ scripts/generate_api_contract.sh
 
 CI fails if `frontend/openapi.json` or `frontend/src/generated/api-schema.d.ts` drifts. Generated types are the frontend/backend contract; do not maintain a conflicting handwritten schema.
 
-These checks do not validate a live Proxmox cluster, host networking, systemd permissions, browser compatibility, or real backup restoration.
+`scripts/codex_cloud_check.sh` runs the complete local gate and fails with setup
+guidance when a required tool or installed dependency is missing. It never treats
+a skipped validation as success. CI additionally migrates disposable PostgreSQL,
+verifies its current revision equals the repository head, and explicitly imports
+every runtime Python module.
+
+The backend commands require the safe test environment values used by CI and a
+disposable PostgreSQL database. The GitHub workflow is the canonical executable
+reference when reproducing them locally.
+
+These checks do not validate a live Proxmox cluster, host networking, systemd
+permissions, browser compatibility, TLS termination, update failure recovery,
+or real backup restoration. Record those results with the
+[pre-production acceptance checklist](../operations/preproduction-acceptance.md).

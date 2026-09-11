@@ -44,31 +44,48 @@ class DB:
 
 
 @pytest.mark.asyncio
-async def test_url_safety_rejects_bad_scheme():
+async def test_url_safety_rejects_bad_scheme(monkeypatch):
     s = AssetSyncService(DB())
+    from app.core.config import settings
+
+    monkeypatch.setattr(
+        settings, "asset_source_iso_base_url", "http://192.0.2.10/assets/iso"
+    )
     with pytest.raises(ValueError):
-        await s.enqueue_iso("a.iso", "local", "ftp://10.0.16.126/a.iso", ["pve-lab-01"])
+        await s.enqueue_iso(
+            "a.iso", "local", "ftp://192.0.2.10/assets/iso/a.iso", ["pve-lab-01"]
+        )
 
 
 @pytest.mark.asyncio
-async def test_url_safety_rejects_credentials():
+async def test_url_safety_rejects_credentials(monkeypatch):
     s = AssetSyncService(DB())
+    from app.core.config import settings
+
+    monkeypatch.setattr(
+        settings, "asset_source_iso_base_url", "http://192.0.2.10/assets/iso"
+    )
     with pytest.raises(ValueError):
         await s.enqueue_iso(
-            "a.iso", "local", "http://u:p@10.0.16.126/a.iso", ["pve-lab-01"]
+            "a.iso", "local", "http://u:p@192.0.2.10/assets/iso/a.iso", ["pve-lab-01"]
         )
 
 
 @pytest.mark.asyncio
 async def test_enqueue_iso_creates_queued_job(monkeypatch):
     s = AssetSyncService(DB())
+    from app.core.config import settings
+
+    monkeypatch.setattr(
+        settings, "asset_source_iso_base_url", "http://192.0.2.10/assets/iso"
+    )
 
     async def _ok_targets(*_args, **_kwargs):
         return None
 
     monkeypatch.setattr(s, "_validate_targets", _ok_targets)
     jobs = await s.enqueue_iso(
-        "ubuntu.iso", "local", "http://10.0.16.126/ubuntu.iso", ["pve-lab-02"]
+        "ubuntu.iso", "local", "http://192.0.2.10/assets/iso/ubuntu.iso", ["pve-lab-02"]
     )
     assert jobs[0].state == "queued"
     assert jobs[0].finished_at is None
@@ -80,7 +97,7 @@ async def test_process_job_ok_transitions_verified(monkeypatch):
     job = Obj(
         id=1,
         method="download-url-iso",
-        metadata_json="{'filename':'ubuntu.iso','storage_id':'local','source_url':'http://10.0.16.126/ubuntu.iso'}",
+        metadata_json="{'filename':'ubuntu.iso','storage_id':'local','source_url':'http://192.0.2.10/assets/iso/ubuntu.iso'}",
         target_node="pve-lab-02",
         state="queued",
         proxmox_upid=None,
@@ -120,6 +137,32 @@ async def test_process_job_ok_transitions_verified(monkeypatch):
     assert job.state == "verified"
     assert job.proxmox_upid == "UPID:node:200"
     assert job.finished_at is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "source_url",
+    [
+        "http://127.0.0.1:8088/ubuntu.iso",
+        "http://169.254.169.254/ubuntu.iso",
+        "http://192.0.2.11/assets/iso/ubuntu.iso",
+        "http://192.0.2.10/admin/ubuntu.iso",
+        "http://192.0.2.10/assets/iso/../admin/ubuntu.iso",
+        "http://192.0.2.10/assets/iso/ubuntu.iso?token=secret",
+    ],
+)
+async def test_url_safety_rejects_non_configured_or_unsafe_destination(
+    monkeypatch, source_url
+):
+    from app.core.config import settings
+
+    monkeypatch.setattr(
+        settings, "asset_source_iso_base_url", "http://192.0.2.10/assets/iso"
+    )
+    with pytest.raises(ValueError):
+        await AssetSyncService(DB()).enqueue_iso(
+            "ubuntu.iso", "local", source_url, ["pve-lab-01"]
+        )
 
 
 @pytest.mark.asyncio

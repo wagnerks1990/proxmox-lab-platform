@@ -1,9 +1,11 @@
 # Development Workflow
 
 ## Branch model
-- `main`: stable production
-- `develop`: integration testing
-- `feature/*`: scoped implementation
+- `main`: source of truth for the current alpha and release candidates
+- `feature/*`, `fix/*`, and `audit/*`: scoped branches created from `main`
+
+There is no active `develop` branch. Merging to `main` does not by itself confer
+production support; the pre-production acceptance gates remain authoritative.
 
 ## Backend refactor policy
 - Keep API paths backward-compatible during route splitting.
@@ -19,10 +21,12 @@
 - Never drop data as part of Codex migration fixes.
 
 ## Safe testing policy
-- Allowed in Codex:
-  - `python3 -m compileall backend/app`
-  - `cd frontend && npm run build`
-- Disallowed in Codex:
-  - destructive Proxmox actions
-  - deployment scripts
-  - live runtime integration/destructive tests
+- Safe local and disposable validation is expected when its dependencies are
+  available. Use `docs/development/validation.md` for the canonical commands.
+- The disposable Compose live test may run only against its isolated local
+  database and simulator with the required destructive-test acknowledgement.
+- Never run destructive actions against a real Proxmox cluster, a reused
+  database, or an actual deployment from an unattended development environment.
+- Real-cluster, browser-console, TLS, update-recovery, and restore tests belong
+  to the isolated acceptance environment and must be recorded in the
+  pre-production acceptance checklist.

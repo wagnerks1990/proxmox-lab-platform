@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.models.models import ProxmoxCluster, ProxmoxNode, ProxmoxClusterDefault
 from app.services.secret_crypto import encrypt_secret, decrypt_secret
+from app.services.proxmox_url import canonicalize_proxmox_api_url
 
 
 TOKEN_ID_DEFAULT = "labgoblin"
@@ -14,8 +15,10 @@ class ProxmoxBootstrapService:
         self.db = db
 
     async def bootstrap_with_root(self, payload: dict) -> dict:
-        api_url = payload["api_url"].rstrip("/")
         verify_ssl = bool(payload.get("verify_ssl", True))
+        api_url = canonicalize_proxmox_api_url(
+            payload["api_url"], verify_ssl=verify_ssl
+        )
         root_username = payload.get("root_username", "root@pam")
         root_password = payload["root_password"]
         cluster_name = payload["name"]
@@ -98,8 +101,10 @@ class ProxmoxBootstrapService:
         }
 
     async def upsert_manual_token(self, payload: dict) -> dict:
-        api_url = payload["api_url"].rstrip("/")
         verify_ssl = bool(payload.get("verify_ssl", True))
+        api_url = canonicalize_proxmox_api_url(
+            payload["api_url"], verify_ssl=verify_ssl
+        )
         name = payload["name"]
         token_user = payload["token_user"]
         token_id = payload["token_id"]
@@ -141,7 +146,9 @@ class ProxmoxBootstrapService:
         headers = self._cluster_headers(cluster)
         if not headers:
             return {"ok": False, "error": "missing token secret"}
-        async with httpx.AsyncClient(verify=cluster.verify_ssl, timeout=20) as client:
+        async with httpx.AsyncClient(
+            verify=cluster.verify_ssl, timeout=20, follow_redirects=False
+        ) as client:
             r = await client.get(f"{cluster.api_url}/nodes", headers=headers)
             r.raise_for_status()
             nodes = r.json().get("data", [])
@@ -153,7 +160,10 @@ class ProxmoxBootstrapService:
             return []
         out: list[dict] = []
         async with httpx.AsyncClient(
-            verify=cluster.verify_ssl, timeout=20, headers=headers
+            verify=cluster.verify_ssl,
+            timeout=20,
+            headers=headers,
+            follow_redirects=False,
         ) as client:
             nodes_resp = await client.get(f"{cluster.api_url}/nodes")
             nodes_resp.raise_for_status()
@@ -183,7 +193,10 @@ class ProxmoxBootstrapService:
             return []
         out: list[dict] = []
         async with httpx.AsyncClient(
-            verify=cluster.verify_ssl, timeout=20, headers=headers
+            verify=cluster.verify_ssl,
+            timeout=20,
+            headers=headers,
+            follow_redirects=False,
         ) as client:
             nodes_resp = await client.get(f"{cluster.api_url}/nodes")
             nodes_resp.raise_for_status()
@@ -214,7 +227,10 @@ class ProxmoxBootstrapService:
             return []
         out: list[dict] = []
         async with httpx.AsyncClient(
-            verify=cluster.verify_ssl, timeout=20, headers=headers
+            verify=cluster.verify_ssl,
+            timeout=20,
+            headers=headers,
+            follow_redirects=False,
         ) as client:
             nodes_resp = await client.get(f"{cluster.api_url}/nodes")
             nodes_resp.raise_for_status()
@@ -245,7 +261,10 @@ class ProxmoxBootstrapService:
         out: list[dict] = []
         warnings: list[str] = []
         async with httpx.AsyncClient(
-            verify=cluster.verify_ssl, timeout=20, headers=headers
+            verify=cluster.verify_ssl,
+            timeout=20,
+            headers=headers,
+            follow_redirects=False,
         ) as client:
             nodes_resp = await client.get(f"{cluster.api_url}/nodes")
             nodes_resp.raise_for_status()
@@ -294,7 +313,9 @@ class ProxmoxBootstrapService:
     async def _login(
         self, api_url: str, verify_ssl: bool, username: str, password: str
     ) -> dict:
-        async with httpx.AsyncClient(verify=verify_ssl, timeout=20) as client:
+        async with httpx.AsyncClient(
+            verify=verify_ssl, timeout=20, follow_redirects=False
+        ) as client:
             r = await client.post(
                 f"{api_url}/access/ticket",
                 data={"username": username, "password": password},
@@ -312,7 +333,11 @@ class ProxmoxBootstrapService:
         cookies = {"PVEAuthCookie": auth["ticket"]}
         headers = {"CSRFPreventionToken": auth["csrf"]}
         async with httpx.AsyncClient(
-            verify=verify_ssl, timeout=20, cookies=cookies, headers=headers
+            verify=verify_ssl,
+            timeout=20,
+            cookies=cookies,
+            headers=headers,
+            follow_redirects=False,
         ) as client:
             r = await client.get(f"{api_url}/cluster/resources")
             r.raise_for_status()
@@ -324,7 +349,11 @@ class ProxmoxBootstrapService:
         cookies = {"PVEAuthCookie": auth["ticket"]}
         headers = {"CSRFPreventionToken": auth["csrf"]}
         async with httpx.AsyncClient(
-            verify=verify_ssl, timeout=20, cookies=cookies, headers=headers
+            verify=verify_ssl,
+            timeout=20,
+            cookies=cookies,
+            headers=headers,
+            follow_redirects=False,
         ) as client:
             r = await client.post(
                 f"{api_url}/access/users/{user}/token/{token_id}", data={"privsep": 0}
@@ -351,7 +380,10 @@ class ProxmoxBootstrapService:
             "Authorization": f"PVEAPIToken={token_user}!{token_id}={token_secret}"
         }
         async with httpx.AsyncClient(
-            verify=verify_ssl, timeout=20, headers=headers
+            verify=verify_ssl,
+            timeout=20,
+            headers=headers,
+            follow_redirects=False,
         ) as client:
             r = await client.get(f"{api_url}/cluster/resources")
             if r.status_code >= 400:
