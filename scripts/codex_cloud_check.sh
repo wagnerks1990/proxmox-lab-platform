@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "=== Proxmox Lab Platform: Codex Cloud Check ==="
+echo "=== LabGoblin: Codex Cloud Check ==="
 
 echo "=== Git status ==="
 git status --short

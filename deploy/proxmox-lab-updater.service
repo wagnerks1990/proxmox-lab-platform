@@ -1,5 +1,5 @@
 [Unit]
-Description=Proxmox Lab Platform Update Agent
+Description=LabGoblin Update Agent
 After=docker.service network-online.target
 Requires=docker.service
 
@@ -9,6 +9,8 @@ Group=proxmox-lab-updater
 EnvironmentFile=/opt/proxmox-lab-platform/app/.env
 Environment=PLATFORM_APP_DIR=/opt/proxmox-lab-platform/app
 Environment=PLATFORM_STATE_DIR=/var/lib/proxmox-lab-platform
+# Compatibility note: legacy filesystem, service, and group identifiers are
+# intentionally retained until a tested installed-system migration exists.
 # Keep Docker's client state outside /root, which is intentionally hidden by
 # ProtectHome=true. This permits Compose builds without weakening that sandbox.
 Environment=DOCKER_CONFIG=/var/lib/proxmox-lab-platform/docker

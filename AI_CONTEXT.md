@@ -1,10 +1,39 @@
-# AI contributor context
+# LabGoblin AI contributor context
 
-Read this file, `AGENTS.md`, and the documentation page for the feature before changing code.
+Read this file, `AGENTS.md`, `docs/brand.md`, and the documentation page for the feature before changing code.
+
+## Canonical identity
+
+- Product: **LabGoblin**
+- Category: **Virtual Lab Provisioning & Management**
+- Primary tagline: **Real Skills. Virtual Machines.**
+- Campaign line: **Build. Deploy. Learn. Repeat.**
+- Legacy identity: `Proxmox Lab Platform` / `proxmox-lab-platform`
+
+All new user-facing text must use **LabGoblin**. Proxmox VE is an infrastructure integration, not part of the product name.
 
 ## Product boundary
 
-Proxmox Lab Platform is a classroom control plane. PostgreSQL is authoritative for desired state; Proxmox is an external system whose observed state must be reconciled. Students never gain broad Proxmox access.
+LabGoblin is a classroom control plane. PostgreSQL is authoritative for desired state; Proxmox VE is an external system whose observed state must be reconciled. Students never gain broad Proxmox access.
+
+## Branding migration rules
+
+- Change display names, UI copy, docs headings, browser metadata, API titles, screenshots, and help text to LabGoblin.
+- Preserve legacy deployment paths, updater service/group names, database identifiers, environment variable names, and API identifiers until a compatibility-safe migration exists.
+- Do not break installed systems solely to achieve cosmetic renaming.
+- If a compatibility-sensitive legacy identifier is replaced, add migration/alias handling and document rollback impact.
+- Keep README, source-controlled wiki, operator docs, release notes, and AI-aware files synchronized.
+- Do not imply that LabGoblin is affiliated with, endorsed by, or part of Proxmox Server Solutions GmbH.
+
+## Design tokens
+
+- Goblin Green: `#22C55E`
+- Deep Space: `#0B1220`
+- Slate Surface: `#1F2937`
+- Steel Secondary: `#3B4754`
+- Cloud Light: `#E5E7EB`
+- Mint Accent: `#A7F3D0`
+- UI/body type: Inter or system-ui fallback
 
 ## Non-negotiable invariants
 
@@ -30,3 +59,4 @@ Run backend tests, frontend tests/build, dependency audits, the single-head migr
 - Classroom policy: `backend/app/services/classroom_access.py`
 - Deployment: `deploy/install.sh`, `deploy/updater_agent.py`, `docker-compose.yml`
 - Contract: `frontend/openapi.json`, `frontend/src/generated/api-schema.d.ts`
+- Brand: `docs/brand.md`, `frontend/public/brand/`

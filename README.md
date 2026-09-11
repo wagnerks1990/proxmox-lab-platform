@@ -1,34 +1,37 @@
-# Proxmox Lab Access Platform
+# LabGoblin
 
-Classroom-focused control plane for managing student access to Proxmox lab
-resources.
+**Virtual Lab Provisioning & Management**  
+**Real Skills. Virtual Machines.**
 
-> **Development status:** the current application is an alpha. It is suitable
-> for isolated development and review, but it is not yet approved for
-> unsupervised student or production use. The V2 stabilization and rebuild
-> roadmap is documented in [`docs/roadmap/v2-rebuild.md`](docs/roadmap/v2-rebuild.md).
+LabGoblin is a classroom-focused control plane for giving students controlled access to virtual lab resources while instructors manage templates, assignments, scheduling, provisioning, lifecycle operations, and auditability.
 
-The source-controlled documentation wiki starts at [`docs/index.md`](docs/index.md).
+> **Development status:** the current application is an alpha. It is suitable for isolated development and review, but it is not yet approved for unsupervised student or production use. The V2 stabilization and rebuild roadmap is documented in [`docs/roadmap/v2-rebuild.md`](docs/roadmap/v2-rebuild.md).
+
+The source-controlled documentation wiki starts at [`docs/index.md`](docs/index.md). Brand and naming rules are documented in [`docs/brand.md`](docs/brand.md).
+
+## Brand identity
+
+- **Product:** LabGoblin
+- **Category:** Virtual Lab Provisioning & Management
+- **Primary tagline:** Real Skills. Virtual Machines.
+- **Campaign line:** Build. Deploy. Learn. Repeat.
+- **Primary color:** Goblin Green `#22C55E`
+- **Primary dark:** Deep Space `#0B1220`
+
+LabGoblin is the product identity. **Proxmox VE** is currently the underlying hypervisor integration and is referenced by name only where technically relevant.
 
 ## Appliance installation
 
-A dedicated Debian or Ubuntu VM on the Proxmox cluster is the recommended
-deployment target. When the repository is public, installation is one command:
+A dedicated Debian or Ubuntu VM on the Proxmox cluster is the recommended deployment target. The repository currently retains its legacy GitHub slug during the branding migration, so the installation URL remains:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/wagnerks1990/proxmox-lab-platform/main/deploy/install.sh | sudo sh
 ```
 
-The installer deploys the application with Docker Compose, generates bootstrap
-secrets, runs database migrations, installs the local update agent, and waits
-for the application health gate. See
-[`docs/operations/deployment.md`](docs/operations/deployment.md) before using
-the direct-on-hypervisor override. For a private repository, clone with a
-read-only deploy key first; unauthenticated `raw.githubusercontent.com` links do
-not work for private repositories.
+The installer deploys LabGoblin with Docker Compose, generates bootstrap secrets, runs database migrations, installs the local update agent, and waits for the application health gate. See [`docs/operations/deployment.md`](docs/operations/deployment.md) before using the direct-on-hypervisor override. For a private repository, clone with a read-only deploy key first; unauthenticated `raw.githubusercontent.com` links do not work for private repositories.
 
 ## Stack
-- Frontend: React + Vite (Tailwind-ready)
+- Frontend: React + Vite
 - Backend: FastAPI + SQLAlchemy
 - DB: PostgreSQL
 - Auth: revocable JWT sessions in HttpOnly same-site cookies + bcrypt password hashing
@@ -39,7 +42,8 @@ not work for private repositories.
 - `backend/app/models/models.py` – relational models (`users`, `roles`, `vm_templates`, `student_vms`, `permissions`, `audit_logs`)
 - `backend/app/services/proxmox.py` – secure backend-only Proxmox API client
 - `backend/init.sql` – seed data
-- `frontend/src/main.jsx` – login + role dashboard + template list + VM create UI
+- `frontend/src/main.jsx` – application routes and bootstrap
+- `frontend/public/brand/` – application branding assets
 
 ## Working development features
 
@@ -52,17 +56,11 @@ not work for private repositories.
 - structured identity and classroom audit events;
 - source-controlled MkDocs wiki and CI validation.
 
-The current API is mounted at `/api` and `/v1/api` during the versioned
-transition. Interactive OpenAPI documentation is available at `/docs` on a
-running development installation.
+The current API is mounted at `/api` and `/v1/api` during the versioned transition. Interactive OpenAPI documentation is available at `/docs` on a running development installation and is branded as the **LabGoblin API**.
 
 ## Disposable live test
 
-The repository includes a stateful Proxmox simulator and a guarded end-to-end
-test. It exercises first-admin enrollment, organization and classroom setup,
-student authorization, durable VM clone/start/stop/delete operations, and
-logout through the public HTTP API. The test is destructive and is intended
-only for the disposable Docker Compose database created for CI.
+The repository includes a stateful Proxmox simulator and a guarded end-to-end test. It exercises first-admin enrollment, organization and classroom setup, student authorization, durable VM clone/start/stop/delete operations, and logout through the public HTTP API. The test is destructive and is intended only for the disposable Docker Compose database created for CI.
 
 ```bash
 export POSTGRES_PASSWORD='live-test-database-password'
@@ -78,23 +76,22 @@ docker compose -f docker-compose.yml -f docker-compose.live-test.yml down \
   --volumes --remove-orphans
 ```
 
-See [`docs/operations/live-test.md`](docs/operations/live-test.md) for safety
-boundaries, troubleshooting, and what this simulator does not prove.
+See [`docs/operations/live-test.md`](docs/operations/live-test.md) for safety boundaries, troubleshooting, and what this simulator does not prove.
 
-## Setup
-1. Backend
+## Development setup
+
+### Backend
 ```bash
 cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
-# Generate and review secrets before continuing.
 python scripts/ensure_config_encryption_key.py --create
 alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
-2. Frontend
+### Frontend
 ```bash
 cd frontend
 npm install
@@ -103,55 +100,46 @@ npm run dev
 
 ## First administrator
 
-A fresh appliance has no default password. The installer prints a random,
-one-time bootstrap token used by the first-run page to create the initial
-administrator. See [`docs/operations/first-run.md`](docs/operations/first-run.md).
+A fresh appliance has no default password. The installer prints a random, one-time bootstrap token used by the first-run page to create the initial administrator. See [`docs/operations/first-run.md`](docs/operations/first-run.md).
 
-## Proxmox configuration
-Set in `backend/.env`:
+## Proxmox VE configuration
+
+Set the appropriate configuration in `backend/.env` or configure the integration through the administration interface. Relevant variables include:
+
 - `PROXMOX_BASE_URL`
 - `PROXMOX_TOKEN_ID`
 - `PROXMOX_TOKEN_SECRET`
 - `PROXMOX_VERIFY_SSL`
 
-The token is used only by backend service (`app/services/proxmox.py`) and never exposed to frontend.
+The token is used only by the backend service and is never exposed to frontend code.
 
 ## Security notes
-- Passwords stored as bcrypt hashes.
-- All VM actions require JWT auth.
-- Student provisioning requires an active classroom assignment; legacy direct
-  and group template permissions are not sufficient.
-- VM create action logs to `audit_logs`.
-- Secret values sourced from environment variables.
 
-## Post-pull validation (recommended)
-Run this single command to validate current live backend health after pulling changes:
+- Passwords are stored as bcrypt hashes.
+- VM actions require authenticated authorization.
+- Student provisioning requires an active classroom assignment; legacy direct and group template permissions are not sufficient.
+- VM operations are auditable.
+- Secret values are sourced from protected configuration.
+- Branding changes must never weaken authorization, tenant isolation, updater safety, or audit behavior.
+
+## Post-pull validation
+
+Run this command to validate current live backend health after pulling changes:
 
 ```bash
 python backend/scripts/validate_deploy.py
 ```
 
-It checks:
-- backend app modules compile
-- `SESSION_EXPIRED` exists in `app.architecture.events`
-- Alembic reports exactly one head
-- database connectivity (`SELECT 1`)
-- live `/api/health` response is fully OK (`backend`, `database`, `proxmox`)
+It checks backend module compilation, required architecture events, a single Alembic head, database connectivity, and live `/api/health` state.
 
-This command validates the *current* deployment state and does not treat stale historical journal entries from older restarts as active failures.
+## SSE proxy requirement
 
-## SSE proxy requirement (production)
-For `/api/admin/events/stream` (EventSource/SSE), include the dedicated NGINX location block from:
+For `/api/admin/events/stream` (EventSource/SSE), include the dedicated NGINX location block from `deploy/nginx/sse-events-stream.conf`. This disables proxy buffering and keeps the stream open so live telemetry can remain connected.
 
-- `deploy/nginx/sse-events-stream.conf`
+## Legacy naming compatibility
 
-This disables proxy buffering and keeps the stream open so live telemetry status transitions to connected in the GUI.
+The product is now **LabGoblin**, but selected internal identifiers intentionally retain the old `proxmox-lab-platform` name during migration. This includes deployment paths, updater service/group names, some environment defaults, database identifiers, and the current repository slug. They must not be renamed casually because deployed installations and rollback/update logic may depend on them. See [`docs/brand.md`](docs/brand.md).
 
 ## Future expansion-ready
-Architecture leaves space for:
-- class/group and quota tables
-- scheduled cleanup jobs
-- snapshots
-- VLAN/private network workflows
-- SSO providers
-- embedded noVNC
+
+The architecture leaves space for quotas, scheduled cleanup, snapshots, VLAN/private network workflows, SSO providers, embedded remote consoles, and broader hypervisor abstraction.

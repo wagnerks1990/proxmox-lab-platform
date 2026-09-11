@@ -20,7 +20,11 @@ async def lifespan(_app: FastAPI):
         stop_scheduler()
 
 
-app = FastAPI(title="Proxmox Lab Manager", lifespan=lifespan)
+app = FastAPI(
+    title="LabGoblin API",
+    description="Virtual Lab Provisioning & Management API for hands-on learning environments.",
+    lifespan=lifespan,
+)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestIdMiddleware)
 allowed_origins = [

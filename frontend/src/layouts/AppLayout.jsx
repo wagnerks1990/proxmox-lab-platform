@@ -40,8 +40,7 @@ export default function AppLayout({ children, setUser, user }) {
     setOrganizationId(event.target.value)
     window.location.reload()
   }
-  const role = user?.role
-  const normalizedRole = (role || '').toLowerCase()
+  const normalizedRole = (user?.role || '').toLowerCase()
   const activeOrganization = organizations.find(organization => String(organization.id) === organizationId)
   const tenantRole = activeOrganization?.role
   const isPlatformAdmin = normalizedRole === 'admin'
@@ -49,7 +48,7 @@ export default function AppLayout({ children, setUser, user }) {
   const isTenantAdmin = ['admin', 'owner'].includes(tenantRole) || isPlatformAdmin
   return <div className='app-shell'>
     <aside className='sidebar'>
-      <div className='brand'>Proxmox Lab Control Plane</div>
+      <div className='brand-lockup'><img src='/brand/labgoblin-icon.svg' alt='' className='brand-mark'/><div><div className='brand-wordmark'>Lab<span>Goblin</span></div><div className='brand-subtitle'>Virtual Lab Management</div></div></div>
       {organizations.length > 0 && <label className='muted'>Organization
         <select className='input' value={organizationId} onChange={changeOrganization} style={{marginTop: 6}}>
           <option value='' disabled>Select an organization</option>
@@ -71,7 +70,8 @@ export default function AppLayout({ children, setUser, user }) {
       {isPlatformAdmin && <Link className='nav-link' to='/admin/organizations'>Organizations</Link>}
       {isPlatformAdmin && <Link className='nav-link' to='/admin/system-update'>System Updates</Link>}
       <button onClick={logout} style={{marginTop: 10, width: '100%'}}>Logout</button>
-      <div style={{marginTop:14, color:'#a7b0d6', fontSize:12}}>Current: {loc.pathname}</div>
+      <div className='brand-footer'>Real Skills. Virtual Machines.</div>
+      <div style={{marginTop:8, color:'#738096', fontSize:11}}>Current: {loc.pathname}</div>
     </aside>
     <main className='content'>{!organizationReady ? <section className='panel'>Selecting organization…</section> : organizationError ? <section className='panel error'>{organizationError}</section> : organizations.length > 0 && !organizationId ? <section className='panel'>Select an organization to continue.</section> : children}</main>
   </div>

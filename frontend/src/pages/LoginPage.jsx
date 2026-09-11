@@ -14,5 +14,12 @@ export default function LoginPage({ onLogin, setMessage }) {
       setMessage({ type: 'error', text: error?.response?.data?.detail || 'Login failed. Check credentials.' })
     }
   }
-  return <div className='login-wrap'><form className='login-card' onSubmit={submit}><h2>Lab Login</h2><p style={{color:'#a7b0d6'}}>Access your assigned Proxmox labs.</p><input className='input' autoComplete='username' value={username} onChange={e=>setU(e.target.value)} placeholder='Username' /><input className='input' autoComplete='current-password' type='password' value={password} onChange={e=>setP(e.target.value)} placeholder='Password' /><button style={{width:'100%'}} disabled={!username || !password}>Sign in</button></form></div>
+  return <div className='login-wrap'><form className='login-card' onSubmit={submit}>
+    <div className='login-brand'><img src='/brand/labgoblin-icon.svg' alt='' className='login-brand-mark'/><div><div className='brand-wordmark'>Lab<span>Goblin</span></div><div className='brand-subtitle'>Virtual Lab Provisioning & Management</div></div></div>
+    <h2>Sign in</h2><p className='muted'>Access your assigned virtual labs.</p>
+    <input className='input' autoComplete='username' value={username} onChange={e=>setU(e.target.value)} placeholder='Username' />
+    <input className='input' autoComplete='current-password' type='password' value={password} onChange={e=>setP(e.target.value)} placeholder='Password' />
+    <button style={{width:'100%'}} disabled={!username || !password}>Sign in</button>
+    <div className='login-tagline'>Real Skills. Virtual Machines.</div>
+  </form></div>
 }

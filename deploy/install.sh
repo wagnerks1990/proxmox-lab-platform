@@ -1,6 +1,8 @@
 #!/bin/sh
 set -eu
 
+# The repository URL and filesystem/service identifiers below intentionally retain
+# their legacy values for installed-system update and rollback compatibility.
 REPOSITORY=${UPDATER_REPOSITORY:-https://github.com/wagnerks1990/proxmox-lab-platform.git}
 BRANCH=${PLATFORM_BRANCH:-main}
 INSTALL_ROOT=/opt/proxmox-lab-platform
@@ -53,7 +55,7 @@ chmod 0750 /run/proxmox-lab-updater
 if [ ! -d "$INSTALL_ROOT/app/.git" ]; then
   git clone --branch "$BRANCH" --single-branch "$REPOSITORY" "$INSTALL_ROOT/app"
 else
-  echo "Existing deployment found; use the updater instead of reinstalling." >&2
+  echo "Existing LabGoblin deployment found; use the updater instead of reinstalling." >&2
   exit 1
 fi
 
@@ -94,14 +96,14 @@ until curl -fsS http://127.0.0.1:8080/api/ready >/dev/null; do
   attempt=$((attempt + 1))
   if [ "$attempt" -ge 60 ]; then
     docker compose --env-file .env ps
-    echo "Installation started but the health gate failed." >&2
+    echo "LabGoblin installation started but the health gate failed." >&2
     exit 1
   fi
   sleep 3
 done
 
-echo "Proxmox Lab Platform is available at http://$(hostname -I | awk '{print $1}'):8080"
-echo "Open the site and create the first administrator with this one-time bootstrap token:"
+echo "LabGoblin is available at http://$(hostname -I | awk '{print $1}'):8080"
+echo "Open LabGoblin and create the first administrator with this one-time bootstrap token:"
 echo "$BOOTSTRAP_ADMIN_TOKEN"
 echo "The token is also stored in $INSTALL_ROOT/app/.env (mode 0600). Remove it after enrollment."
-echo "Then configure Proxmox credentials in the web administration interface."
+echo "Then configure the Proxmox VE integration in the LabGoblin administration interface."
