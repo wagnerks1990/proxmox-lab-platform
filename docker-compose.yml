@@ -1,12 +1,12 @@
-name: proxmox-lab-platform
+name: labgoblin
 
 services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-proxmox_lab}
-      POSTGRES_USER: ${POSTGRES_USER:-proxmox_lab}
+      POSTGRES_DB: ${POSTGRES_DB:-labgoblin}
+      POSTGRES_USER: ${POSTGRES_USER:-labgoblin}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     volumes:
       - postgres-data:/var/lib/postgresql/data
@@ -27,7 +27,7 @@ services:
     build: ./backend
     restart: unless-stopped
     environment: &backend-env
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-proxmox_lab}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-proxmox_lab}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-labgoblin}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-labgoblin}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?JWT_SECRET_KEY is required}
       CONFIG_ENCRYPTION_KEY: ${CONFIG_ENCRYPTION_KEY:?CONFIG_ENCRYPTION_KEY is required}
       BOOTSTRAP_ADMIN_TOKEN: ${BOOTSTRAP_ADMIN_TOKEN:?BOOTSTRAP_ADMIN_TOKEN is required}
@@ -47,7 +47,7 @@ services:
       WORKER_SCHEDULER_ENABLED: "true"
       RUN_MIGRATIONS: "true"
     volumes:
-      - /var/lib/proxmox-lab-platform/updater:/var/lib/proxmox-lab-platform/updater
+      - /var/lib/labgoblin/updater:/var/lib/labgoblin/updater
     group_add:
       - "${UPDATER_GID:?UPDATER_GID is required}"
     depends_on:
