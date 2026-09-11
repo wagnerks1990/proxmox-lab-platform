@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import ssl
 import threading
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -172,8 +173,17 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=18006)
+    parser.add_argument("--certfile")
+    parser.add_argument("--keyfile")
     args = parser.parse_args()
-    ThreadingHTTPServer((args.host, args.port), Handler).serve_forever()
+    server = ThreadingHTTPServer((args.host, args.port), Handler)
+    if args.certfile or args.keyfile:
+        if not args.certfile or not args.keyfile:
+            parser.error("--certfile and --keyfile must be provided together")
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(args.certfile, args.keyfile)
+        server.socket = context.wrap_socket(server.socket, server_side=True)
+    server.serve_forever()
 
 
 if __name__ == "__main__":

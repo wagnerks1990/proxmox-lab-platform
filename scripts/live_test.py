@@ -19,6 +19,8 @@ STUDENT_PASSWORD = "LiveTest-Student-42!"
 class Client:
     def __init__(self, base_url: str):
         self.base_url = base_url.rstrip("/")
+        parsed = urllib.parse.urlsplit(self.base_url)
+        self.origin = f"{parsed.scheme}://{parsed.netloc}"
         self.cookies = http.cookiejar.CookieJar()
         self.opener = urllib.request.build_opener(
             urllib.request.HTTPCookieProcessor(self.cookies)
@@ -34,7 +36,11 @@ class Client:
         expected: set[int] = {200},
     ):
         data = json.dumps(payload).encode() if payload is not None else None
-        headers = {"Content-Type": "application/json"}
+        headers = {
+            "Content-Type": "application/json",
+            # Exercise the browser's cookie/Origin CSRF contract.
+            "Origin": self.origin,
+        }
         if self.organization_id is not None:
             headers["X-Organization-ID"] = str(self.organization_id)
         request = urllib.request.Request(
@@ -107,7 +113,7 @@ def run(base_url: str, bootstrap_token: str, timeout: float) -> None:
         "/api/admin/proxmox/clusters/manual-token",
         {
             "name": "mock",
-            "api_url": "http://mock-proxmox:8006/api2/json",
+            "api_url": "https://mock-proxmox:8006/api2/json",
             "token_user": "live-test@pve",
             "token_id": "platform",
             "token_secret": "live-test-only",
