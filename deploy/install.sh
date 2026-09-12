@@ -38,7 +38,7 @@ case "${ID:-}" in
 esac
 
 apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates curl git openssl docker.io
+DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates curl git openssl python3 docker.io
 if ! DEBIAN_FRONTEND=noninteractive apt-get install -y docker-compose-v2; then
   DEBIAN_FRONTEND=noninteractive apt-get install -y docker-compose-plugin
 fi

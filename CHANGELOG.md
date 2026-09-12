@@ -11,6 +11,11 @@ releases begin, material changes are recorded in pull requests and this file.
 - Added Cloudflare DNS/TLS, cache, WAF, rate-limit, SSE/WebSocket, rotation,
   outage recovery, rollback, and acceptance guidance. R2 backup support remains
   deliberately deferred pending complete encrypted backups and tested restores.
+- Added guided, idempotent Cloudflare provisioning with protected file-based API
+  credentials, reviewed plan/apply workflow, local JSON status, least-privilege
+  district IdP group policy, DNS-last publication, nonsecret resource state,
+  connector health gating, and fail-closed disable behavior for safe at-home
+  student access.
 - Rebuilt the frontend around a responsive, role-aware application shell,
   simplified workflow navigation, reusable interface primitives, labeled forms,
   adaptive data regions, and explicit loading/error/empty states.

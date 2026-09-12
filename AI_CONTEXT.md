@@ -64,6 +64,14 @@ CSS pixel viewport without page-level horizontal scrolling.
   root-owned `/etc/labgoblin/cloudflare-tunnel-token` restricted to the
   dedicated connector group, exact HTTPS origin, and secure-cookie contract
   described in `docs/operations/cloudflare.md`.
+- Preserve guided Cloudflare `plan` and `apply` reconciliation, protected
+  file-only API-token input, nonsecret resource-ID state, local JSON status,
+  DNS-last publication, connector health gating, and fail-closed disable
+  behavior. A LAN bind is restored only through the explicit
+  `--restore-lan-bind` choice.
+- Prefer an approved district IdP group for student access. Treat the
+  email-domain selector as a weaker fallback and never publish Proxmox, SSH,
+  PostgreSQL, Redis, updater, management, or lab-network services.
 - Access enforcement validates `Cf-Access-Jwt-Assertion` cryptographically and
   then continues through normal LabGoblin authentication, revocable sessions,
   organization membership, RBAC, ownership, CSRF, and audit checks. Never map

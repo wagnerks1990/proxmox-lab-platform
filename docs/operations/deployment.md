@@ -43,11 +43,22 @@ The current Compose stack contains the web application, API service with embedde
 
 An optional `cloudflare` Compose profile adds the `cloudflared` connector. The
 host-only `deploy/configure-cloudflare.sh` helper supports `enable`, `disable`,
-and `status`; enabling stores the Tunnel token at
+and machine-readable `status --json`; enabling stores the Tunnel token at
 `/etc/labgoblin/cloudflare-tunnel-token`, binds HTTP to loopback, and configures
-the exact HTTPS public origin and secure cookies. The default deployment remains
-unchanged until an operator explicitly enables the profile. See
-[Optional Cloudflare edge integration](cloudflare.md) before using it.
+the exact HTTPS public origin and secure cookies. Startup is health-gated with
+Compose `--wait`. Disable keeps loopback binding by default; restoring the saved
+LAN listener requires the explicit `--restore-lan-bind` option after firewall
+review.
+
+For new deployments, `deploy/provision_cloudflare.py` provides the guided
+`plan` and `apply` workflow. It uses a protected API-token file to
+reconcile the named Tunnel/configuration, reusable Access policy, self-hosted
+application, and DNS record, with DNS published last. It retrieves the Tunnel
+run token only for the local helper and persists only nonsecret resource IDs.
+Prefer an approved district IdP group. The allowed-email-domain selector is a
+supported but intentionally weaker fallback. The default deployment remains
+unchanged until an operator explicitly applies the plan. See
+[Cloudflare edge and at-home student access](cloudflare.md) before using it.
 
 ## Configuration boundary
 
@@ -117,6 +128,13 @@ rolled back by the updater. Operators must record and reverse Tunnel, DNS,
 Access, WAF, and rate-limit changes separately. R2 upload is intentionally not
 implemented because the current PostgreSQL-only archive is not a complete
 recovery artifact.
+
+Cloudflare is the recommended public connection layer for at-home student lab
+use, not a path into the infrastructure plane. Publish only the LabGoblin web
+proxy. Students use a browser through district Access SSO and then LabGoblin's
+own login and assignment controls; they need no Cloudflare account, WARP, or
+VPN. Proxmox, SSH, PostgreSQL, Redis, the updater socket, and management or VM
+networks remain private.
 
 ## Backup requirements
 

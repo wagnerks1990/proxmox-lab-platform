@@ -43,9 +43,16 @@ environment-dependent checks.
   root-owned and restricted to the dedicated connector group, direct-origin
   bypass fails, unexpected Host values fail, and
   forwarded headers from every non-Tunnel path are ignored.
+- Cloudflare plan/apply is idempotent, accepts its scoped API token only from a
+  protected file, persists only nonsecret resource IDs, creates DNS last, and
+  refuses to adopt or overwrite conflicting unmanaged resources.
 - Required Cloudflare Access denies missing, forged, expired, wrong-issuer, and
   wrong-audience assertions while an accepted identity still requires a valid
   LabGoblin session, organization membership, and role.
+- The Access Allow policy uses the approved district IdP group. If the weaker
+  email-domain fallback is temporarily accepted, its broader population,
+  compensating controls, owner, and removal date are recorded; Everyone and
+  Bypass rules are absent.
 - A least-privilege Proxmox token passes the documented permission matrix with
   TLS verification enabled.
 
@@ -68,6 +75,14 @@ environment-dependent checks.
   WebSocket upgrades succeed, SSE reconnects without buffering, WAF rules have
   no unresolved false positives, and shared-NAT classroom traffic remains usable
   under the configured rate limits.
+- From both a home connection and the school network, an approved test student
+  completes district SSO, LabGoblin login, and an assigned browser-console
+  session without WARP, VPN, a Cloudflare account, or any direct Proxmox/SSH
+  access. Removal from the IdP group and assignment closure are verified
+  independently.
+- External scans confirm that only the intended HTTPS hostname is published;
+  the appliance address, Proxmox UI/API, SSH, PostgreSQL, Redis, updater, and
+  management or VM networks are not reachable through Cloudflare or directly.
 
 ## Interface acceptance
 
@@ -103,6 +118,10 @@ environment-dependent checks.
 - Cloudflare Tunnel-token and Access service-token rotation, connector outage,
   local health access, intentional disable, and application rollback are tested
   without temporarily exposing the origin to the Internet.
+- Connector startup and restart satisfy the health check and Compose `--wait`;
+  `status --json` contains no secret, failed enablement remains loopback-bound,
+  default disable remains loopback-bound, and only explicit
+  `--restore-lan-bind` restores the reviewed LAN listener.
 - Do not count R2 toward backup acceptance until a complete client-side
   encrypted artifact and isolated restore test cover every required state item.
 

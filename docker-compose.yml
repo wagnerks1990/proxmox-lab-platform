@@ -99,6 +99,12 @@ services:
       - cloudflare-edge
     depends_on:
       - web
+    healthcheck:
+      test: ["CMD", "cloudflared", "tunnel", "ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
     read_only: true
     tmpfs:
       - /tmp:size=16m,mode=1777
