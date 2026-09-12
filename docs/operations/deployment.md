@@ -41,6 +41,14 @@ Bootstrap secrets are stored in a root-readable `.env` file. Operational setting
 
 The current Compose stack contains the web application, API service with embedded scheduler and leased durable workers, PostgreSQL, and Redis. Guacamole, a separately scaled worker service, TLS automation, and an AI gateway are planned components and are not silently installed by the current script.
 
+An optional `cloudflare` Compose profile adds the `cloudflared` connector. The
+host-only `deploy/configure-cloudflare.sh` helper supports `enable`, `disable`,
+and `status`; enabling stores the Tunnel token at
+`/etc/labgoblin/cloudflare-tunnel-token`, binds HTTP to loopback, and configures
+the exact HTTPS public origin and secure cookies. The default deployment remains
+unchanged until an operator explicitly enables the profile. See
+[Optional Cloudflare edge integration](cloudflare.md) before using it.
+
 ## Configuration boundary
 
 The minimum bootstrap environment contains database, encryption, updater, and initial-administrator secrets. Cluster, storage, network, template, console, policy, AI-provider, update-channel, and organization configuration is stored in the database and managed through the GUI.
@@ -51,6 +59,20 @@ Secrets remain encrypted at rest and are never exported through normal settings 
 origins. Cookie-authenticated unsafe requests and all browser WebSocket
 handshakes are checked against it. Bearer-token API clients do not use the
 cookie CSRF check. Set the value explicitly when TLS is terminated upstream.
+
+For a Cloudflare deployment, the helper sets
+`CLOUDFLARE_TUNNEL_ENABLED=true`, `HTTP_BIND_ADDRESS=127.0.0.1`,
+`AUTH_COOKIE_SECURE=true`, an exact HTTPS
+`BROWSER_TRUSTED_ORIGINS`, and an empty CORS allowlist for the normal same-origin
+GUI. `CLOUDFLARE_TUNNEL_TOKEN_FILE` points to the root-owned token file,
+`CLOUDFLARE_TUNNEL_GID` grants read access only to the dedicated connector
+group, and the credential does not belong in `.env` or PostgreSQL.
+
+Optional Access validation is configured with
+`CLOUDFLARE_ACCESS_REQUIRED`, `CLOUDFLARE_ACCESS_TEAM_DOMAIN`,
+`CLOUDFLARE_ACCESS_AUDIENCE`, and `CLOUDFLARE_ACCESS_JWKS_TTL_SECONDS`.
+Required mode denies missing or invalid assertions and still requires the normal
+LabGoblin session and authorization path.
 
 Proxmox API endpoints must use HTTPS and end in `/api2/json`. Existing cluster
 origins and TLS-verification policy cannot be edited in place because doing so
@@ -89,6 +111,12 @@ Automatic updates are disabled by default and additionally require host policy `
 Only one update operation can hold the host lock. The updater is reachable only through the `labgoblin-updater` group-restricted Unix socket and requires a separate authentication token. The Docker socket is not mounted into the web or API containers.
 
 The current backup covers PostgreSQL. It does not include `.env`, key material, TLS configuration, or Proxmox VE resources. Optional commit verification is enabled with `UPDATER_REQUIRE_SIGNED_COMMITS=true` and requires host Git trust configuration. Release-note display, migration compatibility manifests, and non-destructive workflow probes remain release-engineering work.
+
+Cloudflare dashboard state is external to the application release and is not
+rolled back by the updater. Operators must record and reverse Tunnel, DNS,
+Access, WAF, and rate-limit changes separately. R2 upload is intentionally not
+implemented because the current PostgreSQL-only archive is not a complete
+recovery artifact.
 
 ## Backup requirements
 

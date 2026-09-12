@@ -127,7 +127,7 @@ jobs:
           python-version: '3.12'
       - run: python scripts/check_branding.py
       - run: python scripts/check_repository_hygiene.py
-      - run: sh -n deploy/install.sh backend/docker-entrypoint.sh scripts/generate_api_contract.sh
+      - run: sh -n deploy/install.sh deploy/configure-cloudflare.sh backend/docker-entrypoint.sh scripts/generate_api_contract.sh
       - run: bash -n scripts/codex_cloud_check.sh scripts/deploy.sh scripts/backend-restart.sh scripts/frontend-build.sh
 
   disposable-live-test:
@@ -144,7 +144,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - run: python -m compileall -q deploy/updater_agent.py
-      - run: sh -n deploy/install.sh backend/docker-entrypoint.sh
+      - run: sh -n deploy/install.sh deploy/configure-cloudflare.sh backend/docker-entrypoint.sh
       - run: docker compose -f docker-compose.yml -f docker-compose.live-test.yml config --quiet
       - run: sudo mkdir -p /run/labgoblin-updater
       - run: docker compose -f docker-compose.yml -f docker-compose.live-test.yml up -d --build

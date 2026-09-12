@@ -32,6 +32,31 @@ A fresh installation is fully LabGoblin-native: `/opt/labgoblin`, `/var/lib/labg
 
 The installer deploys LabGoblin with Docker Compose, generates bootstrap secrets, runs database migrations, installs the local update agent, and waits for the application health gate. See [`docs/operations/deployment.md`](docs/operations/deployment.md) before using the direct-on-hypervisor override. For a private repository, clone with a read-only deploy key first; unauthenticated `raw.githubusercontent.com` links do not work for private repositories.
 
+### Optional Cloudflare edge
+
+The deployment includes an opt-in `cloudflare` Compose profile for publishing
+LabGoblin through an outbound-only Cloudflare Tunnel. The helper keeps the
+origin on loopback, stores the Tunnel token in a root-owned restricted file, configures the
+exact HTTPS browser origin and secure cookies, and requires a validated
+Cloudflare Access assertion before LabGoblin's own login and RBAC.
+
+```bash
+cd /opt/labgoblin/app
+sudo deploy/configure-cloudflare.sh enable \
+  --hostname lab.example.edu \
+  --team-domain school.cloudflareaccess.com \
+  --audience ACCESS_APPLICATION_AUD \
+  --token-file /root/cloudflare-tunnel-token
+sudo deploy/configure-cloudflare.sh status
+```
+
+Cloudflare Access is an outer gate, not a replacement identity or authorization
+system. Read the complete security, outage recovery, rotation, verification,
+and rollback procedure in
+[`docs/operations/cloudflare.md`](docs/operations/cloudflare.md) before enabling
+the profile. Cloudflare R2 backups are deliberately deferred until LabGoblin
+supports complete client-side encrypted backups and isolated restore tests.
+
 ## Stack
 - Frontend: React + Vite
 - Backend: FastAPI + SQLAlchemy
@@ -57,6 +82,7 @@ The installer deploys LabGoblin with Docker Compose, generates bootstrap secrets
 - template discovery/import, placement-aware VM provisioning, lifecycle controls, and reconciliation;
 - Docker Compose installation, health-gated GitHub updates, and rollback;
 - structured identity and classroom audit events;
+- optional Cloudflare Tunnel publication and validated Access pre-authentication;
 - source-controlled MkDocs wiki and CI validation.
 
 The current API is mounted at `/api` and `/v1/api` during the versioned transition. Interactive OpenAPI documentation is available at `/docs` on a running development installation and is branded as the **LabGoblin API**.

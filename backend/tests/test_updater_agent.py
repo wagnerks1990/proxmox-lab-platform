@@ -163,3 +163,56 @@ def test_failed_recovery_is_reported_and_preserves_original_cause(monkeypatch):
 def test_compose_allows_bootstrap_token_to_be_removed_after_enrollment():
     compose_source = MODULE_PATH.parents[1].joinpath("docker-compose.yml").read_text()
     assert "BOOTSTRAP_ADMIN_TOKEN: ${BOOTSTRAP_ADMIN_TOKEN:-}" in compose_source
+
+
+def test_compose_keeps_cloudflare_profile_enabled_across_updates(monkeypatch, tmp_path):
+    app_dir = tmp_path / "app"
+    app_dir.mkdir()
+    app_dir.joinpath(".env").write_text("CLOUDFLARE_TUNNEL_ENABLED=true\n")
+    app_dir.joinpath("docker-compose.yml").write_text(
+        "services:\n  cloudflared:\n    profiles: [cloudflare]\n"
+    )
+    captured = {}
+
+    def fake_run(args, **kwargs):
+        captured["args"] = args
+        captured["cwd"] = kwargs["cwd"]
+        return object()
+
+    monkeypatch.setattr(updater, "APP_DIR", app_dir)
+    monkeypatch.setattr(updater, "run", fake_run)
+    updater.compose("up", "-d")
+
+    assert captured["args"][:8] == [
+        "docker",
+        "compose",
+        "--env-file",
+        str(app_dir / ".env"),
+        "--project-directory",
+        str(app_dir),
+        "--profile",
+        "cloudflare",
+    ]
+    assert captured["args"][8:] == ["up", "-d"]
+
+
+def test_compose_omits_cloudflare_profile_for_preintegration_rollback(
+    monkeypatch, tmp_path
+):
+    app_dir = tmp_path / "app"
+    old_worktree = tmp_path / "old"
+    app_dir.mkdir()
+    old_worktree.mkdir()
+    app_dir.joinpath(".env").write_text("CLOUDFLARE_TUNNEL_ENABLED=true\n")
+    old_worktree.joinpath("docker-compose.yml").write_text("services:\n  web: {}\n")
+    captured = {}
+
+    def fake_run(args, **kwargs):
+        captured["args"] = args
+        return object()
+
+    monkeypatch.setattr(updater, "APP_DIR", app_dir)
+    monkeypatch.setattr(updater, "run", fake_run)
+    updater.compose("build", project_dir=old_worktree)
+
+    assert "--profile" not in captured["args"]

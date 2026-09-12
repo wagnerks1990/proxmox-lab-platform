@@ -11,6 +11,7 @@ infrastructure.
 The system treats these as separate trust zones:
 
 - public browser clients;
+- optional Cloudflare DNS, edge security, Access, and Tunnel connector;
 - authenticated students;
 - authenticated teachers;
 - organization administrators;
@@ -40,6 +41,8 @@ guest or the control plane.
   break-glass exception.
 - Students require an active enrollment and explicit assignment.
 - Frontend visibility is never considered an authorization control.
+- Cloudflare Access approval is pre-authentication only. It never grants a
+  LabGoblin role, membership, organization, object, or durable-operation right.
 - Console, lifecycle, reset, snapshot, and deletion paths repeat authorization at the backend boundary.
 - Destructive bulk actions require a preview and explicit confirmation token.
 
@@ -62,6 +65,14 @@ guest or the control plane.
   source address; attempted passwords are never retained.
 - Secrets are redacted from structured logs, job payloads, audit details, and AI prompts.
 - The encryption key is backed up separately from, but consistently with, the database.
+- A required Cloudflare Access assertion is cryptographically verified for
+  signature, algorithm, issuer, application audience, and time validity before
+  the normal LabGoblin session and authorization checks run.
+- Tunnel, Access service-token, and Cloudflare API credentials never enter the
+  browser, database, URLs, normal logs, exports, or support bundles.
+- Cloudflare client-IP and protocol headers are currently ignored as identity
+  and audit attributes. Any future use must be limited to the exclusive
+  configured connector path and never serve as identity evidence.
 
 ## Required security tests
 
@@ -79,6 +90,11 @@ The release suite must prove that:
 - duplicate requests cannot create duplicate VMs;
 - SSRF validation blocks unapproved infrastructure and asset destinations;
 - secrets do not appear in API responses, URLs, logs, exports, or AI requests.
+- required Access rejects missing, forged, expired, wrong-issuer, and
+  wrong-audience assertions without weakening LabGoblin session/RBAC checks;
+- direct-origin requests cannot bypass the loopback-bound Tunnel deployment;
+- edge cache, WAF, and rate-limit rules preserve login cookies, API behavior,
+  SSE continuity, WebSocket upgrades, and shared-school-NAT usability.
 
 ## Destructive operations
 

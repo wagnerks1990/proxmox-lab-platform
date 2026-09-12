@@ -39,6 +39,13 @@ environment-dependent checks.
   URLs, browser storage, responses, logs, diagnostics, backups, and screenshots.
 - TLS is valid from each managed client; authentication cookies are Secure; HSTS
   is enabled only after HTTPS is confirmed end to end.
+- When Cloudflare is enabled, the origin is loopback-bound, the Tunnel token is
+  root-owned and restricted to the dedicated connector group, direct-origin
+  bypass fails, unexpected Host values fail, and
+  forwarded headers from every non-Tunnel path are ignored.
+- Required Cloudflare Access denies missing, forged, expired, wrong-issuer, and
+  wrong-audience assertions while an accepted identity still requires a valid
+  LabGoblin session, organization membership, and role.
 - A least-privilege Proxmox token passes the documented permission matrix with
   TLS verification enabled.
 
@@ -57,6 +64,10 @@ environment-dependent checks.
   destination binding pass the hostile-guest pivot test.
 - SSE remains live through the deployed proxy without buffering and terminates
   promptly after authorization revocation.
+- On the real Cloudflare route, API/authentication responses bypass cache,
+  WebSocket upgrades succeed, SSE reconnects without buffering, WAF rules have
+  no unresolved false positives, and shared-NAT classroom traffic remains usable
+  under the configured rate limits.
 
 ## Interface acceptance
 
@@ -89,6 +100,11 @@ environment-dependent checks.
   login, tenancy, audit, and VM-reconciliation checks.
 - Disk, backup, worker, scheduler, updater, database, Redis, and Proxmox alerts
   reach the assigned operator; log and backup retention are bounded.
+- Cloudflare Tunnel-token and Access service-token rotation, connector outage,
+  local health access, intentional disable, and application rollback are tested
+  without temporarily exposing the origin to the Internet.
+- Do not count R2 toward backup acceptance until a complete client-side
+  encrypted artifact and isolated restore test cover every required state item.
 
 ## Approval
 

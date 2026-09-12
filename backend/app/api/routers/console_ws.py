@@ -12,6 +12,12 @@ from app.services.organization_access import (
 )
 from app.core.config import settings
 from app.middleware.csrf import websocket_origin_allowed
+from app.security.cloudflare_access import (
+    CloudflareAccessInvalid,
+    CloudflareAccessUnavailable,
+    cloudflare_tunnel_host_allowed,
+    require_cloudflare_access,
+)
 
 router = APIRouter()
 
@@ -49,6 +55,17 @@ def _get_vm_for_user(
 
 @router.websocket("/vms/{id}/console/ssh/ws")
 async def ssh_ws(id: int, websocket: WebSocket, db: Session = Depends(get_db)):
+    if not cloudflare_tunnel_host_allowed(websocket.headers):
+        await websocket.close(code=1008, reason="Invalid Host header")
+        return
+    try:
+        await require_cloudflare_access(websocket.headers)
+    except CloudflareAccessInvalid:
+        await websocket.close(code=1008, reason="Cloudflare Access required")
+        return
+    except (CloudflareAccessUnavailable, ValueError):
+        await websocket.close(code=1013, reason="Cloudflare Access unavailable")
+        return
     if not websocket_origin_allowed(websocket):
         await websocket.close(code=1008, reason="Untrusted origin")
         return
@@ -83,6 +100,17 @@ async def ssh_ws(id: int, websocket: WebSocket, db: Session = Depends(get_db)):
 
 @router.websocket("/vms/{id}/console/novnc/ws")
 async def novnc_ws(id: int, websocket: WebSocket, db: Session = Depends(get_db)):
+    if not cloudflare_tunnel_host_allowed(websocket.headers):
+        await websocket.close(code=1008, reason="Invalid Host header")
+        return
+    try:
+        await require_cloudflare_access(websocket.headers)
+    except CloudflareAccessInvalid:
+        await websocket.close(code=1008, reason="Cloudflare Access required")
+        return
+    except (CloudflareAccessUnavailable, ValueError):
+        await websocket.close(code=1013, reason="Cloudflare Access unavailable")
+        return
     if not websocket_origin_allowed(websocket):
         await websocket.close(code=1008, reason="Untrusted origin")
         return
