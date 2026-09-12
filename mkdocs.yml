@@ -24,6 +24,7 @@ nav:
   - AI: ai/ai-safety.md
   - Operations:
       - Deployment: operations/deployment.md
+      - Cloudflare edge: operations/cloudflare.md
       - First run: operations/first-run.md
       - Durable jobs: operations/durable-operations.md
       - Consoles: operations/consoles.md

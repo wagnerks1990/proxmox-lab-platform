@@ -34,6 +34,12 @@ services:
       AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
       BROWSER_TRUSTED_ORIGINS: ${BROWSER_TRUSTED_ORIGINS:-}
+      CLOUDFLARE_TUNNEL_ENABLED: ${CLOUDFLARE_TUNNEL_ENABLED:-false}
+      CLOUDFLARE_PUBLIC_HOSTNAME: ${CLOUDFLARE_PUBLIC_HOSTNAME:-}
+      CLOUDFLARE_ACCESS_REQUIRED: ${CLOUDFLARE_ACCESS_REQUIRED:-false}
+      CLOUDFLARE_ACCESS_TEAM_DOMAIN: ${CLOUDFLARE_ACCESS_TEAM_DOMAIN:-}
+      CLOUDFLARE_ACCESS_AUDIENCE: ${CLOUDFLARE_ACCESS_AUDIENCE:-}
+      CLOUDFLARE_ACCESS_JWKS_TTL_SECONDS: ${CLOUDFLARE_ACCESS_JWKS_TTL_SECONDS:-3600}
       PROXMOX_BASE_URL: ${PROXMOX_BASE_URL:-https://127.0.0.1:8006/api2/json}
       PROXMOX_TOKEN_ID: ${PROXMOX_TOKEN_ID:-bootstrap@pve!replace}
       PROXMOX_TOKEN_SECRET: ${PROXMOX_TOKEN_SECRET:-replace-in-gui}
@@ -63,10 +69,48 @@ services:
     build: ./frontend
     restart: unless-stopped
     ports:
-      - "${HTTP_PORT:-8080}:8080"
+      - "${HTTP_BIND_ADDRESS:-0.0.0.0}:${HTTP_PORT:-8080}:8080"
+    networks:
+      - default
+      - cloudflare-edge
     depends_on:
       - api
+
+  cloudflared:
+    profiles: ["cloudflare"]
+    image: cloudflare/cloudflared:2026.9.1
+    restart: unless-stopped
+    command:
+      - tunnel
+      - --no-autoupdate
+      - --metrics
+      - 0.0.0.0:20241
+      - run
+      - --token-file
+      - /run/secrets/cloudflare-tunnel-token
+    volumes:
+      - type: bind
+        source: ${CLOUDFLARE_TUNNEL_TOKEN_FILE:-/etc/labgoblin/cloudflare-tunnel-token}
+        target: /run/secrets/cloudflare-tunnel-token
+        read_only: true
+    group_add:
+      - "${CLOUDFLARE_TUNNEL_GID:-65534}"
+    networks:
+      - cloudflare-edge
+    depends_on:
+      - web
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    init: true
 
 volumes:
   postgres-data:
   redis-data:
+
+networks:
+  cloudflare-edge:

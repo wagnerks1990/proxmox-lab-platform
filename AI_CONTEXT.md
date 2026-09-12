@@ -59,6 +59,20 @@ CSS pixel viewport without page-level horizontal scrolling.
 - Do not change a credential-bound Proxmox origin or TLS policy in place.
 - Keep SSH terminal access disabled until per-assignment credentials and trusted destination binding replace deployment-wide credentials and guest-claimed IP authority.
 - Treat AI-generated material as untrusted advice. AI is read-only until a human approves a normal, authorized durable operation.
+- Treat Cloudflare as an optional edge, not an application authority. Preserve
+  the `cloudflare` Compose profile, `cloudflared` service, loopback HTTP bind,
+  root-owned `/etc/labgoblin/cloudflare-tunnel-token` restricted to the
+  dedicated connector group, exact HTTPS origin, and secure-cookie contract
+  described in `docs/operations/cloudflare.md`.
+- Access enforcement validates `Cf-Access-Jwt-Assertion` cryptographically and
+  then continues through normal LabGoblin authentication, revocable sessions,
+  organization membership, RBAC, ownership, CSRF, and audit checks. Never map
+  Access email/groups directly to authority or accept header presence alone.
+- Cloudflare forwarding headers are not application identity or audit fields.
+  Any future use is restricted to the configured Tunnel path; never use a
+  forwarded client address as identity or authorization evidence.
+- R2 backup work remains deferred until a complete client-side encrypted backup
+  and repeatable isolated restore contract exists.
 - Add a linear Alembic migration for schema changes and regenerate the OpenAPI contract.
 
 ## Validation
@@ -78,6 +92,8 @@ Passing source-contract tests does not prove browser layout or interaction.
 - Proxmox adapter: `backend/app/services/proxmox.py`
 - Classroom policy: `backend/app/services/classroom_access.py`
 - Deployment: `deploy/install.sh`, `deploy/updater_agent.py`, `deploy/labgoblin-updater.service`, `docker-compose.yml`
+- Cloudflare edge: `deploy/configure-cloudflare.sh`, `docker-compose.yml`,
+  `docs/operations/cloudflare.md`
 - Contract: `frontend/openapi.json`, `frontend/src/generated/api-schema.d.ts`
 - Brand: `docs/brand.md`, `frontend/public/brand/`
 - Navigation model: `frontend/src/navigation/appNavigation.js`

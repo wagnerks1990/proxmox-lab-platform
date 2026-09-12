@@ -13,6 +13,8 @@
 - Runtime deployment uses Ubuntu, nginx, and systemd.
 - Proxmox VE API access must remain backend-only.
 - Remote access direction is Guacamole-first, with ttyd only as fallback/debug if already present.
+- Cloudflare is an optional deployment edge. The canonical contract is in
+  `docs/operations/cloudflare.md`.
 
 ## Branding and documentation
 - User-facing names MUST use **LabGoblin**.
@@ -31,6 +33,9 @@
 - Preserve existing working behavior.
 - Prefer incremental, testable changes.
 - Keep frontend API base URL as `/api`.
+- Preserve the disabled-by-default `cloudflare` Compose profile, root-owned
+  Tunnel token restricted to the dedicated connector group, loopback origin
+  binding, and exact public-origin settings.
 
 ## Frontend experience
 
@@ -84,6 +89,20 @@
 - Access tokens must remain bound to a live `auth_sessions` row and the current user `token_version`; do not add stateless-token bypasses for tests or tools.
 - Password, username, activation, and credential-recovery changes must preserve documented session-revocation behavior.
 - Identity audit metadata must never contain plaintext usernames from failed unknown-user logins, passwords, hashes, tokens, or other credentials.
+- Cloudflare Access may be an outer authentication gate, but LabGoblin sessions,
+  tenant membership, RBAC, ownership, revocation, CSRF, and origin checks remain
+  authoritative.
+- When Access enforcement is enabled, validate the assertion signature,
+  algorithm, issuer, configured application audience, and time claims. Header
+  presence or an asserted email/group never grants a LabGoblin role.
+- Do not promote Cloudflare client/protocol headers into application identity
+  or audit fields. Any future use is limited to the exclusive configured Tunnel
+  path; a forwarded address is never proof of identity or authorization.
+- Never store a Tunnel token, Access service-token secret, Access assertion, or
+  broad Cloudflare API token in git, the database, normal logs, browser storage,
+  URLs, or support bundles.
+- Do not add R2 backup support until the backup is complete and client-side
+  encrypted and isolated restore testing proves it can recover the application.
 
 ## VM/API rules
 - VM route identity should use the app database VM id unless explicitly documented otherwise.

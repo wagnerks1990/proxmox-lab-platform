@@ -5,6 +5,12 @@ releases begin, material changes are recorded in pull requests and this file.
 
 ## Unreleased
 
+- Added an optional, disabled-by-default Cloudflare Tunnel deployment profile,
+  restricted token-file setup helper, loopback origin binding, and opt-in
+  Cloudflare Access JWT validation while preserving LabGoblin sessions and RBAC.
+- Added Cloudflare DNS/TLS, cache, WAF, rate-limit, SSE/WebSocket, rotation,
+  outage recovery, rollback, and acceptance guidance. R2 backup support remains
+  deliberately deferred pending complete encrypted backups and tested restores.
 - Rebuilt the frontend around a responsive, role-aware application shell,
   simplified workflow navigation, reusable interface primitives, labeled forms,
   adaptive data regions, and explicit loading/error/empty states.

@@ -29,12 +29,34 @@ The primary design goals are:
 | Redis | Queue transport, distributed locks, rate limits, and short-lived events |
 | Console broker | Current same-origin noVNC and key-based SSH WebSocket proxy; Guacamole remains planned |
 | Reverse proxy | TLS termination and routing for web, API, WebSocket, and Guacamole traffic |
+| Cloudflare edge | Optional DNS, TLS, WAF, Access, and outbound Tunnel publication; disabled by default |
 | Documentation | Version-matched MkDocs wiki |
 | AI gateway | Planned optional provider abstraction; current AI behavior is documentation-only and read-only |
 
 The current scheduler is embedded in the API process. Redis locks and database
 leases prevent overlapping work, but separating and independently scaling the
 worker/scheduler is still required before multi-API deployment.
+
+## Optional external edge
+
+The supported Cloudflare topology uses a `cloudflared` connector in the
+opt-in `cloudflare` Compose profile and binds the appliance HTTP listener to
+loopback. The public hostname terminates at Cloudflare and reaches the connector
+over an outbound Tunnel; the origin is not independently Internet-reachable.
+LabGoblin does not hold a broad Cloudflare account API credential.
+
+Cloudflare Access can provide pre-authentication and machine service policies.
+When enabled, the API validates the Access assertion signature, issuer,
+audience, and time claims as an additional edge boundary. The verified assertion
+does not create a LabGoblin session or grant a role. Application login, session
+revocation, organization membership, ownership, RBAC, CSRF, and WebSocket origin
+checks remain authoritative.
+
+LabGoblin does not currently promote Cloudflare forwarding headers into
+identity or audit fields. Any future use must accept them only from the
+exclusive trusted Tunnel path. Dynamic API, identity, event-stream, and console
+traffic is never edge-cached. See
+[Optional Cloudflare edge integration](../operations/cloudflare.md).
 
 ## Domain boundaries
 

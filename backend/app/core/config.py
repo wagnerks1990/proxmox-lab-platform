@@ -1,4 +1,25 @@
+import ipaddress
+import re
+
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+_DNS_LABEL = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
+
+
+def _normalize_public_hostname(value: str) -> str:
+    raw = value.strip()
+    hostname = raw.lower()
+    if raw != value or len(hostname) > 253 or "." not in hostname:
+        raise ValueError("CLOUDFLARE_PUBLIC_HOSTNAME must be a DNS hostname")
+    if any(not _DNS_LABEL.fullmatch(label) for label in hostname.split(".")):
+        raise ValueError("CLOUDFLARE_PUBLIC_HOSTNAME must be a DNS hostname")
+    try:
+        ipaddress.ip_address(hostname)
+    except ValueError:
+        return hostname
+    raise ValueError("CLOUDFLARE_PUBLIC_HOSTNAME must not be an IP address")
 
 
 class Settings(BaseSettings):
@@ -17,6 +38,13 @@ class Settings(BaseSettings):
     auth_cookie_secure: bool = False
     cors_allowed_origins: str = ""
     browser_trusted_origins: str = ""
+
+    cloudflare_tunnel_enabled: bool = False
+    cloudflare_public_hostname: str = ""
+    cloudflare_access_required: bool = False
+    cloudflare_access_team_domain: str = ""
+    cloudflare_access_audience: str = ""
+    cloudflare_access_jwks_ttl_seconds: int = Field(default=3600, ge=30, le=86400)
 
     proxmox_base_url: str
     proxmox_token_id: str
@@ -77,6 +105,27 @@ class Settings(BaseSettings):
     updater_poll_interval_seconds: int = 900
     updater_allow_automatic: bool = False
     updater_require_signed_commits: bool = False
+
+    @model_validator(mode="after")
+    def validate_cloudflare_access(self):
+        if self.cloudflare_tunnel_enabled:
+            if not self.cloudflare_public_hostname.strip():
+                raise ValueError(
+                    "CLOUDFLARE_PUBLIC_HOSTNAME is required when "
+                    "CLOUDFLARE_TUNNEL_ENABLED is true"
+                )
+            self.cloudflare_public_hostname = _normalize_public_hostname(
+                self.cloudflare_public_hostname
+            )
+        if self.cloudflare_access_required and not (
+            self.cloudflare_access_team_domain.strip()
+            and self.cloudflare_access_audience.strip()
+        ):
+            raise ValueError(
+                "CLOUDFLARE_ACCESS_TEAM_DOMAIN and CLOUDFLARE_ACCESS_AUDIENCE "
+                "are required when CLOUDFLARE_ACCESS_REQUIRED is true"
+            )
+        return self
 
 
 settings = Settings()

@@ -106,6 +106,14 @@ def compose(
     project_dir: Path | None = None,
 ):
     directory = project_dir or APP_DIR
+    profile_args = []
+    compose_source = directory / "docker-compose.yml"
+    if (
+        env_file().get("CLOUDFLARE_TUNNEL_ENABLED", "false").lower() == "true"
+        and compose_source.is_file()
+        and re.search(r"(?m)^\s{2}cloudflared:\s*$", compose_source.read_text())
+    ):
+        profile_args = ["--profile", "cloudflare"]
     return run(
         [
             "docker",
@@ -114,6 +122,7 @@ def compose(
             str(APP_DIR / ".env"),
             "--project-directory",
             str(directory),
+            *profile_args,
             *args,
         ],
         check=check,
