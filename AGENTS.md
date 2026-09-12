@@ -35,7 +35,9 @@
 - Keep frontend API base URL as `/api`.
 - Preserve the disabled-by-default `cloudflare` Compose profile, root-owned
   Tunnel token restricted to the dedicated connector group, loopback origin
-  binding, and exact public-origin settings.
+  binding, connector health gate, exact public-origin settings, and explicit
+  `--restore-lan-bind` requirement. Preserve the provisioner's reviewed
+  plan/apply reconciliation, local JSON status, and DNS-last ordering.
 
 ## Frontend experience
 
@@ -101,6 +103,13 @@
 - Never store a Tunnel token, Access service-token secret, Access assertion, or
   broad Cloudflare API token in git, the database, normal logs, browser storage,
   URLs, or support bundles.
+- Cloudflare provisioning API tokens must be accepted only through protected
+  files, limited to the selected account/zone, and discarded after use. Persist
+  only nonsecret Cloudflare resource IDs.
+- Prefer a district IdP group for student Access. The allowed-email-domain
+  fallback is explicitly weaker; never substitute an Everyone or Bypass policy.
+- Cloudflare publication exposes only the LabGoblin web proxy. Never publish
+  Proxmox, SSH, PostgreSQL, Redis, the updater, or lab/management networks.
 - Do not add R2 backup support until the backup is complete and client-side
   encrypted and isolated restore testing proves it can recover the application.
 

@@ -35,24 +35,38 @@ The installer deploys LabGoblin with Docker Compose, generates bootstrap secrets
 ### Optional Cloudflare edge
 
 The deployment includes an opt-in `cloudflare` Compose profile for publishing
-LabGoblin through an outbound-only Cloudflare Tunnel. The helper keeps the
-origin on loopback, stores the Tunnel token in a root-owned restricted file, configures the
-exact HTTPS browser origin and secure cookies, and requires a validated
-Cloudflare Access assertion before LabGoblin's own login and RBAC.
+LabGoblin through an outbound-only Cloudflare Tunnel. This is the recommended
+public path when students need to use their assigned labs from home. Students
+open one HTTPS URL, complete district SSO through Cloudflare Access, sign in to
+LabGoblin, and use their assigned browser consoles. They do not need WARP, a
+VPN client, a Cloudflare account, or access to Proxmox, SSH, the database, or
+internal lab networks.
+
+The guided provisioner can plan and reconcile the Tunnel, ingress, Access
+application and least-privilege policy, and DNS record. Prefer an approved
+district IdP group; the supported email-domain fallback is broader and weaker.
 
 ```bash
 cd /opt/labgoblin/app
-sudo deploy/configure-cloudflare.sh enable \
+sudo python3 deploy/provision_cloudflare.py plan \
+  --api-token-file /root/cloudflare-api-token \
+  --account-id CLOUDFLARE_ACCOUNT_ID \
+  --zone example.edu \
   --hostname lab.example.edu \
   --team-domain school.cloudflareaccess.com \
-  --audience ACCESS_APPLICATION_AUD \
-  --token-file /root/cloudflare-tunnel-token
-sudo deploy/configure-cloudflare.sh status
+  --access-group-id CLOUDFLARE_ACCESS_GROUP_ID
+# Review the plan, then repeat the same protected arguments with `apply`.
+sudo deploy/configure-cloudflare.sh status --json
 ```
 
-Cloudflare Access is an outer gate, not a replacement identity or authorization
-system. Read the complete security, outage recovery, rotation, verification,
-and rollback procedure in
+The provisioner passes the Tunnel token directly to the hardened local helper;
+only nonsecret resource IDs are persisted. It keeps the origin on loopback,
+uses a restricted token file, configures the exact HTTPS browser origin and
+secure cookies, and requires a cryptographically validated Access assertion
+before LabGoblin's own login and RBAC. Cloudflare Access is an outer gate, not
+a replacement identity or authorization system. Read the complete scopes,
+manual fallback, security, real-environment staging, outage recovery, rotation,
+verification, and rollback procedure in
 [`docs/operations/cloudflare.md`](docs/operations/cloudflare.md) before enabling
 the profile. Cloudflare R2 backups are deliberately deferred until LabGoblin
 supports complete client-side encrypted backups and isolated restore tests.

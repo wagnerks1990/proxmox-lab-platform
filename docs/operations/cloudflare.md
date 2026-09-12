@@ -1,4 +1,4 @@
-# Optional Cloudflare edge integration
+# Cloudflare edge and at-home student access
 
 Cloudflare is an optional deployment edge for LabGoblin. It can publish the
 existing web application without an inbound Internet listener and can add an
@@ -7,7 +7,32 @@ organization membership, tenant isolation, role checks, session revocation, or
 application rate limits.
 
 The integration is disabled by default. Enabling it is a host operation, not a
-setting available to a browser administrator.
+setting available to a browser administrator. For a classroom deployment,
+Cloudflare Tunnel plus Access is the recommended public connection path: it
+lets students reach an assigned lab from home without publishing the appliance
+or asking each student to install a VPN client.
+
+## Student journey and security boundary
+
+The intended student experience is deliberately simple:
+
+1. Open the instructor-provided HTTPS URL from a normal browser.
+2. Complete the district identity-provider sign-in and MFA required by the
+   Cloudflare Access policy.
+3. Sign in to LabGoblin with the student's LabGoblin account.
+4. Open only the browser consoles and lab resources assigned to that student
+   during the active run window.
+
+Students do **not** need a Cloudflare account, WARP, a VPN client, a Tunnel
+token, or access to the Cloudflare dashboard. Cloudflare Access is the outer
+district-identity gate; LabGoblin login, enrollment, assignment windows,
+ownership, RBAC, session revocation, and audit remain the application authority.
+
+The public hostname exposes only LabGoblin's web proxy. It must never publish a
+Proxmox management interface, SSH service, PostgreSQL, Redis, updater socket,
+hypervisor API, VM network, or other internal service. Student remote work uses
+LabGoblin's assigned browser-console path, not direct access to the management
+plane or lab network.
 
 ## Supported design
 
@@ -33,22 +58,108 @@ and [firewall requirements](https://developers.cloudflare.com/cloudflare-one/net
 ## Prerequisites
 
 - A domain managed in Cloudflare DNS.
-- A remotely managed, named Cloudflare Tunnel with a published application
-  hostname whose service target is exactly `http://web:8080`.
-- A tunnel token copied once from Cloudflare. Treat it as a root credential.
 - An exact HTTPS hostname such as `https://lab.example.edu`. Wildcard browser
   origins are not accepted.
-- A Cloudflare Access self-hosted application for the same hostname. The secure
-  setup helper enables origin JWT validation together with Tunnel publication.
+- A Cloudflare Zero Trust team domain such as
+  `school.cloudflareaccess.com` and the district identity provider connected to
+  Access.
+- A reusable Cloudflare Access group whose Include rule maps the district IdP
+  group containing only students and staff approved for remote LabGoblin
+  access. Pass the Cloudflare Access group ID, not an unverified display name or
+  raw IdP assertion. This is strongly recommended. An allowed email domain is
+  supported as a simpler fallback, but it is weaker because every account in
+  that domain can pass the outer gate unless separately excluded.
+- A temporary, root-readable file containing a narrowly scoped Cloudflare API
+  token for provisioning. Never paste the token into a command.
 
-Use a narrowly scoped Cloudflare API token when creating Cloudflare resources.
-LabGoblin runtime services do not need and must not receive a Cloudflare global
-API key or an account-management API token. Cloudflare documents remotely
-managed tunnel creation and token permissions in its
+Create a custom Cloudflare API token limited to the one LabGoblin account and
+zone with exactly these permissions:
+
+| Scope | Resource | Permission |
+| --- | --- | --- |
+| Account | selected account | Cloudflare Tunnel: Edit |
+| Account | selected account | Access: Apps and Policies: Edit |
+| Zone | selected zone | DNS: Edit |
+| Zone | selected zone | Zone: Read |
+
+`Zone: Read` is used to resolve and verify the exact `--zone` name. Do not grant
+account-wide DNS, Access user/session management, Workers, R2, billing, or
+global-key access.
+LabGoblin runtime services never receive this provisioning token. Cloudflare
+documents remotely managed tunnel creation and token permissions in its
 [Tunnel API guide](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/get-started/create-remote-tunnel-api/).
 Do not use a temporary Quick Tunnel for a production or classroom deployment.
 
-## Cloudflare-side setup
+## Guided automated provisioning
+
+`deploy/provision_cloudflare.py` is the preferred setup path. It plans and then
+reconciles a named Tunnel, its `http://web:8080` ingress configuration, one
+reusable Access policy, the exact-hostname self-hosted Access application, and
+the proxied DNS record. DNS is created last so a partially configured path is
+not advertised. After Cloudflare accepts the configuration, the provisioner
+retrieves the Tunnel run token and invokes the local secure configuration helper.
+
+Only nonsecret Cloudflare resource IDs are saved for later reconciliation.
+Neither the API token nor Tunnel token is written to the repository, `.env`,
+database, normal logs, or provisioner state. Keep the API token in a protected
+temporary file and remove or revoke it after setup.
+
+First preview the exact operations. Prefer the district IdP group form:
+
+```bash
+cd /opt/labgoblin/app
+sudo python3 deploy/provision_cloudflare.py plan \
+  --api-token-file /root/cloudflare-api-token \
+  --account-id CLOUDFLARE_ACCOUNT_ID \
+  --zone example.edu \
+  --hostname lab.example.edu \
+  --team-domain school.cloudflareaccess.com \
+  --access-group-id CLOUDFLARE_ACCESS_GROUP_ID
+```
+
+Review the plan for the exact account, zone, hostname, origin service, and
+Access selector. Then apply the same arguments with `apply`:
+
+```bash
+sudo python3 deploy/provision_cloudflare.py apply \
+  --api-token-file /root/cloudflare-api-token \
+  --account-id CLOUDFLARE_ACCOUNT_ID \
+  --zone example.edu \
+  --hostname lab.example.edu \
+  --team-domain school.cloudflareaccess.com \
+  --access-group-id CLOUDFLARE_ACCESS_GROUP_ID
+sudo deploy/configure-cloudflare.sh status --json
+```
+
+Exactly one Access selector is required. If the district cannot yet supply a
+group, replace `--access-group-id` with `--allow-email-domain students.example.edu`.
+That fallback is broader and must be recorded as a pilot risk. Never use an
+Everyone or Bypass policy for convenience. Set `--session-duration` to the
+district-approved Access reauthentication interval when the default is not
+appropriate. An Access session never extends a LabGoblin login, assignment, or
+run window.
+
+The provisioner is idempotent: rerun `plan` with the same protected arguments
+to verify the resources it owns. It creates missing resources, but stops for
+explicit review rather than silently overwriting configuration drift. By
+default it does not adopt or overwrite an unrelated Tunnel, Access
+application, policy, or DNS record with the same name.
+Use `--adopt-existing` only after independently verifying the resource IDs,
+configuration, ownership, and impact shown in the plan. For unattended
+execution, `--yes` suppresses only the final confirmation after that review; it
+does not bypass validation, ownership, or conflict checks. DNS is attempted
+only after the Access, Tunnel, and local health gates. If a create request has
+an ambiguous network outcome, the tool stops without retrying it and requires
+fresh discovery before adoption. A failed local startup leaves the origin
+loopback-bound. The local helper's `status --json` is suitable for
+operator checks and contains no secret values. These controls are covered by
+offline tests; final acceptance still requires the real staging checks below
+against the district's Cloudflare account and identity provider.
+
+## Manual Cloudflare-side setup
+
+Use this path only when API-driven provisioning is prohibited. It produces the
+same resource and security contract as the guided provisioner.
 
 1. Add the public domain to Cloudflare DNS and verify that the intended
    hostname does not reveal or resolve directly to the appliance address.
@@ -83,13 +194,15 @@ sudo deploy/configure-cloudflare.sh enable \
   --team-domain school.cloudflareaccess.com \
   --audience 0123456789abcdef0123456789abcdef \
   --token-file /root/cloudflare-tunnel-token
-sudo deploy/configure-cloudflare.sh status
+sudo deploy/configure-cloudflare.sh status --json
 ```
 
 The helper validates the hostname, team domain, audience, JWKS TTL, and token
 file. It copies the token to the protected destination, validates the Compose
-configuration, and starts the API, web, and connector. If startup fails, it
-restores the previous environment and restarts the normal API and web services.
+configuration, and starts the API, web, and connector with Compose `--wait`.
+The connector health check must pass before enablement succeeds. If startup
+fails, it restores the previous environment and restarts the normal API and web
+services while keeping the host HTTP listener on loopback.
 It configures this deployment contract:
 
 ```dotenv
@@ -237,7 +350,7 @@ After enabling the profile:
 
 ```bash
 cd /opt/labgoblin/app
-sudo deploy/configure-cloudflare.sh status
+sudo deploy/configure-cloudflare.sh status --json
 sudo docker compose ps
 curl -fsS http://127.0.0.1:8080/api/ready
 ```
@@ -247,30 +360,60 @@ stopped by Cloudflare Access. Test the public endpoint with an allowed browser
 identity or a dedicated service token; do not place the Client Secret on a
 command line or in shell history.
 
-Then verify all of the following from a managed client:
+### Required real staging checklist
 
-1. DNS returns Cloudflare addresses and the HTTPS certificate is valid.
-2. The appliance address is not reachable from the Internet.
-3. Access rejects an unauthorized identity and accepts an allowed identity.
-4. LabGoblin still requires its own login after Access succeeds.
-5. Secure login cookies, unsafe-request origin checks, logout, and session
-   revocation work through the public hostname.
-6. Student and instructor tenant boundaries are unchanged.
-7. SSE remains connected without buffering and stops after authorization is
-   revoked.
-8. Console WebSocket upgrade, reconnect, expiry, and revocation behave normally.
-9. API responses are not cached and a test limit returns 429 without a browser
-   challenge.
-10. No forwarded Cloudflare header is treated as identity or authorization.
+The automated test suite mocks Cloudflare APIs and Access signing keys. It does
+not prove that a real Tunnel, district IdP, Cloudflare policy, browser session,
+or long-lived console path works. Before a student pilot, retain dated evidence
+for all of the following against a non-production LabGoblin environment:
+
+1. `plan` shows only the intended account, zone, hostname, Tunnel, Access
+   application, reusable policy, and proxied DNS record; a second `plan` after
+   `apply` reports no unintended drift.
+2. Local `status --json`, Compose service health, and loopback readiness are
+   healthy; the connector recovers after a controlled restart.
+3. DNS returns Cloudflare addresses, HTTPS has a valid certificate, and no
+   public DNS record discloses the appliance address.
+4. The appliance HTTP port, Proxmox UI/API, SSH, PostgreSQL, Redis, updater, and
+   VM networks are unreachable from an external network.
+5. A district IdP user outside the approved group is denied, an approved test
+   student is accepted, and removing that student from the group closes a new
+   Access session. If email-domain fallback is used, verify and record its
+   intentionally broader population.
+6. LabGoblin still requires its own login after Access succeeds. Disabling the
+   LabGoblin account, ending the assignment, changing membership, logging out,
+   and revoking the session each terminate application access.
+7. A student can see and control only their assigned VM during the run window;
+   direct URLs for another student, organization, admin route, Proxmox, SSH,
+   database, or internal network remain denied.
+8. Secure cookies, unsafe-request origin checks, expected-host enforcement,
+   login throttling, logout, and session revocation work through the public
+   hostname in every supported browser.
+9. SSE remains connected without proxy buffering and stops after authorization
+   is revoked. Browser-console WebSocket upgrade, resize, reconnect, expiry,
+   revocation, and a representative 80-minute class session all succeed from a
+   home/mobile connection as well as the school network.
+10. API, authentication, console, and event-stream responses are not cached;
+    WAF and rate-limit rules do not challenge API/WebSocket/SSE requests or
+    block a classroom sharing one NAT address.
+11. Missing, forged, expired, wrong-audience, and wrong-issuer Access assertions
+    fail at the origin, and no forwarded Cloudflare header becomes identity or
+    authorization.
+12. The API-token file and temporary Tunnel-token file are removed or securely
+    retained as documented; neither secret appears in state, `.env`, logs,
+    process arguments, shell history, support output, or the repository.
+13. Simulated Cloudflare loss leaves local health available to an operator but
+    does not expose a direct-origin fallback. Intentional disable and re-enable
+    both complete without changing student authorization.
 
 ## Rotation
 
-To rotate a Tunnel token, create or rotate it in Cloudflare and rerun the full
-`deploy/configure-cloudflare.sh enable` command with the new protected
-`--token-file`. The helper recreates the affected services. Confirm the
-connector and authenticated public workflow are healthy, securely remove the
-temporary source file, and re-check the installed token's root ownership and
-mode.
+To rotate a Tunnel token, rerun the provisioner's `plan` and `apply` workflow
+with a protected API-token file. For a manually managed Tunnel, rotate it in
+Cloudflare and rerun the full `deploy/configure-cloudflare.sh enable` command
+with the new protected `--token-file`. Confirm connector health and the
+authenticated public workflow, securely remove the temporary source file, and
+re-check the installed token's root ownership and mode.
 
 Access signing keys rotate through the published JWKS and should not be pinned
 as static files. Service-token Client Secrets require their own rotation; they
@@ -285,26 +428,26 @@ origin intentionally remains unavailable to remote users. An operator with SSH
 access can still inspect services and call local health endpoints. Do not expose
 the origin publicly as an outage workaround.
 
-To intentionally remove the integration:
-
-First confirm that the appliance HTTP port is not forwarded through an Internet
-firewall. `disable` removes only the helper-managed environment block and
-restores the deployment's previous bind, cookie, origin, and CORS values; a
-previous `0.0.0.0` bind can therefore become reachable again if perimeter rules
-allow it.
+To intentionally remove the integration, first confirm that the appliance HTTP
+port is not forwarded through an Internet firewall. `disable` removes the
+connector profile but deliberately keeps HTTP bound to loopback by default.
+This prevents a Cloudflare rollback from silently creating a LAN or public
+listener.
 
 ```bash
 cd /opt/labgoblin/app
 sudo deploy/configure-cloudflare.sh disable
-sudo deploy/configure-cloudflare.sh status
+sudo deploy/configure-cloudflare.sh status --json
 ```
 
-After disabling, configure an approved local reverse proxy or LAN-only bind,
-set `BROWSER_TRUSTED_ORIGINS` to the exact replacement origin, and set
-`AUTH_COOKIE_SECURE` according to the replacement TLS path. Test authentication
-before declaring service restored. Retain the token file only if the Tunnel is
-expected to return; otherwise revoke the Tunnel credential in Cloudflare and
-run `sudo deploy/configure-cloudflare.sh disable --remove-token` to remove the
+To restore the saved pre-Cloudflare LAN bind deliberately, use
+`sudo deploy/configure-cloudflare.sh disable --restore-lan-bind` only after
+confirming host and perimeter firewall policy. The helper restores the saved
+browser origin, cookie, and CORS settings together with that explicit bind.
+Test authentication from the replacement origin before declaring service
+restored. Retain the token file only if the Tunnel is expected to return;
+otherwise revoke the Tunnel credential in Cloudflare and run
+`sudo deploy/configure-cloudflare.sh disable --remove-token` to remove the
 installed file. The harmless dedicated system group remains in place.
 
 Rollback of an application release does not roll back Cloudflare dashboard

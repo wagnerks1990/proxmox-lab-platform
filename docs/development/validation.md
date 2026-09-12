@@ -4,7 +4,7 @@ Run from the repository root with safe test-only environment values:
 
 ```bash
 pip install -r backend/requirements.txt -r backend/requirements-dev.txt
-python -m compileall -q backend/app backend/tests
+python -m compileall -q backend/app backend/tests deploy/provision_cloudflare.py
 ruff format --check backend/app backend/tests deploy scripts tests
 ruff check backend/app backend/tests deploy scripts tests
 bandit -r backend/app deploy -ll -q
