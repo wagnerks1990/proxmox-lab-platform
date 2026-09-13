@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import api from '../services/api'
 
-const bootstrapInit = { name:'Primary Proxmox', api_url:'', verify_ssl:true, root_username:'root@pam', root_password:'', token_id:'labgoblin' }
-const manualInit = { name:'Primary Proxmox', api_url:'', verify_ssl:true, token_user:'root@pam', token_id:'labgoblin', token_secret:'' }
+const bootstrapInit = { name:'Primary Proxmox', api_url:'', verify_ssl:true, root_password:'' }
+const manualInit = { name:'Primary Proxmox', api_url:'', verify_ssl:true, token_user:'labgoblin@pve', token_id:'labgoblin', token_secret:'' }
 const defaultsInit = { default_node:'', default_storage:'', default_bridge:'', default_template_vmid:'', clone_mode:'full', placement_policy:'', notes:'' }
 const statusTone = status => status === 'PASS' || status === 'ok' ? 'ui-status-badge--success' : status === 'WARN' ? 'ui-status-badge--warning' : status === 'FAIL' ? 'ui-status-badge--danger' : 'ui-status-badge--neutral'
 
 export default function ProxmoxSetupPage(){
+  const secureBootstrapContext = window.isSecureContext
   const [clusters,setClusters]=useState([])
   const [selectedId,setSelectedId]=useState(null)
   const [loading,setLoading]=useState(false)
@@ -99,12 +100,8 @@ export default function ProxmoxSetupPage(){
   })
 
   const doBootstrap = ()=>run(async ()=>{
-    const {data} = await api.post('/admin/proxmox/bootstrap-root', bootstrap)
+    const {data} = await api.post('/admin/proxmox/bootstrap-root', { ...bootstrap, root_username:'root@pam' })
     setBootstrap({...bootstrap, root_password:''})
-    if (data?.token_exists) {
-      setMsg(`${data.message} Suggested actions: ${data.suggested_actions?.join(' | ')}`)
-      return
-    }
     await loadClusters()
     if (data?.cluster_id) await refreshDiscovery(data.cluster_id)
     setMsg('Bootstrap successful.')
@@ -145,20 +142,21 @@ export default function ProxmoxSetupPage(){
   return <section className='page-shell' aria-labelledby='proxmox-setup-title'>
     <header className='ui-page-header'><div className='ui-page-header__copy'><p className='muted'>Infrastructure</p><h2 id='proxmox-setup-title' className='ui-page-header__title'>Proxmox setup</h2><p className='ui-page-header__description'>Connect clusters, validate access, review readiness, and set placement defaults.</p></div></header>
     {activeCluster ? <p className='ui-alert ui-alert--success'><strong>Active cluster:</strong>&nbsp; {activeCluster.name} ({activeCluster.api_url})</p> : <p className='ui-alert ui-alert--warning'>No active cluster is configured.</p>}
-    <p className='muted'>Root credentials are used only during bootstrap and are not stored. Token secrets are never returned by the API.</p>
+    <p className='muted'>Root credentials are used once to create the dedicated labgoblin@pve account, LabGoblinRole permissions, and labgoblin API token. The root password is never stored. The generated token secret is encrypted at rest and never returned by the API.</p>
 
     <button disabled={loading} aria-expanded={showBootstrap || !activeCluster} aria-controls='cluster-connection-forms' onClick={()=>setShowBootstrap(!showBootstrap)}>{showBootstrap ? 'Hide connection forms' : 'Add or reconnect cluster'}</button>
 
     {(showBootstrap || !activeCluster) ? <section id='cluster-connection-forms' className='ui-card'>
-      <h3>Bootstrap with root</h3>
+      <h3>Automatic dedicated access</h3>
+      <p className='muted'>Use this only from an HTTPS page or a localhost SSH tunnel. Existing users or roles with conflicting permissions are not overwritten.</p>
+      {!secureBootstrapContext ? <p className='ui-alert ui-alert--error' role='alert'>Root bootstrap is blocked on an insecure browser connection. Use HTTPS or open LabGoblin through a localhost SSH tunnel.</p> : null}
       <div className='ui-form-grid'>
         <label className='ui-field'>Cluster name<input className='input' value={bootstrap.name} onChange={e=>setBootstrap({...bootstrap,name:e.target.value})}/></label>
         <label className='ui-field'>API URL<input className='input' type='url' value={bootstrap.api_url} onChange={e=>setBootstrap({...bootstrap,api_url:e.target.value})}/></label>
-        <label className='ui-field'>Root username<input className='input' value={bootstrap.root_username} onChange={e=>setBootstrap({...bootstrap,root_username:e.target.value})}/></label>
-        <label className='ui-field'>Token ID<input className='input' value={bootstrap.token_id} onChange={e=>setBootstrap({...bootstrap,token_id:e.target.value})}/></label>
+        <div className='ui-field'><span>Dedicated identity</span><strong>labgoblin@pve!labgoblin</strong></div>
         <label className='ui-field'>Root password<input className='input' type='password' autoComplete='off' value={bootstrap.root_password} onChange={e=>setBootstrap({...bootstrap,root_password:e.target.value})}/></label>
         <label><input type='checkbox' checked={bootstrap.verify_ssl} onChange={e=>setBootstrap({...bootstrap,verify_ssl:e.target.checked})}/> Verify SSL</label>
-        <button disabled={loading} onClick={doBootstrap}>Bootstrap</button>
+        <button disabled={loading || !secureBootstrapContext} onClick={doBootstrap}>Create dedicated Proxmox access</button>
       </div>
       <h3>Host access</h3>
       <p className='muted'>Current mode: {hostAccess?.mode || 'api_only'}. Root password is used only during this request and is not persisted.</p>

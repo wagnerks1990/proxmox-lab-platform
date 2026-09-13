@@ -57,6 +57,9 @@ CSS pixel viewport without page-level horizontal scrolling.
 - Keep JWTs in HttpOnly cookies. Never put JWTs, tickets, credentials, keys, or provider secrets in URLs, logs, browser storage, or normal API responses.
 - Enforce exact browser origins on cookie-authenticated unsafe requests and WebSockets.
 - Do not change a credential-bound Proxmox origin or TLS policy in place.
+- Root bootstrap is a one-time `root@pam` exchange that creates the fixed
+  least-privilege `labgoblin@pve` user and token. Never persist the root
+  password, create a root token, or overwrite conflicting Proxmox identities.
 - Keep SSH terminal access disabled until per-assignment credentials and trusted destination binding replace deployment-wide credentials and guest-claimed IP authority.
 - Treat AI-generated material as untrusted advice. AI is read-only until a human approves a normal, authorized durable operation.
 - Treat Cloudflare as an optional edge, not an application authority. Preserve
