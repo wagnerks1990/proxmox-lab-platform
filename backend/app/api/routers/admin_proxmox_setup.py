@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
+import httpx
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_role
@@ -16,7 +17,10 @@ from app.models.models import (
     AuditLog,
 )
 from app.core.config import settings
-from app.services.proxmox_bootstrap import ProxmoxBootstrapService
+from app.services.proxmox_bootstrap import (
+    ProxmoxBootstrapError,
+    ProxmoxBootstrapService,
+)
 from app.services.proxmox import ProxmoxClient
 from app.services.proxmox_resource_stats import ProxmoxResourceStatsService
 from app.services.asset_server_control import (
@@ -164,10 +168,29 @@ def list_clusters(_user=Depends(require_role("Admin")), db: Session = Depends(ge
 async def bootstrap_root(
     payload: dict, _user=Depends(require_role("Admin")), db: Session = Depends(get_db)
 ):
-    raise HTTPException(
-        status_code=410,
-        detail="Root-password bootstrap is disabled. Create a least-privilege API token in Proxmox and use manual token setup.",
-    )
+    required = ["name", "api_url", "root_password"]
+    missing = [key for key in required if not payload.get(key)]
+    if missing:
+        raise HTTPException(
+            status_code=422, detail={"error": f"Missing fields: {', '.join(missing)}"}
+        )
+    try:
+        return await ProxmoxBootstrapService(db).bootstrap_with_root(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ProxmoxBootstrapError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except httpx.HTTPStatusError as exc:
+        status = exc.response.status_code
+        raise HTTPException(
+            status_code=502,
+            detail=f"Proxmox rejected root bootstrap (HTTP {status})",
+        ) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="Unable to reach Proxmox securely during root bootstrap",
+        ) from exc
 
 
 @router.post("/admin/proxmox/host-access/bootstrap")

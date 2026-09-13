@@ -55,6 +55,10 @@ environment-dependent checks.
   Bypass rules are absent.
 - A least-privilege Proxmox token passes the documented permission matrix with
   TLS verification enabled.
+- Automatic Proxmox bootstrap creates only `labgoblin@pve`, the exact
+  `LabGoblinRole`, and `labgoblin@pve!labgoblin`; it refuses conflicting
+  identities, cleans up newly created objects after validation failure, and
+  leaves no root password or root token in storage, logs, or responses.
 
 ## Real infrastructure
 

@@ -1,22 +1,66 @@
 # Proxmox Setup Wizard
 
-- Root credentials are used only during bootstrap and are not stored.
-- API token secrets are encrypted at rest.
-- `CONFIG_ENCRYPTION_KEY` must be backed up.
-- If token already exists, choose a different token ID or use manual token mode.
-- Deleting a cluster removes app DB config only; it does not delete Proxmox VMs.
-- Env fallback for Proxmox still exists when no active DB cluster is present.
-- Discovery-driven defaults are available:
-  - nodes
-  - storage targets
-  - VM templates
-  - bridges/networks
-- If discovery is empty/unavailable, manual defaults input is still supported.
+## Automatic dedicated access
 
-- Placement policy options:
-  - `manual` (requires online default node)
-  - `balanced` (resource-aware node scoring)
-  - `prefer_default_then_balance`
+A LabGoblin platform administrator can connect a cluster without manually
+creating a Proxmox token. Open **Administration > Proxmox setup**, expand the
+connection form, and provide:
+
+- a descriptive cluster name;
+- the HTTPS Proxmox API URL, normally
+  `https://PROXMOX_HOST:8006/api2/json`;
+- the one-time `root@pam` password; and
+- whether the Proxmox TLS certificate must be verified.
+
+The form is enabled only in a secure browser context (HTTPS or localhost). The
+backend signs in to Proxmox as `root@pam`, creates the exact resources below,
+validates the generated token, and stores only the encrypted token secret. The
+root password is never stored, logged, returned, or used to create a root API
+token.
+
+| Resource | Fixed value |
+| --- | --- |
+| Proxmox user | `labgoblin@pve` |
+| Role | `LabGoblinRole` |
+| API token | `labgoblin@pve!labgoblin` |
+| ACL | `/`, propagated, `LabGoblinRole` only |
+
+The first configured cluster becomes active automatically. A later cluster is
+saved inactive until an administrator explicitly activates it.
+
+The automatic role contains only these privileges:
+
+- `Datastore.AllocateSpace`, `Datastore.AllocateTemplate`, `Datastore.Audit`
+- `Pool.Allocate`, `Pool.Audit`
+- `SDN.Audit`, `SDN.Use`
+- `Sys.Audit`
+- `VM.Allocate`, `VM.Audit`, `VM.Clone`, `VM.Console`, `VM.Monitor`,
+  `VM.PowerMgmt`
+
+LabGoblin refuses to overwrite an existing `labgoblin@pve` user or an existing
+`LabGoblinRole` with a different privilege set. Remove or rename the conflicting
+Proxmox object after reviewing it, or use the manual-token form. If validation
+fails after LabGoblin created the user and role, it attempts to remove those new
+objects. Interactive root logins that require a second factor are not supported
+by this one-time flow; create a dedicated token manually instead.
+
+## Manual token fallback
+
+Enter the cluster name, API URL, token user, token ID, token secret, and TLS
+verification choice. LabGoblin validates the token before encrypting it with
+`CONFIG_ENCRYPTION_KEY`. Back up that encryption key. Never use a root token.
+
+Deleting a cluster removes only the LabGoblin database configuration; it does
+not delete Proxmox users, tokens, roles, or VMs. Environment-variable fallback
+still applies when no active database cluster exists.
+
+## Discovery and placement
+
+Discovery-driven defaults cover nodes, storage targets, VM templates, and
+bridges/networks. Manual defaults remain available when discovery is empty.
+
+Placement policy options are `manual` (requires an online default node),
+`balanced`, and `prefer_default_then_balance`.
 
 
 ## Cluster readiness panel

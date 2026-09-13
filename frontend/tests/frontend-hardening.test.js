@@ -124,3 +124,12 @@ test('top-level render is protected by a recovery error boundary', () => {
   const source = readFileSync(new URL('../src/main.jsx', import.meta.url), 'utf8')
   assert.match(source, /render\(<ErrorBoundary><App \/><\/ErrorBoundary>\)/)
 })
+
+test('Proxmox root bootstrap creates a fixed service identity only from a secure browser context', () => {
+  const source = readFileSync(new URL('../src/pages/ProxmoxSetupPage.jsx', import.meta.url), 'utf8')
+  assert.match(source, /window\.isSecureContext/)
+  assert.match(source, /labgoblin@pve!labgoblin/)
+  assert.match(source, /disabled=\{loading \|\| !secureBootstrapContext\}/)
+  assert.doesNotMatch(source, /bootstrap\.token_id/)
+  assert.doesNotMatch(source, /bootstrap\.root_username/)
+})

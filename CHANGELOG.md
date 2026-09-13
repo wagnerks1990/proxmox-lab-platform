@@ -5,6 +5,9 @@ releases begin, material changes are recorded in pull requests and this file.
 
 ## Unreleased
 
+- Re-enabled Proxmox root bootstrap as a one-time, secure-context workflow that
+  creates and validates a fixed least-privilege `labgoblin@pve` service user,
+  role, and token without storing the root password or creating a root token.
 - Added an optional, disabled-by-default Cloudflare Tunnel deployment profile,
   restricted token-file setup helper, loopback origin binding, and opt-in
   Cloudflare Access JWT validation while preserving LabGoblin sessions and RBAC.

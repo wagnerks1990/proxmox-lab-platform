@@ -79,6 +79,10 @@
 
 ## Security
 - Never expose Proxmox API tokens to frontend code.
+- Proxmox root bootstrap may use `root@pam` only as a one-time credential to
+  create the fixed least-privilege `labgoblin@pve` service identity. Never
+  persist or return the root password, create a root token, or overwrite a
+  conflicting service user or role.
 - Never expose VM credentials to frontend code.
 - Never expose SSH credentials to frontend code.
 - Never expose Guacamole credentials to frontend code.

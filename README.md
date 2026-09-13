@@ -32,6 +32,16 @@ A fresh installation is fully LabGoblin-native: `/opt/labgoblin`, `/var/lib/labg
 
 The installer deploys LabGoblin with Docker Compose, generates bootstrap secrets, runs database migrations, installs the local update agent, and waits for the application health gate. See [`docs/operations/deployment.md`](docs/operations/deployment.md) before using the direct-on-hypervisor override. For a private repository, clone with a read-only deploy key first; unauthenticated `raw.githubusercontent.com` links do not work for private repositories.
 
+### Proxmox connection
+
+From an HTTPS page or a localhost SSH tunnel, a platform administrator can use
+the Proxmox setup page and a one-time `root@pam` password to create the fixed
+`labgoblin@pve` user, least-privilege `LabGoblinRole`, and
+`labgoblin@pve!labgoblin` API token automatically. LabGoblin stores only the
+encrypted generated token, never the root password. Existing conflicting users
+or roles are not overwritten. See
+[`docs/proxmox-setup-wizard.md`](docs/proxmox-setup-wizard.md).
+
 ### Optional Cloudflare edge
 
 The deployment includes an opt-in `cloudflare` Compose profile for publishing
